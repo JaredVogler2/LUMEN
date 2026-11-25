@@ -1,0 +1,12 @@
+# LUMEN runtime dependencies — exact pins (CPU-only, manylinux wheels, no GPU, no system OpenCV).
+# Verified in this repository on Python 3.11 / 3.12 / 3.13 (see docs/BUILD_LOG.md).
+fastapi==0.165.0
+starlette==1.10.0
+pydantic==2.14.4
+pydantic-core==2.50.5
+uvicorn==0.54.0
+numpy==2.5.5
+scipy==1.18.1
+opencv-python-headless==4.14.0.94
+pillow==13.0.0
+zxing-cpp==3.2.0

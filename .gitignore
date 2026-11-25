@@ -1,0 +1,18 @@
+.venv/
+.venv-*/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+*.egg-info/
+build/
+dist/
+.DS_Store
+# runtime data (never commit sessions, uploads or exports)
+.lumen-data/
+lumen-data/
+*.log
+# local screenshots / scratch produced by browser tests
+tests/browser/_artifacts/
+docs/screenshots/_tmp/
+node_modules/
