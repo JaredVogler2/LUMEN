@@ -28,11 +28,13 @@ import hashlib
 import json
 import re
 import threading
+import time
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Iterator, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from ..errors import ConflictError, LumenValidationError, NotFoundError
 from ..geometry.localframe import AXIS_POLICIES, REFERENCE_POINTS
@@ -56,7 +58,10 @@ class Length(_Model):
     @field_validator("unit")
     @classmethod
     def _unit(cls, v: str) -> str:
-        return normalize_length_unit(v)
+        try:
+            return normalize_length_unit(v)
+        except LumenValidationError as exc:  # as a ValueError the place of the mistake is reported with it
+            raise ValueError(exc.message) from exc
 
     @property
     def mm(self) -> float:
@@ -70,7 +75,10 @@ class Angle(_Model):
     @field_validator("unit")
     @classmethod
     def _unit(cls, v: str) -> str:
-        return normalize_angle_unit(v)
+        try:
+            return normalize_angle_unit(v)
+        except LumenValidationError as exc:
+            raise ValueError(exc.message) from exc
 
     @property
     def rad(self) -> float:
@@ -236,7 +244,7 @@ class OperationDefinition(_Model):
     @classmethod
     def _id(cls, v: str) -> str:
         if not _ID_RE.match(v):
-            raise ValueError("operation_id must be 1-64 characters: letters, digits, . _ - / space")
+            raise ValueError("must be 1 to 64 characters (letters, digits, . _ - / and spaces), starting with a letter or digit")
         return v
 
     # ------------------------------------------------------------ analysis
@@ -325,16 +333,46 @@ class OperationDefinition(_Model):
         }
 
 
+class AuditEntry(_Model):
+    """Who changed which record when (kept with the local library file)."""
+
+    at: str
+    action: Literal["saved", "superseded", "deleted"]
+    operation_id: str
+    revision: str
+    status: str = ""
+    content_hash: str = ""
+    author: str = ""
+
+
 class LibraryFile(_Model):
     schema_version: int = SCHEMA_VERSION
     library_revision: str = ""
     notice: str = ""
     operations: list[OperationDefinition] = Field(default_factory=list)
+    audit: list[AuditEntry] = Field(default_factory=list)
+
+
+_AUDIT_KEEP = 500
 
 
 # --------------------------------------------------------------------------
 # Library
 # --------------------------------------------------------------------------
+@contextmanager
+def _file_lock(path: Path) -> Iterator[None]:
+    """Exclusive lock for read-modify-write of the local library across worker processes."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path.with_suffix(".lock"), "a+") as fh:
+        try:
+            import fcntl
+
+            fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
+        except ImportError:  # pragma: no cover - no fcntl on this platform: one process is assumed
+            pass
+        yield  # closing the file releases the lock
+
+
 def _norm(code: str) -> str:
     return re.sub(r"\s+", " ", code.strip())
 
@@ -356,6 +394,9 @@ class OperationLibrary:
         self._origin: dict[tuple[str, str], str] = {}
         self.library_revision = ""
         self.load_errors: list[str] = []
+        self.persistent: bool | None = None  # set by whoever knows where the overlay lives
+        self._stamp: tuple[int, int] | None = None
+        self._checked = 0.0
         self.reload()
 
     # ---------------------------------------------------------------- load
@@ -367,8 +408,31 @@ class OperationLibrary:
     def editable(self) -> bool:
         return self._overlay_dir is not None
 
+    def _file_stamp(self) -> tuple[int, int] | None:
+        path = self.overlay_path
+        if path is None:
+            return None
+        try:
+            st = path.stat()
+        except OSError:
+            return None
+        return (st.st_mtime_ns, st.st_size)
+
+    def _refresh(self) -> None:
+        """Pick up records saved by another worker process (checked at most twice a second)."""
+        if self._overlay_dir is None:
+            return
+        now = time.monotonic()
+        if now - self._checked < 0.5:
+            return
+        self._checked = now
+        if self._file_stamp() != self._stamp:
+            self.reload()
+
     def reload(self) -> None:
         with self._lock:
+            self._stamp = self._file_stamp()
+            self._checked = time.monotonic()
             self._ops.clear()
             self._origin.clear()
             self.load_errors = []
@@ -392,10 +456,12 @@ class OperationLibrary:
 
     # --------------------------------------------------------------- query
     def all(self) -> list[OperationDefinition]:
+        self._refresh()
         with self._lock:
             return [self._ops[k] for k in sorted(self._ops)]
 
     def revisions(self, operation_id: str) -> list[OperationDefinition]:
+        self._refresh()
         with self._lock:
             return [op for k, op in sorted(self._ops.items()) if k[0] == operation_id]
 
@@ -439,7 +505,7 @@ class OperationLibrary:
         matches: list[dict[str, Any]] = []
         near: list[dict[str, Any]] = []
         if not q:
-            return {"status": "none", "query": q, "matches": [], "near": []}
+            return {"status": "none", "query": q, "matches": [], "other_revisions": [], "near": []}
         ql = q.lower()
         for op in self.all():
             cands: list[tuple[str, str, str | None]] = [(op.operation_id, "operation_id", None), (op.panel.panel_id, "panel_id", None)]
@@ -462,6 +528,22 @@ class OperationLibrary:
                     matches.append(entry)
                 elif v.lower() == ql or (len(ql) >= 4 and ql in v.lower()):
                     near.append(entry)
+        # Revisions of one operation share its codes.  The released revision is
+        # the one a code means; its drafts and superseded revisions do not make
+        # the code ambiguous (they are listed under "other_revisions").  An
+        # operation with no released revision is offered as what it is.
+        other: list[dict[str, Any]] = []
+        by_op: dict[str, list[dict[str, Any]]] = {}
+        for m in matches:
+            by_op.setdefault(m["operation_id"], []).append(m)
+        matches = []
+        for group in by_op.values():
+            for wanted in ("released", "draft", "superseded"):
+                keep = [m for m in group if m["status"] == wanted]
+                if keep:
+                    matches += keep
+                    other += [m for m in group if m["status"] != wanted]
+                    break
         # one operation revision matched through several fields is still one match
         uniq = {(m["operation_id"], m["revision"], m["placard_id"]) for m in matches}
         ops = {(m["operation_id"], m["revision"]) for m in matches}
@@ -471,32 +553,64 @@ class OperationLibrary:
             status = "exact"
         else:
             status = "ambiguous"
-        return {"status": status, "query": q, "matches": matches, "near": near[:20]}
+        return {"status": status, "query": q, "matches": matches, "other_revisions": other, "near": near[:20]}
 
     # --------------------------------------------------------------- write
-    def save(self, op: OperationDefinition, *, author: str = "") -> OperationDefinition:
-        """Store a new revision in the editable overlay.
+    def storage(self) -> dict[str, Any]:
+        """Where local records go, for the people who enter them."""
+        return {"editable": self.editable, "persistent": self.persistent if self.editable else None}
 
-        An existing ``(operation_id, revision)`` is immutable once released:
-        changing released content requires a new revision string.
-        """
+    def _require_editable(self) -> Path:
         if not self.editable or self.overlay_path is None:
             raise ConflictError(
                 "library_read_only",
                 "The operation library is read-only on this deployment.",
                 suggestions=["Set LUMEN_OPERATIONS_DIR to a writable directory to enable local editing."],
             )
+        return self.overlay_path
+
+    def _read_local(self, path: Path) -> LibraryFile:
+        if not path.exists():
+            return LibraryFile(schema_version=SCHEMA_VERSION, library_revision="", operations=[])
+        try:
+            return LibraryFile.model_validate_json(path.read_text(encoding="utf-8"))
+        except Exception as exc:
+            raise ConflictError("local_library_unreadable", f"The local library file is not readable: {exc}") from exc
+
+    def _write_local(self, path: Path, lib: LibraryFile, entry: AuditEntry) -> None:
+        lib.library_revision = entry.at
+        lib.notice = "Locally edited LUMEN operation records. Generic research data only."
+        lib.audit = (lib.audit + [entry])[-_AUDIT_KEEP:]
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(f".json.{threading.get_ident()}.tmp")
+        tmp.write_text(json.dumps(lib.model_dump(mode="json"), indent=2), encoding="utf-8")
+        tmp.replace(path)
+        self.reload()
+
+    @staticmethod
+    def _now() -> str:
+        return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    def save(self, op: OperationDefinition, *, author: str = "") -> OperationDefinition:
+        """Store a new revision in the editable overlay.
+
+        An existing ``(operation_id, revision)`` is immutable once released:
+        changing released content requires a new revision string.  (Marking a
+        released revision as superseded is done with :meth:`supersede`.)
+        """
+        path = self._require_editable()
         if op.synthetic and self._origin.get(op.key()) == "bundled":
             raise ConflictError("bundled_record_immutable", "Bundled sample records cannot be overwritten; save under a new operation id or revision.")
-        with self._lock:
+        with self._lock, _file_lock(path):
+            self.reload()  # another process may have saved since this one looked
             existing = self._ops.get(op.key())
             if existing is not None:
                 if self._origin.get(op.key()) == "bundled":
                     raise ConflictError("bundled_record_immutable", "Bundled sample records cannot be overwritten; use a new revision.")
-                if existing.status == "released" and existing.content_hash() != op.content_hash():
+                if existing.status in ("released", "superseded") and existing.content_hash() != op.content_hash():
                     raise ConflictError(
                         "released_revision_immutable",
-                        f"Revision {op.revision!r} of {op.operation_id!r} is released; save the change as a new revision.",
+                        f"Revision {op.revision!r} of {op.operation_id!r} is {existing.status}; save the change as a new revision.",
                     )
             if op.status == "released" and op.issues():
                 raise LumenValidationError(
@@ -504,23 +618,76 @@ class OperationLibrary:
                     "A record with missing datums, dimensions or tolerances cannot be released.",
                     details={"issues": op.issues()},
                 )
-            path = self.overlay_path
-            lib = LibraryFile(schema_version=SCHEMA_VERSION, library_revision="", operations=[])
-            if path.exists():
-                try:
-                    lib = LibraryFile.model_validate_json(path.read_text(encoding="utf-8"))
-                except Exception as exc:
-                    raise ConflictError("local_library_unreadable", f"The local library file is not readable: {exc}") from exc
+            lib = self._read_local(path)
             lib.operations = [o for o in lib.operations if o.key() != op.key()] + [op]
-            stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-            lib.library_revision = stamp
-            lib.notice = "Locally edited LUMEN operation records. Generic research data only."
-            path.parent.mkdir(parents=True, exist_ok=True)
-            tmp = path.with_suffix(".json.tmp")
-            tmp.write_text(json.dumps(lib.model_dump(mode="json"), indent=2), encoding="utf-8")
-            tmp.replace(path)
-            self.reload()
+            self._write_local(path, lib, AuditEntry(at=self._now(), action="saved", operation_id=op.operation_id, revision=op.revision, status=op.status, content_hash=op.content_hash(), author=author))
             return self._ops[op.key()]
+
+    def supersede(self, operation_id: str, revision: str, *, author: str = "") -> OperationDefinition:
+        """Mark a released local revision as superseded (its values stay as they were)."""
+        path = self._require_editable()
+        with self._lock, _file_lock(path):
+            self.reload()
+            op = self.get(operation_id, revision)
+            if self._origin.get(op.key()) == "bundled":
+                raise ConflictError("bundled_record_immutable", "Bundled sample records cannot be changed.")
+            if op.status == "superseded":
+                return op
+            if op.status != "released":
+                raise ConflictError("only_released_can_be_superseded", f"Revision {revision!r} of {operation_id!r} is a {op.status}; only a released revision can be superseded.")
+            new = op.model_copy(update={"status": "superseded"})
+            lib = self._read_local(path)
+            lib.operations = [o for o in lib.operations if o.key() != op.key()] + [new]
+            self._write_local(path, lib, AuditEntry(at=self._now(), action="superseded", operation_id=operation_id, revision=revision, status="superseded", content_hash=new.content_hash(), author=author))
+            return self._ops[op.key()]
+
+    def delete(self, operation_id: str, revision: str, *, author: str = "") -> None:
+        """Remove a local *draft*.  Released and superseded revisions are kept: sessions refer to them."""
+        path = self._require_editable()
+        with self._lock, _file_lock(path):
+            self.reload()
+            op = self.get(operation_id, revision)
+            if self._origin.get(op.key()) == "bundled":
+                raise ConflictError("bundled_record_immutable", "Bundled sample records cannot be deleted.")
+            if op.status != "draft":
+                raise ConflictError("only_drafts_can_be_deleted", f"Revision {revision!r} of {operation_id!r} is {op.status}; it is kept so that sessions which used it stay traceable.")
+            lib = self._read_local(path)
+            lib.operations = [o for o in lib.operations if o.key() != op.key()]
+            self._write_local(path, lib, AuditEntry(at=self._now(), action="deleted", operation_id=operation_id, revision=revision, status="draft", content_hash=op.content_hash(), author=author))
+
+    def audit(self, operation_id: str | None = None) -> list[dict[str, Any]]:
+        path = self.overlay_path
+        if path is None or not path.exists():
+            return []
+        try:
+            entries = LibraryFile.model_validate_json(path.read_text(encoding="utf-8")).audit
+        except Exception:
+            return []
+        return [e.model_dump(mode="json") for e in entries if operation_id is None or e.operation_id == operation_id]
+
+
+def record_problems(exc: Exception) -> list[dict[str, str]]:
+    """Why a record could not be read, field by field, in words an operator can act on."""
+    if not isinstance(exc, ValidationError):
+        return [{"where": "", "message": str(exc)[:300]}]
+    out: list[dict[str, str]] = []
+    for e in exc.errors()[:40]:
+        loc = [str(x) for x in e.get("loc", ())]
+        msg = str(e.get("msg", "not valid"))
+        for prefix in ("Value error, ", "Assertion failed, "):
+            if msg.startswith(prefix):
+                msg = msg[len(prefix):]
+        kind = e.get("type", "")
+        if kind == "missing":
+            msg = "is required"
+        elif kind == "extra_forbidden":
+            msg = "is not a field of an operation record"
+        elif kind == "literal_error":
+            msg = "is not one of the allowed values" + (f" ({e['ctx']['expected']})" if isinstance(e.get("ctx"), dict) and "expected" in e["ctx"] else "")
+        elif kind.endswith("_type") or kind.endswith("_parsing"):
+            msg = msg[0].lower() + msg[1:] if msg else "has the wrong kind of value"
+        out.append({"where": ".".join(loc), "message": msg[:300]})
+    return out
 
 
 def parse_operation(data: dict[str, Any]) -> OperationDefinition:
@@ -528,7 +695,39 @@ def parse_operation(data: dict[str, Any]) -> OperationDefinition:
     try:
         return OperationDefinition.model_validate(data)
     except Exception as exc:
-        raise LumenValidationError("invalid_operation_record", "The operation record is not valid.", details={"error": str(exc)[:2000]}) from exc
+        problems = record_problems(exc)
+        text = "; ".join(f"{p['where']}: {p['message']}" if p["where"] else p["message"] for p in problems[:6])
+        raise LumenValidationError(
+            "invalid_operation_record", "The operation record is not valid.", details={"error": text[:2000], "problems": problems},
+            suggestions=[text[:400]] if text else None,
+        ) from exc
+
+
+def analyse_record(data: dict[str, Any]) -> tuple[OperationDefinition | None, list[dict[str, str]]]:
+    """A record as typed so far: what cannot be read, and the record if the rest can be checked.
+
+    While a record is being entered its ID or revision may still be empty or
+    not allowed; those are reported as problems and the rest is still analysed
+    (under a stand-in ID that is never stored).
+    """
+    try:
+        return OperationDefinition.model_validate(data), []
+    except Exception as exc:
+        problems = record_problems(exc)
+    if not isinstance(data, dict):
+        return None, problems
+    patched = dict(data)
+    wheres = {p["where"] for p in problems}
+    if "operation_id" in wheres:
+        patched["operation_id"] = "UNNAMED"
+    if "revision" in wheres:
+        patched["revision"] = "UNNAMED"
+    if isinstance(patched.get("panel"), dict) and "panel.panel_id" in wheres:
+        patched["panel"] = {**patched["panel"], "panel_id": ""}
+    try:
+        return OperationDefinition.model_validate(patched), problems
+    except Exception:
+        return None, problems
 
 
 def snapshot(op: OperationDefinition, library: OperationLibrary) -> dict[str, Any]:
@@ -555,8 +754,16 @@ def get_library() -> OperationLibrary:
             from ..config import get_settings
 
             s = get_settings()
-            overlay = Path(s.operations_dir) if s.operations_dir else None
+            # Local records go to the configured directory; otherwise next to the
+            # sessions, which is temporary storage unless LUMEN_DATA_DIR says otherwise.
+            if s.operations_readonly:
+                overlay = None
+            elif s.operations_dir:
+                overlay = Path(s.operations_dir)
+            else:
+                overlay = Path(s.data_dir) / "library"
             _LIB = OperationLibrary(Path(__file__).parent / "data" / "operations.json", overlay)
+            _LIB.persistent = bool(s.operations_dir) or s.data_dir_configured
         return _LIB
 
 

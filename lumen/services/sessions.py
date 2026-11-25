@@ -57,6 +57,7 @@ from ..vision.planar import PlanarSolution, PlanarView, ViewLocalization, locali
 from ..vision.rectify import RectSpec, plan_rectification, rectify_image
 from .context import CpuGate, LruCache, utcnow
 from .frames import build_frame, camera_for_frame, decode_for_session, detect_in_image, sizes_from_state, tag_obs
+from .jobs import JobRunner
 
 import cv2
 import json
@@ -85,6 +86,11 @@ class SessionService:
                 self._domain = None
         self._last_purge = 0.0
         self._purge_lock = threading.Lock()
+        self.jobs = JobRunner(self._load, self._mutate, max_workers=1)
+        self._live = LruCache(8)
+        from ..vision.placard import PlacardConfig
+
+        self._placard_cfg = PlacardConfig()
 
     # ------------------------------------------------------------------ util
     @property
@@ -100,9 +106,18 @@ class SessionService:
                 return
             self._last_purge = now
         self.store.purge_expired(self.settings.limits.session_ttl_seconds, now)
+        from .capture import purge_stale_temp
+
+        purge_stale_temp()
+
+    def log_event(self, sid: str, action: str, detail: dict[str, Any] | None = None) -> None:
+        self._mutate(sid, lambda s: None, action, detail or {})
 
     def _load(self, sid: str) -> Session:
-        return Session.model_validate(self.store.load(sid))
+        d = self.store.load(sid)
+        if d.get("kind") == "calibration":  # a calibration workspace shares the store but is not a session
+            raise NotFoundError("session_not_found", "Unknown or expired session.")
+        return Session.model_validate(d)
 
     def _save(self, s: Session) -> None:
         s.updated = utcnow()
@@ -130,6 +145,13 @@ class SessionService:
         if registration:
             s.registration = None
             self._solutions.drop_prefix(s.id)
+            # verification results were measured against the old registration
+            s.verifications = []
+            s.research.pop("verification_detail", None)
+            # ruler measurements are kept; they are compared again at the next registration
+            from .reference import reevaluate_all
+
+            reevaluate_all(s, None)
         if datums:
             s.datums = {}
             s.local_frame = None
@@ -156,6 +178,7 @@ class SessionService:
         return s
 
     def get(self, sid: str) -> Session:
+        self._housekeeping()  # expired sessions (and their photos) go even when nobody starts a new one
         return self._load(sid)
 
     def delete(self, sid: str) -> bool:
@@ -273,7 +296,7 @@ class SessionService:
         img = decode_for_session(data, self.settings)
         sizes = sizes_from_state(s0.tag_sizes)
         with self.cpu.slot(self.settings.limits.request_timeout_seconds):
-            dets, cam, note = detect_in_image(img, s0.calibration, sizes, self._marker_cfg)
+            dets, cam, note = detect_in_image(img, s0.calibration, sizes, self._marker_cfg, client)
         ext = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/bmp": "bmp"}.get(img.meta.mime, "bin")
 
         def fn(s: Session) -> Frame:
@@ -320,6 +343,85 @@ class SessionService:
 
         return self._mutate(sid, fn, "frame_selection", {"frame_id": frame_id, "selected": selected})
 
+    def set_frame_attributes(self, sid: str, frame_id: str, *, selected: bool | None = None, torch: str | None = None, pair_id: str | None = None, clear_pair: bool = False) -> Session:
+        """Operator edits of a frame: include/exclude, light state, flash pairing."""
+        from ..schemas import TorchState
+
+        if torch is not None and torch not in ("on", "off", "unknown"):
+            raise LumenValidationError("invalid_torch", "torch must be 'on', 'off' or 'unknown'.")
+
+        def fn(s: Session) -> Session:
+            f = self._frame(s, frame_id)
+            if selected is not None and bool(selected) != f.selected:
+                f.selected = bool(selected)
+                self._invalidate(s, registration=True, datums=False)
+            if torch is not None:
+                f.torch = TorchState(torch)
+            if clear_pair:
+                f.pair_id = None
+            elif pair_id is not None:
+                f.pair_id = str(pair_id)[:40]
+            return s
+
+        return self._mutate(sid, fn, "frame_attributes", {"frame_id": frame_id, "selected": selected, "torch": torch, "pair": None if clear_pair else pair_id})
+
+    # ------------------------------------------------------------------ video
+    def start_video_job(self, sid: str, path: str, source: str = "video_upload", meta: dict[str, Any] | None = None) -> dict[str, Any]:
+        from .capture import process_video
+
+        if source not in (FrameSource.VIDEO_UPLOAD.value, FrameSource.LIVE_SWEEP.value):
+            raise LumenValidationError("invalid_frame_kind", "Video source must be 'video_upload' or 'live_sweep'.")
+        s = self._load(sid)
+        if len(s.frames) >= self.settings.limits.max_frames_per_session:
+            raise LimitExceededError("too_many_frames", "This session already holds the maximum number of frames.", suggestions=["Remove frames you do not need before adding a video."])
+        m = dict(meta or {})
+        return self.jobs.submit(sid, "video", lambda job: process_video(self, sid, path, source, m, job))
+
+    def capture_advice(self, sid: str) -> dict[str, Any]:
+        from .capture import capture_advice
+
+        return capture_advice(self, self._load(sid))
+
+    # ------------------------------------------------- independent scale check
+    def reference_suggestion(self, sid: str) -> dict[str, Any] | None:
+        from .reference import suggest_pair
+
+        s = self._load(sid)
+        sol, _ = self._require_registration(s)
+        return suggest_pair(sol)
+
+    def add_reference_distance(self, sid: str, a: dict[str, Any], b: dict[str, Any], measured_mm: float, u_mm: float = 0.5, instrument: str = "") -> dict[str, Any]:
+        from .reference import add_reference
+
+        return add_reference(self, sid, a, b, measured_mm, u_mm, instrument)
+
+    def remove_reference_distance(self, sid: str, rid: str) -> Session:
+        from .reference import remove_reference
+
+        return remove_reference(self, sid, rid)
+
+    # ----------------------------------------------------------- verification
+    def verify(self, sid: str, frame_id: str, *, placard_id: str | None = None, manual_corners_px: list[list[float]] | None = None, snap: bool = True) -> dict[str, Any]:
+        from .verification import verify_frame
+
+        return verify_frame(self, sid, frame_id, placard_id=placard_id, manual_corners_px=manual_corners_px, snap=snap)
+
+    def confirm_verification(self, sid: str, vid: str, confirmed: bool = True) -> Session:
+        from .verification import confirm_verification
+
+        return confirm_verification(self, sid, vid, confirmed)
+
+    def delete_verification(self, sid: str, vid: str) -> Session:
+        from .verification import delete_verification
+
+        return delete_verification(self, sid, vid)
+
+    def track(self, sid: str, data: bytes, *, placard_ids: list[str] | None = None, meta: dict[str, Any] | None = None, force_full: bool = False) -> dict[str, Any]:
+        """Overlay for one live camera frame (never stored); see services/live.py."""
+        from .live import track_frame
+
+        return track_frame(self, sid, data, placard_ids=placard_ids, meta=meta, force_full=force_full)
+
     def frame_image(self, sid: str, frame_id: str, max_edge: int | None = None) -> tuple[bytes, str]:
         s = self._load(sid)
         f = self._frame(s, frame_id)
@@ -345,7 +447,7 @@ class SessionService:
         for f in stale:
             img = self._image(sid, f)
             with self.cpu.slot(self.settings.limits.request_timeout_seconds):
-                results[f.id] = detect_in_image(img, s.calibration, sizes, self._marker_cfg)
+                results[f.id] = detect_in_image(img, s.calibration, sizes, self._marker_cfg, {"camera_label": f.camera_label, "lens": f.lens, "zoom": f.zoom})
 
         def fn(s2: Session) -> None:
             from .frames import marker_from_detection
@@ -364,7 +466,7 @@ class SessionService:
     def _camera(self, s: Session, f: Frame) -> CameraModel | None:
         if not f.calibration_id or s.calibration is None or s.calibration.id != f.calibration_id:
             return None
-        cam, _ = camera_for_frame(s.calibration, f.width, f.height, f.native_width, f.native_height, f.processing_scale)
+        cam, _ = camera_for_frame(s.calibration, f.width, f.height, f.native_width, f.native_height, f.processing_scale, device=f.camera_label, lens=f.lens, zoom=f.zoom)
         return cam
 
     def _views(self, s: Session, frames: list[Frame]) -> list[PlanarView]:
@@ -508,8 +610,11 @@ class SessionService:
         summary["px_per_mm"] = px_per_mm
 
         def fn(s2: Session) -> None:
+            from .reference import reevaluate_all
+
             s2.registration = summary
             s2.surface = surface
+            reevaluate_all(s2, sol)  # the operator's ruler measurements are kept and checked against the new layout
             # datums measured in frames that are no longer registered are dropped
             for k in [k for k, d in s2.datums.items() if d.frame_id not in sol.views]:
                 del s2.datums[k]
@@ -1106,6 +1211,7 @@ class SessionService:
         placard_id: str | None,
         with_uncertainty: bool,
         ext: tuple[Frame, ViewLocalization, PlanarView] | None = None,
+        unc_override: Any | None = None,
     ) -> GateReport:
         inp = GateInputs(demo=(s.mode == SessionMode.DEMO.value))
         pid = placard_id or s.active_placard_id
@@ -1114,6 +1220,7 @@ class SessionService:
         if s.operation:
             op = self._operation(s)
             inp.operation_selected = True
+            inp.record_status = op.status
             inp.surface_target = op.surface.target
             if pid:
                 try:
@@ -1194,6 +1301,9 @@ class SessionService:
                 inp.frame_flags = vflags
                 inp.pose_ambiguous = "pose_ambiguous" in vflags
 
+        from .reference import summary as _ref_summary
+
+        inp.reference_consistent, inp.reference_message = _ref_summary(s) if sol is not None else (None, "")
         inp.datums_present = ("floor" in s.datums, "side" in s.datums)
         inp.datums_confirmed = (bool(s.datums.get("floor") and s.datums["floor"].confirmed), bool(s.datums.get("side") and s.datums["side"].confirmed))
         inp.datum_distinctness = (
@@ -1231,7 +1341,10 @@ class SessionService:
             ctr = sol.layout.centroid()
             radius = max(sol.layout.extent_radius(), 1e-6)
             inp.extrapolation_ratio = float(np.max(np.linalg.norm(rect.corners - ctr, axis=1)) / radius)
-            if with_uncertainty and inp.target_in_view and sol.consistent:
+            if unc_override is not None and inp.target_in_view and sol.consistent:
+                # evaluated moments ago for a nearly identical view of the same tags (live guidance)
+                unc = unc_override
+            elif with_uncertainty and inp.target_in_view and sol.consistent:
                 try:
                     unc = self._uncertainty(s, sol, views, f, loc, ext_view, spec)
                 except Exception as exc:  # uncertainty must never crash the report; it then fails its gate
@@ -1319,6 +1432,7 @@ class SessionService:
         rect_max_edge: int = 1600,
         with_uncertainty: bool = True,
         candidates: bool = False,
+        references: bool = False,
     ) -> dict[str, Any]:
         s = self._load(sid)
         sol, _ = self._require_registration(s)
@@ -1331,7 +1445,7 @@ class SessionService:
                 "report": self._gate_report(s, f.id, None, False).model_dump(mode="json"),
                 "error": exc.to_dict(), "notice": RESEARCH_NOTICE,
             }
-        return self._overlay_for(s, sol, f, H, view=view, placard_ids=placard_ids, rect_max_edge=rect_max_edge, with_uncertainty=with_uncertainty, candidates=candidates)
+        return self._overlay_for(s, sol, f, H, view=view, placard_ids=placard_ids, rect_max_edge=rect_max_edge, with_uncertainty=with_uncertainty, candidates=candidates, references=references)
 
     def _overlay_for(
         self,
@@ -1346,8 +1460,10 @@ class SessionService:
         with_uncertainty: bool,
         ext: tuple[Frame, ViewLocalization, PlanarView] | None = None,
         candidates: bool = False,
+        unc_override: Any | None = None,
+        references: bool = False,
     ) -> dict[str, Any]:
-        cam = self._camera(s, f)
+        cam = self._camera(s, f) if ext is None else ext[2].camera
         lf = self._local_frame(s)
         ctr = sol.layout.centroid()
         footprint = footprint_for_image(H, f.width, f.height, ctr)
@@ -1371,7 +1487,7 @@ class SessionService:
         for pid in pids:
             if pid is None or op is None:
                 continue
-            rep = self._gate_report(s, f.id, pid, with_uncertainty and pid == s.active_placard_id, ext=ext)
+            rep = self._gate_report(s, f.id, pid, with_uncertainty and pid == s.active_placard_id, ext=ext, unc_override=(unc_override if pid == s.active_placard_id else None))
             reports[pid] = rep
             spec = PlacementSpec(**op.placard(pid).resolved())
             if rep.status == GuidanceStatus.BLOCKED.value or lf is None or not lf.valid or not self._spec_complete(spec):
@@ -1411,6 +1527,26 @@ class SessionService:
             mapper=mapper, view_w=vw, view_h=vh, px_per_mm=scale, visible_plane_pts=visible,
             frame=lf, floor=floor, side=side, targets=targets, tags=tags, labels=names,
         )
+        if references:
+            from .reference import suggest_pair
+
+            pairs = [(r["a"], r["b"], r.get("consistent"), f"{r['measured_mm']:.1f} mm measured") for r in s.reference_distances if r.get("evaluable")]
+            sug = suggest_pair(sol)
+            if sug and not pairs:
+                pairs = [(sug["a"], sug["b"], None, "measure between these two corners")]
+            for a, b, okk, label in pairs:
+                if a["tag_id"] in sol.layout.poses and b["tag_id"] in sol.layout.poses:
+                    P = np.array([sol.layout.corners(a["tag_id"])[a["corner"]], sol.layout.corners(b["tag_id"])[b["corner"]]])
+                    uv, good = mapper(P)
+                    if good.all():
+                        col = "#ffffff" if okk is None else ("#3ddc97" if okk else "#ff5d5d")
+                        ov["primitives"].append({"kind": "segment", "points": uv.tolist(), "color": col, "width": 2.5, "dash": [8, 6]})
+                        ov["primitives"].append({"kind": "handle", "points": [uv[0].tolist()], "color": col, "label": f"ID {a['tag_id']}"})
+                        ov["primitives"].append({"kind": "handle", "points": [uv[1].tolist()], "color": col, "label": f"ID {b['tag_id']} · {label}"})
+        if s.verifications and ext is None:
+            from .verification import verification_primitives
+
+            ov["primitives"].extend(verification_primitives(s, f.id, mapper, vw, vh))
         if candidates:
             # automatically found straight features, so the operator can pick one
             for c in (s.research.get("datum_proposals") or {}).get("candidates", []):

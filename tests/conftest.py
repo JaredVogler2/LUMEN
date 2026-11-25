@@ -42,7 +42,10 @@ def render_cached(scene: Scene, cam: CameraSpec, *, ss: int = 3, seed: int = 0, 
         res = RenderResult(image=img, truth=truth, exposure=cam.exposure)
     else:
         res = render(scene, cam, ss=ss, seed=seed)
-        cv2.imwrite(str(png), res.image)
+        # write-then-rename, so a concurrent test process never reads a partial file
+        tmp = CACHE / f"{key}.{os.getpid()}.tmp.png"
+        cv2.imwrite(str(tmp), res.image)
+        os.replace(tmp, png)
     if jpeg is not None:
         ok, buf = cv2.imencode(".jpg", res.image, [int(cv2.IMWRITE_JPEG_QUALITY), jpeg])
         res.jpeg = buf.tobytes()
@@ -110,3 +113,81 @@ def camera_from_truth(c: dict[str, Any]) -> CameraSpec:
         width=c["width"], height=c["height"], fx=c["fx"], fy=c["fy"], cx=c["cx"], cy=c["cy"], dist=tuple(c["dist"]),
         R_wc=tuple(map(tuple, c["R_wc"])), C=tuple(c["C"]),
     )
+
+
+def sweep_video_frames(n_views: int = 8, hold: int = 3, width: int = 1280, height: int = 720, span_deg: float = 44.0, scene: Scene | None = None, blur_px: int = 15) -> tuple[list[np.ndarray], list[CameraSpec], list[int]]:
+    """Frames of a synthetic hand sweep for video tests.
+
+    ``n_views`` rendered viewpoints are each held for ``hold`` frames; only the
+    middle frame of a hold is sharp, its neighbours carry horizontal motion
+    blur (the hand moving between stations).  Returns (frames, camera per
+    frame, indices of the sharp frames).
+    """
+    from lumen.synth.fixtures import flat_panel_scene, phone_camera, sweep_stations
+
+    scene = scene or flat_panel_scene()
+    target = (270.0, 0.0, 300.0)
+    frames: list[np.ndarray] = []
+    cams: list[CameraSpec] = []
+    sharp: list[int] = []
+    kernel = np.zeros((1, blur_px), np.float32)
+    kernel[:] = 1.0 / blur_px
+    for v, (eye, roll) in enumerate(sweep_stations(n_views, distance=720, height=430, span_deg=span_deg, target=target)):
+        cam = phone_camera(eye, target=target, width=width, height=height, roll_deg=roll)
+        img = render_cached(scene, cam, ss=2, seed=v).image
+        for h in range(hold):
+            if h == hold // 2:
+                sharp.append(len(frames))
+                frames.append(img.copy())
+            else:
+                frames.append(cv2.filter2D(img, -1, kernel))
+            cams.append(cam)
+    return frames, cams, sharp
+
+
+def write_video(path: str, frames: list[np.ndarray], fps: float = 12.0, fourcc: str = "mp4v") -> str:
+    h, w = frames[0].shape[:2]
+    vw = cv2.VideoWriter(path, cv2.VideoWriter_fourcc(*fourcc), fps, (w, h))
+    assert vw.isOpened(), f"cannot write {fourcc} video in this environment"
+    for f in frames:
+        vw.write(f)
+    vw.release()
+    return path
+
+
+class PrefixProxy:
+    """A path-stripping reverse proxy in front of the app, as Posit Connect is.
+
+    Requests must arrive under ``prefix``; the prefix is removed before the
+    app sees the path (the app never learns it from the URL).  With
+    ``announce`` the proxy adds Connect's ``RStudio-Connect-App-Base-URL``
+    header; without it the app has to cope on its own.
+    """
+
+    def __init__(self, app: Any, prefix: str = "/content/3f2a9c1e", announce: bool = True, user: str | None = None) -> None:
+        self.app, self.prefix, self.announce, self.user = app, prefix.rstrip("/"), announce, user
+        self.seen: list[str] = []
+
+    async def __call__(self, scope: dict, receive: Any, send: Any) -> None:
+        if scope["type"] not in ("http", "websocket"):
+            await self.app(scope, receive, send)
+            return
+        path = scope["path"]
+        if path != self.prefix and not path.startswith(self.prefix + "/"):
+            await send({"type": "http.response.start", "status": 404, "headers": [(b"content-type", b"text/plain")]})
+            await send({"type": "http.response.body", "body": b"not this content item"})
+            return
+        inner = path[len(self.prefix):] or "/"
+        self.seen.append(inner)
+        new = dict(scope)
+        new["path"] = inner
+        new["raw_path"] = inner.encode()
+        new["root_path"] = ""
+        headers = [(k, v) for k, v in scope["headers"] if k not in (b"rstudio-connect-app-base-url", b"rstudio-connect-credentials")]
+        if self.announce:
+            host = dict(scope["headers"]).get(b"host", b"connect.example.invalid").decode()
+            headers.append((b"rstudio-connect-app-base-url", f"http://{host}{self.prefix}/".encode()))
+        if self.user:
+            headers.append((b"rstudio-connect-credentials", json.dumps({"user": self.user, "groups": []}).encode()))
+        new["headers"] = headers
+        await self.app(new, receive, send)

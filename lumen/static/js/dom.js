@@ -18,6 +18,11 @@ export function h(tag, attrs, ...children) {
     }
   }
   append(el, children);
+  // The DOM's own append()/replaceChildren() print null, false and arrays as
+  // text ("null", "[object HTMLDivElement]").  Views build optional parts with
+  // `cond ? node : null`, so elements made here take the forgiving versions.
+  el.append = (...more) => { append(el, more); };
+  el.replaceChildren = (...more) => { clear(el); append(el, more); };
   return el;
 }
 
@@ -71,6 +76,17 @@ const ICONS = {
   move: 'M12 3v18M3 12h18M12 3l-3 3M12 3l3 3M12 21l-3-3M12 21l3-3M3 12l3-3M3 12l3 3M21 12l-3-3M21 12l-3 3',
   eye: 'M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12zM12 15a3 3 0 100-6 3 3 0 000 6z',
   help: 'M12 21a9 9 0 100-18 9 9 0 000 18zM9.5 9.5a2.5 2.5 0 114 2c-.9.6-1.5 1.1-1.5 2.2M12 16.8v.4',
+  edit: 'M4 20h4.2L19 9.2 14.8 5 4 15.8V20zM13 6.8l4.2 4.2',
+  copy: 'M9 8h11v12H9V8zM5 16V4h11',
+  maximize: 'M4 10V4h6M20 14v6h-6M4 4l7 7M20 20l-7-7',
+  minimize: 'M11 5v6H5M13 19v-6h6M11 11L4 4M13 13l7 7',
+  // coaching arrows: where to move the phone
+  go_left: 'M19 12H5M11 6l-6 6 6 6',
+  go_right: 'M5 12h14M13 6l6 6-6 6',
+  go_up: 'M12 19V5M6 11l6-6 6 6',
+  go_down: 'M12 5v14M6 13l6 6 6-6',
+  go_closer: 'M4 4l5 5M9 5v4H5M20 4l-5 5M15 5v4h4M4 20l5-5M9 19v-4H5M20 20l-5-5M15 19v-4h4',
+  go_back: 'M9 9L4 4M4 8V4h4M15 9l5-5M20 8V4h-4M9 15l-5 5M4 16v4h4M15 15l5 5M20 16v4h-4',
 };
 
 export function icon(name, cls) {

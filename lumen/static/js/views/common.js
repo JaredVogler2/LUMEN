@@ -65,9 +65,9 @@ export function provenanceChip(p) {
 // Load the picture and overlay of one frame into a viewer.
 //   view = 'image'  -> the photo, overlay in frame pixels
 //   view = 'rect'   -> the rectified plane view, overlay in rectified pixels
-export async function showFrame(viewer, frameId, view, { uncertainty = false, maxEdge = 2600, placards = null, candidates = false } = {}) {
+export async function showFrame(viewer, frameId, view, { uncertainty = false, maxEdge = 2600, placards = null, candidates = false, references = false } = {}) {
   const sid = state.session.id;
-  const q = `frame=${encodeURIComponent(frameId)}&view=${view}&uncertainty=${uncertainty ? 'true' : 'false'}${placards ? `&placards=${encodeURIComponent(placards.join(','))}` : ''}${candidates ? '&candidates=true' : ''}`;
+  const q = `frame=${encodeURIComponent(frameId)}&view=${view}&uncertainty=${uncertainty ? 'true' : 'false'}${placards ? `&placards=${encodeURIComponent(placards.join(','))}` : ''}${candidates ? '&candidates=true' : ''}${references ? '&references=true' : ''}`;
   if (view === 'rect') {
     // The picture and its overlay must come from the *same* rectification:
     // both requests name the same size and the returned specs are compared.
@@ -115,6 +115,21 @@ export function viewerShell({ label }) {
   return { wrap, hud, tools, label };
 }
 
+// Let the picture take the whole screen area of the step (panel hidden) and back.
+export function maximizeButton(viewer, splitEl) {
+  const btn = h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Enlarge the picture', 'aria-pressed': 'false', 'data-action': 'maximize' }, icon('maximize'));
+  btn.addEventListener('click', () => {
+    const on = !splitEl.classList.contains('max');
+    splitEl.classList.toggle('max', on);
+    btn.setAttribute('aria-pressed', String(on));
+    btn.setAttribute('aria-label', on ? 'Show the details panel' : 'Enlarge the picture');
+    btn.replaceChildren(icon(on ? 'minimize' : 'maximize'));
+    viewer.userMoved = false;
+    requestAnimationFrame(() => viewer._resize());
+  });
+  return btn;
+}
+
 export function zoomButtons(viewer) {
   return [
     h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Zoom in', onclick: () => { const r = viewer._box(); viewer.zoomAt(r.width / 2, r.height / 2, 1.6); } }, icon('plus')),
@@ -144,4 +159,23 @@ export function targetReadout(p) {
     cell('Rotation', p.angle_rad === null ? '—' : fmt((p.angle_rad * 180) / Math.PI, 1), '°'),
     cell('Reference', (p.reference_point || '—').replace('_', ' '), ''),
     cell('Tolerance', p.tol_position_mm === null ? 'none' : `±${lengthOut(p.tol_position_mm, 1).split(' ')[0]}`, p.tol_position_mm === null ? '' : state.units));
+}
+
+// One-line capture coaching: an arrow for where to move, and what to do next.
+const ARROW_ICON = { left: 'go_left', right: 'go_right', up: 'go_up', down: 'go_down', closer: 'go_closer', back: 'go_back' };
+const ARROW_WORD = { left: 'move left', right: 'move right', up: 'tilt up', down: 'tilt down', closer: 'move closer', back: 'move back' };
+export function coachLine(advice) {
+  const n = advice && advice.next;
+  if (!n) return null;
+  const kind = n.level === 'ok' ? 'ok' : n.level === 'warn' ? 'warn' : n.level === 'info' ? 'info' : 'todo';
+  return h('div', { class: `coach ${kind}`, 'data-coach': n.code, 'data-arrow': n.arrow || '' },
+    n.arrow && ARROW_ICON[n.arrow] ? h('span', { class: 'coach-arrow', role: 'img', 'aria-label': ARROW_WORD[n.arrow] }, icon(ARROW_ICON[n.arrow])) : icon(kind === 'ok' ? 'check' : kind === 'warn' ? 'alert' : 'info'),
+    h('span', { class: 'grow' }, n.text));
+}
+
+export function coachList(advice) {
+  if (!advice) return null;
+  const rows = advice.items.map((i) => h('li', { class: i.level === 'todo' ? 'todo' : i.level === 'warn' ? 'todo' : 'done', 'data-coach': i.code },
+    i.arrow && ARROW_ICON[i.arrow] ? icon(ARROW_ICON[i.arrow]) : icon(i.level === 'info' ? 'info' : 'alert'), h('span', null, i.text)));
+  return rows.length ? h('ul', { class: 'checklist' }, rows) : null;
 }

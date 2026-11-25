@@ -145,3 +145,14 @@ def test_suggestion_points_at_the_largest_contribution():
     rep = evaluate_gates(good(uncertainty=u))
     g = next(g for g in rep.gates if g.code == "uncertainty_vs_tolerance")
     assert "lens distortion" in g.suggestion
+
+
+def test_a_draft_or_superseded_record_stays_a_preview():
+    assert "operation_record_released" in {g.code for g in evaluate_gates(good()).gates if g.passed}
+    for status in ("draft", "superseded"):
+        rep = evaluate_gates(good(record_status=status))
+        assert failed(rep) == {"operation_record_released"} and rep.status == "research_preview"
+        g = next(g for g in rep.gates if g.code == "operation_record_released")
+        assert status in g.message and g.suggestion
+    # nothing is said about the record's status before a record is chosen
+    assert "operation_record_released" not in {g.code for g in evaluate_gates(good(operation_selected=False)).gates}

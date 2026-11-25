@@ -4,18 +4,9 @@ import { h, clear, icon, chip, banner, toast, showError, busy } from '../dom.js'
 import { state, setState, setSession, ensureSession, endSession } from '../store.js';
 import { targetReadout } from './common.js';
 import { openScanner } from './scan.js';
+import { openOperationEditor, nextRevision, issueLabel } from './operation_editor.js';
 
-const ISSUE_TEXT = {
-  missing_position_tolerance: 'no position tolerance',
-  missing_rotation_tolerance: 'no rotation tolerance',
-  missing_x_offset: 'no x offset', missing_z_offset: 'no z offset', missing_size: 'no size',
-  missing_reference_point: 'no reference point', missing_rotation: 'no rotation', missing_x_semantics: 'offset semantics not stated',
-  side_datum_sign_missing: 'side datum sign not defined', floor_datum_sign_missing: 'floor datum sign not defined',
-  axis_policy_missing: 'axis policy not defined', max_axis_disagreement_missing: 'axis limit not defined',
-  missing_floor_datum: 'no floor datum', missing_side_datum: 'no side datum', no_placards: 'no placards',
-  curved_target_experimental: 'curved target (experimental)',
-};
-const issueText = (i) => ISSUE_TEXT[i] || i.replace(/_/g, ' ');
+const issueText = issueLabel;
 
 export function mount(root, ctx) {
   const s = state.session;
@@ -41,7 +32,45 @@ export function mount(root, ctx) {
     h('div', { class: 'row' },
       h('div', { class: 'grow' }, search),
       h('button', { class: 'btn', type: 'button', 'aria-label': 'Scan a barcode or QR code', 'data-action': 'scan', onclick: () => openScanner(resolveCode) }, icon('scan'), 'Scan')),
-    list, detail);
+    list, detail, libraryCard());
+
+  // Local records: where they are kept decides how much to rely on them.
+  function libraryCard() {
+    const lib = state.operations || {};
+    const st = lib.storage || { editable: !!lib.editable, persistent: null };
+    if (!st.editable) {
+      return h('div', { class: 'card tight', 'data-region': 'library' }, h('div', { class: 'eyebrow' }, 'Operation library'),
+        h('p', { class: 'hint' }, 'This deployment shows the bundled sample records only; records cannot be entered here.'));
+    }
+    return h('div', { class: 'card tight', 'data-region': 'library' },
+      h('div', { class: 'eyebrow' }, 'Operation library'),
+      h('p', { class: 'hint' }, st.persistent
+        ? 'Records entered here are kept in the directory the administrator configured.'
+        : 'Records entered here are kept in temporary storage on this server and can disappear when it restarts or is redeployed. Export a record you want to keep.'),
+      h('button', { class: 'btn', type: 'button', 'data-action': 'op-new', onclick: () => edit(null, 'new') }, icon('plus'), 'Enter a new record'));
+  }
+
+  async function reloadLibrary() {
+    try { setState({ operations: await api('GET', 'api/operations') }); } catch (err) { showError(err); }
+  }
+
+  function edit(record, mode) {
+    const lib = (state.operations && state.operations.operations) || [];
+    let rec = record ? JSON.parse(JSON.stringify(record)) : null;
+    if (rec && mode === 'copy') {
+      rec = { ...rec, operation_id: '', revision: 'A', status: 'draft', provenance: { ...rec.provenance, source: '', notes: `Copied from ${record.operation_id} rev ${record.revision}; every value is to be checked against its source.` } };
+      rec.panel = { ...rec.panel, barcodes: [] };
+      rec.placards = rec.placards.map((p) => ({ ...p, barcodes: [], tolerance: { ...p.tolerance, provenance: '' } }));
+    } else if (rec && mode === 'revision') {
+      rec = { ...rec, revision: nextRevision(rec.revision, lib.filter((o) => o.operation_id === rec.operation_id).map((o) => o.revision)), status: 'draft' };
+    }
+    openOperationEditor({ record: rec, mode, library: lib, onSaved: async (summary) => {
+      await reloadLibrary();
+      renderList();
+      if (summary) await choose(summary.operation_id, summary.revision);
+      else { sel.operationId = null; sel.revision = null; sel.detail = null; clear(detail); renderList(); updateActions(); }
+    } });
+  }
 
   if (state.config && state.config.features.demo && !(s && s.frames.length)) {
     root.append(h('div', { class: 'card' },
@@ -63,14 +92,15 @@ export function mount(root, ctx) {
     shown.forEach((o) => {
       const card = h('button', {
         class: `card selectable${sel.operationId === o.operation_id && sel.revision === o.revision ? ' selected' : ''}`,
-        type: 'button', role: 'listitem', 'data-operation': o.operation_id, 'aria-pressed': sel.operationId === o.operation_id ? 'true' : 'false',
+        type: 'button', role: 'listitem', 'data-operation': o.operation_id, 'data-revision': o.revision, 'aria-pressed': sel.operationId === o.operation_id && sel.revision === o.revision ? 'true' : 'false',
         onclick: () => choose(o.operation_id, o.revision),
       },
         h('div', { class: 'row wrap' },
           h('span', { class: 'mono', style: { fontWeight: 800, fontSize: '16px' } }, o.operation_id),
           chip(`rev ${o.revision}`, 'solid'),
-          chip(o.status, o.status === 'released' ? 'ok' : 'warn'),
+          chip(o.status, o.status === 'released' ? 'ok' : o.status === 'superseded' ? 'solid' : 'warn'),
           o.synthetic ? chip('synthetic sample', 'info') : null,
+          o.origin === 'local' ? chip('entered here', 'solid') : null,
           o.complete ? null : chip('incomplete', 'danger')),
         h('div', null, o.title),
         h('div', { class: 'hint' }, `Panel ${o.panel_id} · ${o.n_placards} placard${o.n_placards === 1 ? '' : 's'}`));
@@ -132,7 +162,19 @@ export function mount(root, ctx) {
           h('div', null, p.title || ''),
           sel.placardId === p.placard_id ? targetReadout(p) : null);
       })),
-      h('p', { class: 'hint' }, `Source: ${op.provenance.source || 'not stated'}${op.provenance.notes ? ` — ${op.provenance.notes}` : ''}`));
+      h('p', { class: 'hint' }, `Source: ${op.provenance.source || 'not stated'}${op.provenance.notes ? ` — ${op.provenance.notes}` : ''}`),
+      editButtons(d));
+  }
+
+  function editButtons(d) {
+    const lib = state.operations || {};
+    if (!(lib.storage ? lib.storage.editable : lib.editable)) return null;
+    const op = d.operation;
+    const local = d.origin !== 'bundled';
+    return h('div', { class: 'row wrap', 'data-region': 'record-actions' },
+      local && op.status === 'draft' ? h('button', { class: 'btn sm', type: 'button', 'data-action': 'op-edit', onclick: () => edit(op, 'edit') }, icon('edit'), 'Edit this draft') : null,
+      local && op.status !== 'draft' ? h('button', { class: 'btn sm', type: 'button', 'data-action': 'op-revise', onclick: () => edit(op, 'revision') }, icon('edit'), 'New revision') : null,
+      h('button', { class: 'btn sm', type: 'button', 'data-action': 'op-copy', onclick: () => edit(op, 'copy') }, icon('copy'), 'Copy to a new record'));
   }
 
   async function resolveCode(code) {
@@ -142,7 +184,9 @@ export function mount(root, ctx) {
       if (r.status === 'exact') {
         const m = r.matches[0];
         const pm = r.matches.find((x) => x.placard_id);
-        toast({ title: 'Exact match', detail: `${m.operation_id} rev ${m.revision}`, kind: 'ok', timeout: 3000 });
+        toast({ title: 'Exact match', detail: `${m.operation_id} rev ${m.revision}${m.status === 'released' ? '' : ` (${m.status})`}`, kind: 'ok', timeout: 3000 });
+        // the code may be a barcode text that the list filter does not know: show the list with the match selected
+        sel.query = ''; search.value = '';
         await choose(m.operation_id, m.revision, pm ? pm.placard_id : null);
       } else if (r.status === 'ambiguous') {
         const uniq = [...new Map(r.matches.map((m) => [`${m.operation_id}|${m.revision}`, m])).values()];

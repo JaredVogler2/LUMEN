@@ -109,6 +109,7 @@ export class Viewer {
   }
   centerOn(u, v, scaleMul = null) {
     const r = this._box();
+    if (!r.width || !r.height) return;      // not laid out yet: keep the fit that the next resize will make
     if (scaleMul) this.t.s = Math.min(this.t.s * scaleMul, 40);
     this.t.tx = r.width / 2 - (u + 0.5) * this.t.s;
     this.t.ty = r.height / 2 - (v + 0.5) * this.t.s;
@@ -286,10 +287,22 @@ export class Viewer {
     if (!text) return;
     this._labels.push({ text, x, y, color, align, size, bold, avoid, prio });
   }
+  // Screen areas covered by controls that sit on top of the canvas.
+  _reserved() {
+    const base = this.canvas.getBoundingClientRect();
+    const out = [];
+    this.host.querySelectorAll('.viewer-hud > *, .viewer-tools, .viewer-watermark, .live-coach > *').forEach((el) => {
+      const b = el.getBoundingClientRect();
+      if (b.width > 0 && b.height > 0) out.push({ x: b.left - base.left, y: b.top - base.top, w: b.width, h: b.height });
+    });
+    return out;
+  }
   _flushLabels(ctx) {
     const r = this._box();
     const placed = [];
-    const free = (bx, by, w, hgt) => !placed.some((q) => bx < q.x + q.w + 3 && bx + w + 3 > q.x && by < q.y + q.h + 3 && by + hgt + 3 > q.y);
+    const reserved = this._reserved();
+    const hit = (q, bx, by, w, hgt) => bx < q.x + q.w + 3 && bx + w + 3 > q.x && by < q.y + q.h + 3 && by + hgt + 3 > q.y;
+    const free = (bx, by, w, hgt) => !placed.some((q) => hit(q, bx, by, w, hgt)) && !reserved.some((q) => hit(q, bx, by, w, hgt));
     this._labels.sort((a, b) => b.prio - a.prio);
     for (const L of this._labels) {
       ctx.font = `${L.bold ? 700 : 500} ${L.size}px system-ui, -apple-system, sans-serif`;
@@ -302,7 +315,7 @@ export class Viewer {
       if (free(bx0, by0, w, hgt)) spot = [bx0, by0];
       else if (!L.avoid) {
         const sy = hgt + 4, sx = w * 0.6 + 6;
-        const tries = [[0, sy], [0, -sy], [sx, 0], [-sx, 0], [sx, sy], [-sx, sy], [sx, -sy], [-sx, -sy], [0, 2 * sy], [0, -2 * sy], [2 * sx, 0], [-2 * sx, 0], [0, 3 * sy], [0, -3 * sy]];
+        const tries = [[0, sy], [0, -sy], [sx, 0], [-sx, 0], [sx, sy], [-sx, sy], [sx, -sy], [-sx, -sy], [0, 2 * sy], [0, -2 * sy], [2 * sx, 0], [-2 * sx, 0], [0, 3 * sy], [0, -3 * sy], [-2 * sx, -sy], [-2 * sx, sy], [-3 * sx, 0], [0, 4 * sy], [0, -4 * sy]];
         for (const [dx, dy] of tries) {
           const bx = clampX(bx0 + dx), by = clampY(by0 + dy);
           if (free(bx, by, w, hgt)) { spot = [bx, by]; break; }
@@ -414,7 +427,7 @@ export class Viewer {
       // label above the outline as it appears on screen (whatever its rotation)
       const vv = (p.corners || pts).map((c) => this.toView(c[0], c[1]));
       const minY = Math.min(...vv.map((c) => c[1])), midX = vv.reduce((a, c) => a + c[0], 0) / vv.length;
-      const tagText = k === 'target_preview' ? `${p.label} · PREVIEW` : p.label;
+      const tagText = k === 'target_preview' && p.active !== false ? `${p.label} · PREVIEW` : p.label;
       this._label(ctx, tagText, midX, minY - 17, col, { size: 13, align: 'center', prio: p.active === false ? 4 : 9, avoid: p.active === false });
     } else if (k === 'target_ref') {
       const [x, y] = this.toView(pts[0][0], pts[0][1]);

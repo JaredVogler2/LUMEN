@@ -68,6 +68,8 @@ class Limits:
     session_ttl_seconds: int = 4 * 3600
     #: Wall-clock budget of one analysis job.
     job_timeout_seconds: float = 120.0
+    #: Wall-clock budget of one video (decode, frame selection, tag measurement).
+    video_job_timeout_seconds: float = 300.0
     #: Wall-clock budget of one synchronous request (detection, overlay, track).
     request_timeout_seconds: float = 30.0
     #: Concurrent CPU-heavy computations per worker process.
@@ -83,6 +85,10 @@ class Settings:
     data_dir: Path = field(default_factory=_default_data_dir)
     #: Directory of the editable operation library ("" = bundled read-only sample).
     operations_dir: str = ""
+    #: no local operation records at all (the bundled sample only)
+    operations_readonly: bool = False
+    #: LUMEN_DATA_DIR was set by the administrator (otherwise sessions and local records are in a temporary directory)
+    data_dir_configured: bool = False
     #: External base path when it cannot be discovered from proxy headers.
     base_path: str = ""
     demo_enabled: bool = True
@@ -94,8 +100,6 @@ class Settings:
     llm_timeout_seconds: float = 20.0
     #: Experimental research features; diagnostics only, never guidance.
     photometric_enabled: bool = True
-    #: Retain uploaded photos after the session ends (default: never).
-    retain_images: bool = False
     #: JSON file describing a physically validated measurement domain ("" = none).
     validated_domain_file: str = ""
     log_level: str = "INFO"
@@ -117,6 +121,7 @@ def load_settings() -> Settings:
         max_sessions=_env_int("LUMEN_MAX_SESSIONS", 40),
         session_ttl_seconds=_env_int("LUMEN_SESSION_TTL_SECONDS", 4 * 3600),
         job_timeout_seconds=_env_float("LUMEN_JOB_TIMEOUT_SECONDS", 120.0),
+        video_job_timeout_seconds=_env_float("LUMEN_VIDEO_JOB_TIMEOUT_SECONDS", 300.0),
         request_timeout_seconds=_env_float("LUMEN_REQUEST_TIMEOUT_SECONDS", 30.0),
         max_concurrent_jobs=max(1, _env_int("LUMEN_MAX_CONCURRENT_JOBS", 2)),
         max_track_long_edge=_env_int("LUMEN_MAX_TRACK_LONG_EDGE", 1600),
@@ -129,6 +134,8 @@ def load_settings() -> Settings:
         storage=storage,
         data_dir=_default_data_dir(),
         operations_dir=_env("LUMEN_OPERATIONS_DIR", "") or "",
+        operations_readonly=_env_bool("LUMEN_OPERATIONS_READONLY", False),
+        data_dir_configured=bool(_env("LUMEN_DATA_DIR")),
         base_path=(_env("LUMEN_BASE_PATH", "") or "").rstrip("/"),
         demo_enabled=_env_bool("LUMEN_DEMO_ENABLED", True),
         llm_enabled=_env_bool("LUMEN_LLM_ENABLED", False),
@@ -137,7 +144,6 @@ def load_settings() -> Settings:
         llm_api_key_env=_env("LUMEN_LLM_API_KEY_ENV", "LUMEN_LLM_API_KEY") or "LUMEN_LLM_API_KEY",
         llm_timeout_seconds=_env_float("LUMEN_LLM_TIMEOUT_SECONDS", 20.0),
         photometric_enabled=_env_bool("LUMEN_PHOTOMETRIC_ENABLED", True),
-        retain_images=_env_bool("LUMEN_RETAIN_IMAGES", False),
         validated_domain_file=_env("LUMEN_VALIDATED_DOMAIN_FILE", "") or "",
         log_level=(_env("LUMEN_LOG_LEVEL", "INFO") or "INFO").upper(),
     )

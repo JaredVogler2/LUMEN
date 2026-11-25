@@ -185,3 +185,128 @@ def test_extra_fields_are_rejected(lib):
     rec["placards"][0]["scale_from_barcode_mm"] = 50  # a barcode never supplies physical scale
     with pytest.raises(LumenValidationError):
         parse_operation(rec)
+
+
+def _local(lib, op_id="LOCAL-10", revision="A", status="released", x=240):
+    rec = _record(lib)
+    rec.update(operation_id=op_id, revision=revision, status=status, synthetic=False)
+    rec["placards"][0]["position"]["x"]["value"] = x
+    return parse_operation(rec)
+
+
+def test_a_new_released_revision_supersedes_the_old_one_explicitly(lib):
+    lib.save(_local(lib, revision="A", x=240), author="alice")
+    lib.save(_local(lib, revision="B", x=250), author="bob")
+    with pytest.raises(ConflictError):
+        lib.get("LOCAL-10")
+    old = lib.supersede("LOCAL-10", "A", author="bob")
+    assert old.status == "superseded" and old.placard("PLC-DEMO-101").resolved()["x_mm"] == 240.0, "superseding changes the status and nothing else"
+    assert lib.get("LOCAL-10").revision == "B", "one released revision is left, so no choice is needed"
+    assert lib.supersede("LOCAL-10", "A").status == "superseded"  # repeating it is harmless
+    # a superseded revision is as immutable as a released one
+    with pytest.raises(ConflictError) as e:
+        lib.save(_local(lib, revision="A", x=1))
+    assert e.value.code == "released_revision_immutable"
+    with pytest.raises(ConflictError) as e:
+        lib.save(_local(lib, revision="A", x=240))  # even "un-superseding" by saving it as released again
+    assert e.value.code == "released_revision_immutable"
+
+
+def test_only_local_drafts_can_be_deleted_and_only_released_superseded(lib):
+    lib.save(_local(lib, "LOCAL-11", "A", "draft"))
+    lib.save(_local(lib, "LOCAL-11", "B", "released"))
+    with pytest.raises(ConflictError) as e:
+        lib.supersede("LOCAL-11", "A")
+    assert e.value.code == "only_released_can_be_superseded"
+    with pytest.raises(ConflictError) as e:
+        lib.delete("LOCAL-11", "B")
+    assert e.value.code == "only_drafts_can_be_deleted"
+    lib.delete("LOCAL-11", "A")
+    assert [o.revision for o in lib.revisions("LOCAL-11")] == ["B"]
+    for fn in (lib.supersede, lib.delete):
+        with pytest.raises(ConflictError) as e:
+            fn("DEMO-FLAT-01", "A")
+        assert e.value.code == "bundled_record_immutable"
+    with pytest.raises(NotFoundError):
+        lib.delete("LOCAL-11", "Z")
+    ro = OperationLibrary(BUNDLED_OPS, None)
+    for fn in (ro.supersede, ro.delete):
+        with pytest.raises(ConflictError) as e:
+            fn("DEMO-FLAT-01", "A")
+        assert e.value.code == "library_read_only"
+
+
+def test_every_change_is_recorded_with_who_and_when(lib):
+    lib.save(_local(lib, "LOCAL-12", "A", "draft"), author="alice")
+    lib.save(_local(lib, "LOCAL-12", "A", "released"), author="alice")
+    lib.save(_local(lib, "LOCAL-12", "B", "released", x=260), author="bob")
+    lib.supersede("LOCAL-12", "A", author="bob")
+    lib.save(_local(lib, "LOCAL-13", "A", "draft"), author="carol")
+    lib.delete("LOCAL-13", "A", author="carol")
+    a = lib.audit("LOCAL-12")
+    assert [(e["action"], e["revision"], e["status"], e["author"]) for e in a] == [
+        ("saved", "A", "draft", "alice"), ("saved", "A", "released", "alice"), ("saved", "B", "released", "bob"), ("superseded", "A", "superseded", "bob")]
+    assert a[1]["content_hash"] == lib.get("LOCAL-12", "A").model_copy(update={"status": "released"}).content_hash()
+    assert all(e["at"].endswith("Z") and len(e["at"]) == 20 for e in a)
+    assert [(e["action"], e["operation_id"]) for e in lib.audit()][-2:] == [("saved", "LOCAL-13"), ("deleted", "LOCAL-13")]
+    assert OperationLibrary(BUNDLED_OPS, None).audit() == []
+    # the trail is part of the same file as the records
+    raw = json.loads(lib.overlay_path.read_text())
+    assert len(raw["audit"]) == 6 and {o["operation_id"] for o in raw["operations"]} == {"LOCAL-12"}
+
+
+def test_records_saved_by_another_worker_process_are_seen(tmp_path):
+    a = OperationLibrary(BUNDLED_OPS, tmp_path / "local")
+    b = OperationLibrary(BUNDLED_OPS, tmp_path / "local")  # a second process with its own memory
+    a.save(_local(a, "LOCAL-20", "A"))
+    b._checked = 0.0  # the file is looked at no more than twice a second
+    assert b.get("LOCAL-20").revision == "A" and b.resolve("LOCAL-20")["status"] == "exact"
+    # a save made from stale memory does not drop what the other process stored
+    b.save(_local(b, "LOCAL-21", "A"))
+    a._checked = 0.0
+    assert {o.operation_id for o in a.all()} >= {"LOCAL-20", "LOCAL-21"}
+
+
+def test_simultaneous_saves_from_several_processes_lose_nothing(tmp_path):
+    import threading
+
+    libs = [OperationLibrary(BUNDLED_OPS, tmp_path / "local") for _ in range(4)]
+    errors: list[Exception] = []
+
+    def work(k: int) -> None:
+        try:
+            for j in range(6):
+                libs[k].save(_local(libs[k], f"LOCAL-P{k}-{j}", "A"), author=f"p{k}")
+        except Exception as exc:  # pragma: no cover - reported below
+            errors.append(exc)
+
+    threads = [threading.Thread(target=work, args=(k,)) for k in range(4)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert not errors
+    fresh = OperationLibrary(BUNDLED_OPS, tmp_path / "local")
+    assert len([o for o in fresh.all() if o.operation_id.startswith("LOCAL-P")]) == 24 and len(fresh.audit()) == 24
+    assert not list((tmp_path / "local").glob("*.tmp"))
+
+
+def test_a_code_means_the_released_revision_not_its_drafts_or_superseded_ones(lib):
+    lib.save(_local(lib, "LOCAL-30", "A", "released"))
+    lib.save(_local(lib, "LOCAL-30", "B", "released", x=250))
+    # two released revisions: the operator must choose
+    r = lib.resolve("LOCAL-30")
+    assert r["status"] == "ambiguous" and {m["revision"] for m in r["matches"]} == {"A", "B"}
+    lib.supersede("LOCAL-30", "A")
+    lib.save(_local(lib, "LOCAL-30", "C", "draft", x=260))
+    r = lib.resolve("LOCAL-30")
+    assert r["status"] == "exact" and {m["revision"] for m in r["matches"]} == {"B"}
+    assert {(m["revision"], m["status"]) for m in r["other_revisions"]} == {("A", "superseded"), ("C", "draft")}
+    # only a draft exists: it is found, as a draft
+    lib.save(_local(lib, "LOCAL-31", "A", "draft"))
+    r = lib.resolve("LOCAL-31")
+    assert r["status"] == "exact" and r["matches"][0]["status"] == "draft"
+    # the same code on two different operations stays ambiguous, whatever their status
+    r = lib.resolve("LUMEN-DEMO-PNL-FLAT")
+    assert r["status"] == "ambiguous" and {m["operation_id"] for m in r["matches"]} == {"DEMO-FLAT-01", "LOCAL-30", "LOCAL-31"}
+    assert lib.resolve("")["status"] == "none"
