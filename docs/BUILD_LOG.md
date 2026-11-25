@@ -229,3 +229,83 @@ Without a profile the focal length is self-calibrated for the 3-D checks only
 
 Cost: about 2.3 s for 6 views including held-out re-solves and the free-size
 test (single core).
+
+## 2026-11-25 — Automatic datum geometry and rounded edges (prompt 06)
+
+`lumen/vision/datums.py` finds straight features in every photo, matches them
+across photos and classifies each by triangulation rather than by appearance:
+
+* **on the panel face** — the same physical line in every photo, lying in the
+  tag plane (a seam, a joint, the panel/floor junction);
+* **off the plane** — a stationary physical line at a measured height (the
+  front edge of a raised trim): offered, but choosing it blocks guidance;
+* **view dependent** — the line moves on the panel as the camera moves (the
+  silhouette of a rounded edge, a shadow, a highlight): never offered as a
+  planar datum;
+* **unverified** — seen in one photo only: preview at most.
+
+Floor/side pairs are chosen from the configured nominal angle and the
+configured side of the panel (a handedness in the panel's own frame). Nothing
+uses gravity, the image "down" direction or the phone's orientation.
+
+A rounded panel edge is fitted as a cylinder from its silhouettes in several
+photos. For a camera at in-plane distance `c_e` from the tangent line and
+height `c_h` above the face, the silhouette appears on the face plane at
+`phi = atan2(c_h + R, c_e) - asin(R / hypot(c_e, c_h + R))` around the axis;
+the fit solves for the tangent line and the radius together.
+
+Measured on synthetic 1600x1200 photos, 5–7 per sweep, tags measured,
+calibrated (script output, 2026-11-25; numbers are simulation results, not
+physical accuracy):
+
+| Case | Result |
+|---|---|
+| Flat panel, floor step + joint seam | both found without drawing; floor line within 0.014 mm and seam within 0.021 mm of truth; raw angle 89.998°; target outline 0.03 mm from truth |
+| Floor trim 8 mm proud, 60 mm tall | trim/panel junction classified on-plane; lower front edge classified off-plane at 8.29 mm (true 8.0); the hidden floor line is not invented |
+| Extra seam 45 mm beside the datum seam | side datum reported ambiguous; `research_preview` until the operator chooses |
+| Floor below every photo | no floor datum, capture hint, `blocked` |
+| Rounded edge R = 20 / 35 / 60 mm | R = 20.01 ± 0.17 / 35.03 ± 0.17 / 60.04 ± 0.27 mm; tangent line within 0.017 / 0.026 / 0.035 mm; target 0.03 mm from truth |
+| Rounded edge, one photo | silhouette is not the tangent line: `research_preview`, gate `datum_side_needs_3d` |
+| Edge leaning 5° | raw angle 85.001° kept, disagreement 4.999° > 1° limit: `blocked` (not orthogonalised) |
+| Two identical seams left and right | resolved only by the operation's configured side |
+
+What did not work at first:
+
+* The silhouette formula had a sign error (found by comparing with a
+  brute-force tangent search, now a unit test).
+* The floor line was contaminated by the part of the edge beyond the bend;
+  lines are now trimmed to their straight support before fitting.
+* A cylinder fit returned R = 24 for a true 20 mm when one photo was taken from
+  beyond the edge (bend over 87°). Such views, and outliers, are now excluded;
+  the fit never drops below half of the photos.
+* At higher resolution a silhouette passed as a stationary off-plane line
+  (residual 0.69 mm against a 0.8 mm limit). The limit is now 0.25 mm.
+* One tag without an edge-bias estimate applied the uncorrected 0.25 px bound
+  to every tag (2.9 mm in the budget). The bound is now per observation.
+
+Cost: proposing datums for 5 photos takes about 3.9 s on one core.
+
+Not covered: seams that are curved, occluded along most of their length, or
+visible only as a faint texture change; real materials; real lighting.
+
+## 2026-11-25 — Browser tests and the display mapping
+
+`tests/browser` drives the application in headless Chromium (phone portrait
+390x844 and landscape 844x390): first-run states, operation selection with
+units, the demo walk-through to guidance, theme switch, reload/resume, session
+deletion and basic accessibility (names on controls, 44 px touch targets).
+
+`test_pixel_mapping.py` checks the drawn overlay against the picture itself:
+tag corners returned by the server are located independently in a screenshot
+of the canvas and compared with where the viewer says it drew them.
+
+Finding: everything was drawn about 1 CSS pixel too high (constant −0.97 px in
+y) because the canvas was sized from its bordered container. After sizing from
+the canvas content box the mean error is (0.01, 0.00) px at 3x zoom,
+(0.02, −0.07) px at 6x and (0.24, −0.07) px at 10x, i.e. at the resolution of
+the screenshot-based check.
+
+The page's content security policy forbids `eval`, so the tests pass functions
+(not expression strings) to the browser.
+
+Test count at this point: 273 unit/integration + 9 browser, all passing.

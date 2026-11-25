@@ -73,7 +73,7 @@ def marker_from_detection(d: TagDetection) -> MarkerObservation:
 
 
 def tag_obs(m: MarkerObservation) -> TagObs:
-    return TagObs(m.tag_id, np.asarray(m.corners_ideal, dtype=float), np.asarray(m.cov, dtype=float), float(m.size_mm))
+    return TagObs(m.tag_id, np.asarray(m.corners_ideal, dtype=float), np.asarray(m.cov, dtype=float), float(m.size_mm), bool(m.bias_applied))
 
 
 def detect_in_image(

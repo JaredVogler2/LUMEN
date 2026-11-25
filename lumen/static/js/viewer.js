@@ -47,7 +47,7 @@ export class Viewer {
     this.pointers = new Map();
     this.draft = null;            // line being drawn, frame coords
     this.extra = [];              // caller-supplied primitives drawn on top
-    this.layers = { grid: true, tags: true, dims: true };
+    this.layers = { grid: true, tags: true, dims: true, candidates: false };
     this.userMoved = false;
     this._raf = 0;
     this._bind();
@@ -81,11 +81,18 @@ export class Viewer {
   }
   setLayer(name, on) { this.layers[name] = on; this.draw(); }
 
+  // The drawing surface is the canvas's own content box.  (The container has
+  // a border; sizing from it shifted every overlay by the border width — a
+  // defect found by tests/browser/test_pixel_mapping.py.)
+  _box() {
+    return { width: this.canvas.clientWidth, height: this.canvas.clientHeight };
+  }
+
   // ----------------------------------------------------------- transform
   toView(u, v) { return frameToView(this.t, u, v); }
   toFrame(x, y) { return viewToFrame(this.t, x, y); }
   fit() {
-    const r = this.host.getBoundingClientRect();
+    const r = this._box();
     if (!this.W || !r.width) return;
     this.t = fitTransform(this.W, this.H, r.width, r.height, 0);
     this.minScale = this.t.s * 0.6;
@@ -101,7 +108,7 @@ export class Viewer {
     this.draw();
   }
   centerOn(u, v, scaleMul = null) {
-    const r = this.host.getBoundingClientRect();
+    const r = this._box();
     if (scaleMul) this.t.s = Math.min(this.t.s * scaleMul, 40);
     this.t.tx = r.width / 2 - (u + 0.5) * this.t.s;
     this.t.ty = r.height / 2 - (v + 0.5) * this.t.s;
@@ -110,7 +117,7 @@ export class Viewer {
   }
 
   _resize() {
-    const r = this.host.getBoundingClientRect();
+    const r = this._box();
     const dpr = Math.min(window.devicePixelRatio || 1, 3);
     const w = Math.max(1, Math.round(r.width * dpr));
     const hgt = Math.max(1, Math.round(r.height * dpr));
@@ -194,7 +201,7 @@ export class Viewer {
       this.zoomAt(p[0], p[1], Math.exp(-ev.deltaY * 0.0015));
     }, { passive: false });
     c.addEventListener('keydown', (ev) => {
-      const r = this.host.getBoundingClientRect();
+      const r = this._box();
       const step = 40;
       if (ev.key === '+' || ev.key === '=') this.zoomAt(r.width / 2, r.height / 2, 1.3);
       else if (ev.key === '-') this.zoomAt(r.width / 2, r.height / 2, 1 / 1.3);
@@ -210,6 +217,23 @@ export class Viewer {
   _pinchState() {
     const [a, b] = [...this.pointers.values()];
     return { d: Math.hypot(a.x - b.x, a.y - b.y), cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2 };
+  }
+
+  // Nearest overlay primitive of a kind to a frame point, within `maxPx` on screen.
+  nearest(kind, u, v, maxPx = 26) {
+    const [x, y] = this.toView(u, v);
+    let best = null, bestD = maxPx;
+    for (const p of ((this.overlay && this.overlay.primitives) || [])) {
+      if (p.kind !== kind || !p.points || p.points.length < 2) continue;
+      for (let i = 1; i < p.points.length; i++) {
+        const a = this.toView(p.points[i - 1][0], p.points[i - 1][1]), b = this.toView(p.points[i][0], p.points[i][1]);
+        const dx = b[0] - a[0], dy = b[1] - a[1];
+        const t = Math.max(0, Math.min(1, ((x - a[0]) * dx + (y - a[1]) * dy) / Math.max(dx * dx + dy * dy, 1e-9)));
+        const d = Math.hypot(x - a[0] - t * dx, y - a[1] - t * dy);
+        if (d < bestD) { bestD = d; best = p; }
+      }
+    }
+    return best;
   }
 
   // ------------------------------------------------------------ drawing
@@ -228,7 +252,7 @@ export class Viewer {
     ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(this.bitmap, this.t.tx, this.t.ty, this.W * this.t.s, this.H * this.t.s);
     const prims = [...((this.overlay && this.overlay.primitives) || []), ...this.extra];
-    const order = ['grid_minor', 'grid_major', 'grid_axis', 'tag', 'tag_rejected', 'datum_floor', 'datum_side', 'axis_x', 'axis_z', 'tick', 'origin', 'dim', 'target_preview', 'target', 'target_ref', 'measured', 'proposal', 'segment', 'handle', 'note'];
+    const order = ['grid_minor', 'grid_major', 'grid_axis', 'tag', 'tag_rejected', 'candidate', 'datum_floor', 'datum_side', 'axis_x', 'axis_z', 'tick', 'origin', 'dim', 'target_preview', 'target', 'target_ref', 'measured', 'proposal', 'segment', 'handle', 'note'];
     // grid density on screen decides what is worth drawing
     const step = (this.overlay && this.overlay.grid_step_mm) || 0;
     const ppm = (this.overlay && this.overlay.px_per_mm) || 0;
@@ -263,7 +287,7 @@ export class Viewer {
     this._labels.push({ text, x, y, color, align, size, bold, avoid, prio });
   }
   _flushLabels(ctx) {
-    const r = this.host.getBoundingClientRect();
+    const r = this._box();
     const placed = [];
     const free = (bx, by, w, hgt) => !placed.some((q) => bx < q.x + q.w + 3 && bx + w + 3 > q.x && by < q.y + q.h + 3 && by + hgt + 3 > q.y);
     this._labels.sort((a, b) => b.prio - a.prio);
@@ -407,6 +431,13 @@ export class Viewer {
       this._label(ctx, p.label, x, y, p.color || '#ffffff', { align: 'center' });
     } else if (k === 'segment') {
       this._stroke(ctx, pts, false, p.color || '#ffffff', p.width || 2.5, { dash: p.dash || null });
+    } else if (k === 'candidate') {
+      if (!this.layers.candidates || pts.length < 2) return;
+      const col = p.classification === 'on_plane' ? '#3ddc97' : p.classification === 'off_plane' ? '#ff5d5d' : p.classification === 'view_dependent' ? '#ffb020' : '#ffffff';
+      this._stroke(ctx, pts, false, col, 3, { dash: [10, 7] });
+      const [x, y] = this._along(pts, 0.5);
+      const txt = p.classification === 'on_plane' ? 'on the face' : p.classification === 'off_plane' ? `off the face ${Math.abs(p.height_mm || 0).toFixed(0)} mm` : p.classification === 'view_dependent' ? 'silhouette / shadow' : 'not verified';
+      this._label(ctx, txt, x, y - 14, col, { size: 12, align: 'center', prio: 5, avoid: true });
     }
   }
 

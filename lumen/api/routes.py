@@ -399,6 +399,27 @@ def confirm_datums(request: Request, sid: str, confirmed: bool = True) -> dict[s
     return public_session(_svc(request).confirm_datums(sid, confirmed))
 
 
+@router.post("/sessions/{sid}/datums/propose")
+def propose_datums(request: Request, sid: str, apply: bool = True) -> dict[str, Any]:
+    _session(request, sid)
+    svc = _svc(request)
+    out = svc.propose_datums(sid, apply=apply)
+    return {"proposals": out, "session": public_session(svc.get(sid))}
+
+
+class SelectCandidateBody(BaseModel):
+    kind: str = Field(max_length=8)
+    candidate_id: str = Field(max_length=24)
+
+
+@router.post("/sessions/{sid}/datums/select")
+def select_datum(request: Request, sid: str, body: SelectCandidateBody) -> dict[str, Any]:
+    _session(request, sid)
+    svc = _svc(request)
+    obs = svc.select_datum_candidate(sid, body.kind, body.candidate_id)
+    return {"datum": obs.model_dump(mode="json"), "session": public_session(svc.get(sid))}
+
+
 @router.post("/sessions/{sid}/datums/{kind}")
 def propose_datum(request: Request, sid: str, kind: str, body: DatumBody) -> dict[str, Any]:
     _session(request, sid)
@@ -414,14 +435,14 @@ def clear_datum(request: Request, sid: str, kind: str) -> dict[str, Any]:
 
 
 @router.get("/sessions/{sid}/overlay")
-def overlay(request: Request, sid: str, frame: str, view: str = "image", placards: str | None = None, uncertainty: bool = True, rect_max: int = 1600) -> dict[str, Any]:
+def overlay(request: Request, sid: str, frame: str, view: str = "image", placards: str | None = None, uncertainty: bool = True, rect_max: int = 1600, candidates: bool = False) -> dict[str, Any]:
     _session(request, sid)
     if view not in ("image", "rect"):
         raise LumenValidationError("invalid_view", "view must be 'image' or 'rect'.")
     if not (128 <= rect_max <= 4096):
         raise LumenValidationError("invalid_size", "rect_max must be between 128 and 4096.")
     pids = [p for p in placards.split(",") if p] if placards else None
-    return _svc(request).overlay(sid, frame, view=view, placard_ids=pids, with_uncertainty=uncertainty, rect_max_edge=rect_max)
+    return _svc(request).overlay(sid, frame, view=view, placard_ids=pids, with_uncertainty=uncertainty, rect_max_edge=rect_max, candidates=candidates)
 
 
 @router.get("/sessions/{sid}/report")

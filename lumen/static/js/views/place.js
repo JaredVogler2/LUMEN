@@ -53,7 +53,7 @@ export function mount(root, ctx) {
     const cx = t.corners.reduce((a, c) => a + c[0], 0) / 4, cy = t.corners.reduce((a, c) => a + c[1], 0) / 4;
     viewer.fit();
     viewer.centerOn(cx, cy, 1.0);
-    const r = viewer.host.getBoundingClientRect();
+    const r = viewer._box();
     const wpx = Math.hypot(t.corners[1][0] - t.corners[0][0], t.corners[1][1] - t.corners[0][1]) * viewer.t.s;
     if (wpx < r.width * 0.28) viewer.zoomAt(r.width / 2, r.height / 2, (r.width * 0.34) / Math.max(wpx, 1));
   }

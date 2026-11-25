@@ -48,6 +48,7 @@ from ..schemas import (
     SessionMode,
 )
 from ..storage.base import SessionStore, new_session_id
+from ..vision.datums import DatumConfig, FrameContext, LineCandidate, choose_pairs, fit_cylinder_from_silhouettes, fit_plane_line, fit_to_dict, match_and_classify, propose_in_frame
 from ..vision.edgefit import snap_line
 from ..vision.imaging import DecodedImage, encode_jpeg, to_gray
 from ..vision.markers import MarkerConfig, TagSizeTable
@@ -74,6 +75,7 @@ class SessionService:
         self._ucfg = UncertaintyConfig()
         self._marker_cfg = MarkerConfig()
         self._mv_cfg = MVConfig()
+        self._datum_cfg = DatumConfig()
         self._domain: dict[str, Any] | None = None
         if settings.validated_domain_file:
             try:
@@ -634,7 +636,7 @@ class SessionService:
         if kind not in ("floor", "side"):
             raise LumenValidationError("unknown_datum", "Datum kind must be 'floor' or 'side'.")
         s = self._load(sid)
-        sol, _ = self._require_registration(s)
+        sol, _views, mv = self._require_registration_full(s)
         f = self._frame(s, frame_id)
         if f.id not in sol.views:
             raise ConflictError("frame_not_registered", "Datums must be drawn on a frame that is part of the registration.")
@@ -644,58 +646,134 @@ class SessionService:
         if float(np.linalg.norm(seg[1] - seg[0])) < 30.0:
             raise LumenValidationError("datum_too_short", "The drawn line is too short; draw along at least a few centimetres of the edge.")
         notes: list[str] = []
-        feature_kind = "manual"
-        provenance = Provenance.MANUAL
-        distinct = None
-        n_cand = None
-        fit_d: dict[str, Any]
+        cand: LineCandidate | None = None
         if snap:
             gray = to_gray(self._image(sid, f).bgr)
             with self.cpu.slot(self.settings.limits.request_timeout_seconds):
                 r = snap_line(gray, seg[0], seg[1], camera=cam, search_px=search_px)
-            if r.ok and r.fit is not None and r.fit.mid is not None and r.fit.n is not None:
-                e = r.fit
-                feature_kind = r.kind
-                provenance = Provenance.MEASURED
-                distinct, n_cand = r.distinctness, r.n_candidates
-                fit_d = {
-                    "mid": e.mid.tolist(), "n": e.n.tolist(), "length": e.length,
-                    "var_d": e.var_d * self._marker_cfg.covariance_inflation + 0.02**2,
-                    "var_theta": e.var_theta * self._marker_cfg.covariance_inflation,
-                    "cov_d_theta": e.cov_d_theta * self._marker_cfg.covariance_inflation,
-                    "sigma_blur_px": e.sigma_blur, "contrast": e.contrast, "shift_px": r.shift_px, "tilt_deg": r.tilt_deg,
-                }
-            else:
-                notes.append(f"no edge found near the drawn line ({r.reason}); kept as drawn")
-                snap = False
-        if not snap:
+                if r.ok and r.fit is not None:
+                    line, ends = fit_plane_line(r.fit, np.linalg.inv(H))
+                    cand = LineCandidate(
+                        id=f"{f.id}:drawn", frame_id=f.id, kind=r.kind, fit=r.fit, line=line, endpoints=ends,
+                        length_mm=float(np.linalg.norm(ends[1] - ends[0])), contrast=r.fit.contrast,
+                        sigma_blur_px=r.fit.sigma_blur, distinctness=r.distinctness,
+                    )
+                    cand.notes.append(f"{r.n_candidates} feature(s) in the search band") if r.n_candidates > 1 else None
+                    ctxs = self._frame_contexts(sid, s, sol, mv)
+                    if len(ctxs) > 1:
+                        match_and_classify(cand, ctxs, self._datum_cfg)
+                else:
+                    notes.append(f"no edge found near the drawn line ({r.reason}); kept as drawn")
+        if cand is not None:
+            obs = self._datum_from_candidate(s, sol, kind, cand, n_candidates=None)
+        else:
             t = seg[1] - seg[0]
             L = float(np.linalg.norm(t))
             t /= L
             fit_d = {"mid": (0.5 * (seg[0] + seg[1])).tolist(), "n": [-t[1], t[0]], "length": L, "var_d": 0.0, "var_theta": 0.0, "cov_d_theta": 0.0}
+            obs = self._datum_from_fit(s, sol, kind, f.id, fit_d, feature_kind="manual", provenance=Provenance.MANUAL, distinct=None, n_cand=None, notes=notes, plane_evidence=None)
 
-        ev = self._evidence(kind, f.id, fit_d, self._datum_def(s, kind), manual=(provenance == Provenance.MANUAL))
-        interior = sol.layout.centroid()
-        Hinv = np.linalg.inv(H)
-        feature_line = DatumEvidence(kind, f.id, ev.mid, ev.n, ev.length, ev.cov).plane_line(Hinv, interior)
-        line = ev.plane_line(Hinv, interior)
-        ends = apply_h(Hinv, ev.points())
-        mm_per_px = 1.0 / max(float(local_scale_px_per_mm(H, ends.mean(axis=0)[None])[0]), 1e-9)
+        def fn(s2: Session) -> None:
+            s2.datums[kind] = obs
+            self._rebuild_local_frame(s2, sol)
+
+        self._mutate(sid, fn, "datum_proposed", {"kind": kind, "frame_id": f.id, "feature": obs.feature_kind, "provenance": obs.provenance})
+        return obs
+
+    def _require_registration_full(self, s: Session) -> tuple[PlanarSolution, list[PlanarView], dict[str, Any] | None]:
+        if not s.registration:
+            raise ConflictError("not_registered", "The session has not been registered yet.", suggestions=["Run the analysis after capturing photos."])
+        return self._solve_full(s)
+
+    def _frame_contexts(self, sid: str, s: Session, sol: PlanarSolution, mv: dict[str, Any] | None) -> dict[str, FrameContext]:
+        """Per-photo data for multi-view datum reasoning (pixels, mapping, 3-D pose)."""
+        from ..geometry.se3 import Pose
+
+        frames = {f.id: f for f in s.frames}
+        poses: dict[str, Pose] = {}
+        K = None
+        g = str(sol.layout.gauge_id)
+        if mv and "skipped" not in mv and g in mv.get("tags", {}):
+            T_w_g = Pose.from_dict(mv["tags"][g])
+            for fid, d in mv["cameras"].items():
+                poses[fid] = Pose.from_dict(d) @ T_w_g  # T_cam_plane
+            i = mv["intrinsics"]
+            K = np.array([[i["fx"], 0.0, i["cx"]], [0.0, i["fy"], i["cy"]], [0.0, 0.0, 1.0]])
+        out: dict[str, FrameContext] = {}
+        for fid, v in sol.views.items():
+            f = frames[fid]
+            blur = [m.sigma_blur_px for m in f.markers if m.accepted and m.sigma_blur_px > 0]
+            out[fid] = FrameContext(
+                frame_id=fid,
+                gray=to_gray(self._image(sid, f).bgr),
+                camera=self._camera(s, f),
+                H=v.H,
+                pose=poses.get(fid),
+                K=K if fid in poses else None,
+                tag_blur_px=float(np.median(blur)) if blur else 1.0,
+            )
+        return out
+
+    def _datum_from_candidate(self, s: Session, sol: PlanarSolution, kind: str, c: LineCandidate, n_candidates: int | None) -> DatumObservation:
         ddef = self._datum_def(s, kind)
         declared = None if ddef is None else ddef.on_target_plane
-        obs = DatumObservation(
+        evidence = {"on_plane": "verified_multiview", "off_plane": "off_plane", "view_dependent": "off_plane"}.get(c.classification)
+        if evidence is None:
+            evidence = "configured" if declared else "unverified"
+        notes = list(c.notes)
+        if c.classification == "on_plane":
+            notes.append(f"stays fixed on the panel face across {1 + len(c.matches)} photos (spread {c.spread_mm:.2f} mm)")
+        fit_d = fit_to_dict(c.fit, self._marker_cfg.covariance_inflation)
+        fit_d["classification"] = c.classification
+        fit_d["height_mm"] = c.height_mm
+        fit_d["n_views"] = 1 + len(c.matches)
+        return self._datum_from_fit(
+            s, sol, kind, c.frame_id, fit_d, feature_kind=c.kind, provenance=Provenance.MEASURED,
+            distinct=c.distinctness, n_cand=n_candidates, notes=notes, plane_evidence=evidence,
+        )
+
+    def _datum_from_fit(
+        self,
+        s: Session,
+        sol: PlanarSolution,
+        kind: str,
+        frame_id: str,
+        fit_d: dict[str, Any],
+        *,
+        feature_kind: str,
+        provenance: Provenance,
+        distinct: float | None,
+        n_cand: int | None,
+        notes: list[str],
+        plane_evidence: str | None,
+    ) -> DatumObservation:
+        ddef = self._datum_def(s, kind)
+        declared = None if ddef is None else ddef.on_target_plane
+        ev = self._evidence(kind, frame_id, fit_d, ddef, manual=(provenance == Provenance.MANUAL))
+        interior = sol.layout.centroid()
+        H = sol.views[frame_id].H
+        Hinv = np.linalg.inv(H)
+        feature_line = DatumEvidence(kind, frame_id, ev.mid, ev.n, ev.length, ev.cov, in_plane=ev.in_plane).plane_line(Hinv, interior)
+        line = ev.plane_line(Hinv, interior)
+        ends = ev.points() if ev.in_plane else apply_h(Hinv, ev.points())
+        if ev.in_plane:
+            sigma_perp = float(np.sqrt(max(fit_d.get("var_d", 0.0), 0.0)))
+        else:
+            mm_per_px = 1.0 / max(float(local_scale_px_per_mm(H, ends.mean(axis=0)[None])[0]), 1e-9)
+            sigma_perp = float(np.sqrt(max(fit_d.get("var_d", 0.0), 0.0)) * mm_per_px)
+        return DatumObservation(
             kind=kind,
             n=line.n.tolist(),
             d=line.d,
             provenance=provenance,
             confirmed=False,
             feature_kind=feature_kind,
-            frame_id=f.id,
-            endpoints=ends.tolist(),
-            sigma_perp_mm=float(np.sqrt(max(fit_d["var_d"], 0.0)) * mm_per_px),
-            sigma_angle_rad=float(np.sqrt(max(fit_d["var_theta"], 0.0))),
+            frame_id=frame_id,
+            endpoints=np.asarray(ends).tolist(),
+            sigma_perp_mm=sigma_perp,
+            sigma_angle_rad=float(np.sqrt(max(fit_d.get("var_theta", 0.0), 0.0))),
             offset_applied_mm=ev.offset_mm,
-            on_plane_evidence="configured" if declared else "unverified",
+            on_plane_evidence=plane_evidence or ("configured" if declared else "unverified"),
             distinctness=distinct,
             n_candidates=n_cand,
             notes=notes,
@@ -704,12 +782,227 @@ class SessionService:
             feature_d=feature_line.d,
         )
 
+    # -------------------------------------------------- automatic proposals
+    def propose_datums(self, sid: str, apply: bool = True) -> dict[str, Any]:
+        """Find floor / side datum candidates automatically (prompt 06).
+
+        Candidates are measured in one or two well-placed photos, re-found in
+        all others and classified in 3-D.  Unambiguous best candidates are set
+        as *unconfirmed* datums; the operator still has to review and confirm.
+        """
+        s = self._load(sid)
+        sol, _views, mv = self._require_registration_full(s)
+        op = self._operation(s)
+        frames = {f.id: f for f in s.frames}
+        with self.cpu.slot(self.settings.limits.job_timeout_seconds):
+            ctxs = self._frame_contexts(sid, s, sol, mv)
+            home = self._home_frames(sol, ctxs, frames)
+            tag_c = [sol.layout.corners(t) for t in sol.layout.poses]
+            cands: list[LineCandidate] = []
+            for fid in home:
+                f = frames[fid]
+                H = sol.views[fid].H
+                spec = self.rect_spec(s, sol, f, H, "photo", 1400)
+                rect, _ = rectify_image(self._image(sid, f).bgr, self._camera(s, f), H, spec)
+                for c in propose_in_frame(fid, self._image(sid, f).bgr, self._camera(s, f), H, rect, spec, tag_c, self._datum_cfg):
+                    c.id = f"c{len(cands)}"
+                    if len(ctxs) > 1:
+                        match_and_classify(c, ctxs, self._datum_cfg)
+                    # the same feature seen from a second home photo is one candidate
+                    dup = False
+                    for o in cands:
+                        if o.classification != "view_dependent" and c.classification != "view_dependent" and o.line.angle_to(c.line) < np.deg2rad(1.0) and abs(float(o.line.signed_distance(c.endpoints.mean(axis=0)))) < 1.5:
+                            dup = True
+                            break
+                        if o.frame_id in c.matches and c.kind == o.kind and o.line.angle_to(c.matches[o.frame_id][1]) < np.deg2rad(1.0) and abs(float(o.line.signed_distance(c.matches[o.frame_id][2].mean(axis=0)))) < 1.5:
+                            dup = True
+                            break
+                    if not dup:
+                        cands.append(c)
+            centers = np.array([[p[0], p[1]] for p in sol.layout.poses.values()])
+            d = op.datums
+            nominal = float(np.degrees(d.nominal_angle.rad)) if d.nominal_angle is not None else 90.0
+            ref = sol.views[home[0]]
+            up = apply_h(np.linalg.inv(ref.H), (apply_h(ref.H, centers.mean(axis=0)[None])[0] + np.array([0.0, -5.0]))[None])[0] - centers.mean(axis=0)
+            up = up / max(np.linalg.norm(up), 1e-9)
+            floor_feat = d.floor.feature if d.floor else None
+            side_feat = d.side.feature if d.side else None
+            curve_side = side_feat in ("curve_tangent", "curve_outer_extreme")
+            prop = choose_pairs(
+                cands, centers, nominal_angle_deg=nominal, expected_side=(d.side.side_of_panel if d.side else None),
+                floor_on_plane=(d.floor.on_target_plane if d.floor else None),
+                side_on_plane=(None if curve_side else (d.side.on_target_plane if d.side else None)),
+                image_up_plane=up, cfg=self._datum_cfg,
+            )
+            cyl = None
+            cyl_obs = None
+            if curve_side:
+                cyl, cyl_obs = self._cylinder_side(s, sol, mv, ctxs, cands, centers, d.side)
+        out = prop.to_dict()
+        out["candidates"] = [c.to_dict() for c in cands]
+        out["home_frames"] = home
+        out["cylinder"] = None if cyl is None else cyl.to_dict()
+        out["floor_feature"] = floor_feat
+        out["side_feature"] = side_feat
+        by_id = {c.id: c for c in cands}
+        applied: dict[str, str] = {}
+        new_obs: dict[str, DatumObservation] = {}
+        if apply:
+            if prop.floor:
+                c = by_id[prop.floor[0].id]
+                o = self._datum_from_candidate(s, sol, "floor", c, n_candidates=len(prop.floor))
+                if prop.ambiguous_floor:
+                    o.notes.append("another candidate of similar strength exists: choose the intended feature")
+                    o.distinctness = min(o.distinctness or 1.0, 1.0)
+                new_obs["floor"] = o
+                applied["floor"] = c.id
+            if curve_side:
+                if cyl_obs is not None:
+                    new_obs["side"] = cyl_obs
+                    applied["side"] = "cylinder_model"
+            elif prop.side:
+                c = by_id[prop.side[0].id]
+                o = self._datum_from_candidate(s, sol, "side", c, n_candidates=len(prop.side))
+                if prop.ambiguous_side:
+                    o.notes.append("another candidate of similar strength exists: choose the intended feature")
+                    o.distinctness = min(o.distinctness or 1.0, 1.0)
+                new_obs["side"] = o
+                applied["side"] = c.id
+        out["applied"] = applied
+        missing = [k for k in ("floor", "side") if k not in applied]
+        hints = []
+        if "floor" in missing:
+            hints.append("No floor line was found: include the floor seam in at least one photo (tilt the phone down).")
+        if "side" in missing:
+            hints.append(
+                "The rounded edge could not be modelled: capture 5–9 photos while moving sideways around the edge." if curve_side
+                else "No side line was found: include the side seam/edge in at least one photo."
+            )
+        out["hints"] = hints
+
+        def fn(s2: Session) -> None:
+            s2.research["datum_proposals"] = out
+            if apply:
+                for k, o in new_obs.items():
+                    s2.datums[k] = o
+                if cyl is not None and cyl.ok:
+                    s2.surface.kind = "plane_with_cylindrical_edge"
+                    s2.surface.cylinder = cyl.to_dict()
+                self._rebuild_local_frame(s2, sol)
+
+        self._mutate(sid, fn, "datums_auto_proposed", {"applied": applied, "n_candidates": len(cands)})
+        return out
+
+    @staticmethod
+    def _home_frames(sol: PlanarSolution, ctxs: dict[str, FrameContext], frames: dict[str, Frame]) -> list[str]:
+        """Photos in which candidates are searched: the reference photo and,
+        when camera positions are known, the one seen from the most different
+        direction (features hidden in one are often visible in the other)."""
+        ref = SessionService._pick_reference(sol, frames)
+        out = [ref]
+        if ctxs.get(ref) is not None and ctxs[ref].pose is not None:
+            c0 = ctxs[ref].pose.center  # type: ignore[union-attr]
+            others = [(float(np.linalg.norm(c.pose.center - c0)), fid) for fid, c in ctxs.items() if fid != ref and c.pose is not None]
+            if others:
+                dist, fid = max(others)
+                if dist > 80.0:
+                    out.append(fid)
+        return out
+
+    def select_datum_candidate(self, sid: str, kind: str, candidate_id: str) -> DatumObservation:
+        """Operator picks one of the automatically found alternatives."""
+        s = self._load(sid)
+        sol, _views, _mv = self._require_registration_full(s)
+        props = s.research.get("datum_proposals") or {}
+        cd = next((c for c in props.get("candidates", []) if c["id"] == candidate_id), None)
+        if cd is None or kind not in ("floor", "side"):
+            raise NotFoundError("candidate_not_found", "That datum candidate is no longer available; search again.")
+        evidence = {"on_plane": "verified_multiview", "off_plane": "off_plane", "view_dependent": "off_plane"}.get(cd["classification"])
+        fit_d = dict(cd["image_fit"])
+        fit_d.update(classification=cd["classification"], height_mm=cd["height_mm"], n_views=cd["n_views"])
+        obs = self._datum_from_fit(
+            s, sol, kind, cd["frame_id"], fit_d, feature_kind=cd["kind"], provenance=Provenance.MEASURED,
+            distinct=None, n_cand=None, notes=list(cd.get("notes", [])) + ["chosen by the operator among automatic candidates"], plane_evidence=evidence,
+        )
+
         def fn(s2: Session) -> None:
             s2.datums[kind] = obs
             self._rebuild_local_frame(s2, sol)
 
-        self._mutate(sid, fn, "datum_proposed", {"kind": kind, "frame_id": f.id, "feature": feature_kind, "provenance": provenance.value})
+        self._mutate(sid, fn, "datum_candidate_selected", {"kind": kind, "candidate": candidate_id})
         return obs
+
+    def _cylinder_side(
+        self,
+        s: Session,
+        sol: PlanarSolution,
+        mv: dict[str, Any] | None,
+        ctxs: dict[str, FrameContext],
+        cands: list[LineCandidate],
+        centers: np.ndarray,
+        ddef: Any,
+    ) -> tuple[Any, DatumObservation | None]:
+        """Side datum of a rounded edge from its silhouettes (3-D evidence)."""
+        interior = centers.mean(axis=0)
+        radius_cfg = None if (ddef is None or ddef.radius is None) else float(ddef.radius.mm)
+        # silhouettes: view-dependent edges, plus edges that triangulate to a
+        # fixed line *behind* the face (a tight bend looks almost stationary)
+        sil = [
+            c for c in cands
+            if c.kind == "step" and not c.soft and len(c.matches) >= 1
+            and (c.classification == "view_dependent" or (c.classification == "off_plane" and (c.height_mm or 0.0) < 0.0))
+        ]
+        # also allow a single calibrated view when the radius is configured
+        if not sil and radius_cfg is not None:
+            sil = [c for c in cands if c.classification == "unverified" and c.kind == "step" and ctxs[c.frame_id].pose is not None]
+        best = None
+        best_c = None
+        for c in sorted(sil, key=lambda c: -c.score):
+            obs = []
+            for fid in [c.frame_id, *c.matches]:
+                fc = ctxs[fid]
+                if fc.pose is None:
+                    continue
+                ends = c.endpoints if fid == c.frame_id else c.matches[fid][2]
+                e = c.fit if fid == c.frame_id else c.matches[fid][0]
+                mm_per_px = 1.0 / max(float(local_scale_px_per_mm(fc.H, ends.mean(axis=0)[None])[0]), 1e-9)
+                sig = max(float(np.sqrt(max(e.var_d, 0.0))) * mm_per_px * 2.0, 0.08)
+                obs.append((fc.pose.center, ends, sig))
+            fit = fit_cylinder_from_silhouettes(obs, interior, radius=None)
+            if radius_cfg is not None and (not fit.ok or fit.n_views < 3):
+                fit = fit_cylinder_from_silhouettes(obs, interior, radius=radius_cfg)
+            if fit.ok and (best is None or fit.rms_mm < best.rms_mm):
+                best, best_c = fit, c
+        if best is None or best_c is None or best.tangent is None:
+            from ..vision.datums import CylinderFit
+
+            return CylinderFit(False, "no_silhouette_found"), None
+        if radius_cfg is not None and not best.radius_fixed:
+            dev = abs(best.radius - radius_cfg)
+            if dev > max(3.0 * best.sigma_radius_mm, 0.1 * radius_cfg):
+                best.notes.append(f"measured radius {best.radius:.1f} mm differs from the configured {radius_cfg:.1f} mm")
+        line = best.tangent.oriented_towards(interior)
+        feature = ddef.feature if ddef is not None else "curve_tangent"
+        if feature == "curve_outer_extreme":
+            line = line.offset(-best.radius)  # outermost ruling projected onto the face (bend of 90° or more)
+        ends = best.endpoints if best.endpoints is not None else np.stack([line.point - 100 * line.direction, line.point + 100 * line.direction])
+        ends = line.project(ends)
+        L = float(np.linalg.norm(ends[1] - ends[0]))
+        var_d = best.sigma_tangent_mm**2 + (best.sigma_radius_mm**2 if feature == "curve_outer_extreme" else 0.0) + best.rms_mm**2
+        fit_d = {
+            "in_plane": True, "mid": ends.mean(axis=0).tolist(), "n": line.n.tolist(), "length": L,
+            "var_d": float(var_d), "var_theta": float(np.radians(best.sigma_angle_deg) ** 2), "cov_d_theta": 0.0,
+            "radius_mm": best.radius, "radius_fixed": best.radius_fixed, "n_views": best.n_views, "rms_mm": best.rms_mm,
+        }
+        inferred = bool(mv and mv.get("intrinsics_provenance") == "inferred")
+        notes = [f"tangent line of a cylindrical edge fitted to {best.n_views} silhouettes: radius {best.radius:.1f} mm" + (" (configured)" if best.radius_fixed else f" ± {best.sigma_radius_mm:.1f} mm")] + best.notes
+        if inferred:
+            notes.append("camera positions come from a self-calibrated focal length (inferred)")
+        obs = self._datum_from_fit(
+            s, sol, "side", best_c.frame_id, fit_d, feature_kind="cylinder_model",
+            provenance=(Provenance.INFERRED if inferred else Provenance.MEASURED), distinct=None, n_cand=None, notes=notes, plane_evidence="cylinder_model",
+        )
+        return best, obs
 
     @staticmethod
     def _evidence(kind: str, frame_id: str, fit: dict[str, Any], ddef: Any, manual: bool) -> DatumEvidence:
@@ -724,7 +1017,8 @@ class SessionService:
             cov=np.array([[fit.get("var_d", 0.0), fit.get("cov_d_theta", 0.0)], [fit.get("cov_d_theta", 0.0), fit.get("var_theta", 0.0)]], dtype=float),
             offset_mm=offset,
             positive=positive,
-            manual=manual,
+            manual=manual and not bool(fit.get("in_plane")),
+            in_plane=bool(fit.get("in_plane")),
         )
 
     def confirm_datums(self, sid: str, confirmed: bool = True) -> Session:
@@ -1024,6 +1318,7 @@ class SessionService:
         placard_ids: list[str] | None = None,
         rect_max_edge: int = 1600,
         with_uncertainty: bool = True,
+        candidates: bool = False,
     ) -> dict[str, Any]:
         s = self._load(sid)
         sol, _ = self._require_registration(s)
@@ -1036,7 +1331,7 @@ class SessionService:
                 "report": self._gate_report(s, f.id, None, False).model_dump(mode="json"),
                 "error": exc.to_dict(), "notice": RESEARCH_NOTICE,
             }
-        return self._overlay_for(s, sol, f, H, view=view, placard_ids=placard_ids, rect_max_edge=rect_max_edge, with_uncertainty=with_uncertainty)
+        return self._overlay_for(s, sol, f, H, view=view, placard_ids=placard_ids, rect_max_edge=rect_max_edge, with_uncertainty=with_uncertainty, candidates=candidates)
 
     def _overlay_for(
         self,
@@ -1050,6 +1345,7 @@ class SessionService:
         rect_max_edge: int,
         with_uncertainty: bool,
         ext: tuple[Frame, ViewLocalization, PlanarView] | None = None,
+        candidates: bool = False,
     ) -> dict[str, Any]:
         cam = self._camera(s, f)
         lf = self._local_frame(s)
@@ -1115,6 +1411,18 @@ class SessionService:
             mapper=mapper, view_w=vw, view_h=vh, px_per_mm=scale, visible_plane_pts=visible,
             frame=lf, floor=floor, side=side, targets=targets, tags=tags, labels=names,
         )
+        if candidates:
+            # automatically found straight features, so the operator can pick one
+            for c in (s.research.get("datum_proposals") or {}).get("candidates", []):
+                ends = np.asarray(c["endpoints"], dtype=float)
+                q = ends[0] + np.linspace(0.0, 1.0, 24)[:, None] * (ends[1] - ends[0])
+                uv, ok = mapper(q)
+                pts = [[float(a), float(b)] for (a, b), k in zip(uv, ok) if k and -0.5 <= a <= vw - 0.5 and -0.5 <= b <= vh - 0.5]
+                if len(pts) >= 2:
+                    ov["primitives"].append({
+                        "kind": "candidate", "points": pts, "closed": False, "id": c["id"], "label": None,
+                        "classification": c["classification"], "feature": c["kind"], "height_mm": c["height_mm"], "length_mm": c["length_mm"],
+                    })
         ov.update(
             {
                 "frame_id": f.id,
