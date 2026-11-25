@@ -37,7 +37,7 @@ with a self-calibration from the tags.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Sequence
 
 import cv2
 import numpy as np
@@ -102,6 +102,8 @@ class MVSolution:
     param_index: dict[str, tuple[int, int]]
     excluded_tags: dict[int, list[str]] = field(default_factory=dict)
     excluded_views: dict[str, list[str]] = field(default_factory=dict)
+    #: single observations left out: frame id -> tag ids (the tag fits in every other photo)
+    excluded_observations: dict[str, list[int]] = field(default_factory=dict)
     flags: list[str] = field(default_factory=list)
     checks: dict[str, Any] = field(default_factory=dict)
 
@@ -125,6 +127,7 @@ class MVSolution:
             "dof": self.dof,
             "excluded_tags": {str(k): v for k, v in self.excluded_tags.items()},
             "excluded_views": dict(self.excluded_views),
+            "excluded_observations": {k: list(v) for k, v in sorted(self.excluded_observations.items())},
             "flags": list(self.flags),
             "checks": self.checks,
         }
@@ -623,6 +626,20 @@ def _diversity(cams: dict[str, Pose], centroid: np.ndarray) -> dict[str, Any]:
     return {"n_views": len(cams), "max_view_angle_deg": round(spread, 3), "distance_mm": [round(min(dists), 1), round(max(dists), 1)] if dists else None}
 
 
+def _single_bad_observation(bad: dict[tuple[str, int], float], by_tag: dict[int, float], views: Sequence["MVView"]) -> tuple[str, int] | None:
+    """``(frame, tag)`` when the worst tag is inconsistent in exactly one photo and seen in at least three.
+
+    A tag that was moved between photos is inconsistent in every photo taken after (or before) the move, so
+    with three or more observations a single odd one is a disturbed measurement, not a moved tag.  (A tag moved
+    just before the last photo looks the same from here; leaving that observation out is right for these
+    photos, and any later photo of the tag at its new place is refused when it is registered.)
+    """
+    worst = max(by_tag, key=lambda i: by_tag[i])
+    where = [fid for (fid, tid) in bad if tid == worst]
+    seen = sum(1 for v in views for t in v.tags if t.tag_id == worst)
+    return (where[0], worst) if len(where) == 1 and seen >= 3 else None
+
+
 def solve_multiview(
     views: list[MVView],
     *,
@@ -670,6 +687,7 @@ def solve_multiview(
     gauge = pick_gauge(views, gauge)
     excluded_tags: dict[int, list[str]] = {}
     excluded_views: dict[str, list[str]] = {}
+    excluded_obs: dict[str, list[int]] = {}
     rounds = 0
     while True:
         rounds += 1
@@ -741,6 +759,14 @@ def solve_multiview(
             fid = next(iter(by_view))
             excluded_views[fid] = ["inconsistent_with_other_views"]
             views = [v for v in views if v.frame_id != fid]
+        elif len(ba.tags) >= 3 and _single_bad_observation(bad, by_tag, views) is not None:
+            # One tag does not fit in one photo and fits in at least two others: it has not moved.
+            # Something disturbed that one observation (glare on an edge, something in front of it).
+            # Leave the observation out and keep the tag.
+            fid, tid = _single_bad_observation(bad, by_tag, views)  # type: ignore[misc]
+            excluded_obs.setdefault(fid, []).append(tid)
+            views = [MVView(v.frame_id, [t for t in v.tags if not (v.frame_id == fid and t.tag_id == tid)], v.camera, v.raw, v.image_size) for v in views]
+            views = [v for v in views if v.tags]
         elif len(ba.tags) >= 3:
             worst = max(by_tag, key=lambda i: by_tag[i])
             # Would a different size explain it?  Free the tag sizes and look
@@ -809,7 +835,8 @@ def solve_multiview(
         param_index=dict(ba.index),
         excluded_tags=excluded_tags,
         excluded_views=excluded_views,
-        flags=flags,
+        excluded_observations={k: sorted(v) for k, v in excluded_obs.items()},
+        flags=flags + (["observations_excluded"] if excluded_obs else []),
     )
     sol.checks["ambiguous_views"] = sorted(set(ambiguous))
     sol.checks["positive_depth"] = bool(front)

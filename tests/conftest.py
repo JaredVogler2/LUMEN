@@ -39,7 +39,8 @@ def render_cached(scene: Scene, cam: CameraSpec, *, ss: int = 3, seed: int = 0, 
     if png.exists():
         img = cv2.imread(str(png), cv2.IMREAD_COLOR)
         truth = scene_truth(scene, cam)
-        res = RenderResult(image=img, truth=truth, exposure=cam.exposure)
+        # the exposure an auto-exposing camera chose is not stored with the picture: unknown on a cache hit
+        res = RenderResult(image=img, truth=truth, exposure=float("nan") if cam.auto_exposure else cam.exposure)
     else:
         res = render(scene, cam, ss=ss, seed=seed)
         # write-then-rename, so a concurrent test process never reads a partial file

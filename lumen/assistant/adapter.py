@@ -105,6 +105,8 @@ class MockAdapter:
         for a in ctx.get("advice", [])[:2]:
             steps.append(a["text"])
             cites.append({"source": f"advice:{a['code']}", "quote": a["text"]})
+        # the status itself is a statement of fact and needs its source like any other
+        cites.insert(0, {"source": "status", "quote": f"{ctx.get('status')}: {ctx.get('status_meaning', '')}"})
         if failed:
             answer = "LUMEN reports status '" + str(ctx.get("status")) + "'. " + " ".join(g["message"] for g in failed[:3])
         else:

@@ -17,6 +17,6 @@ rsconnect write-manifest fastapi \
   --requirements-file requirements.txt \
   -x "tests/**" -x "docs/**" -x "prompt_series/**" -x "scripts/**" \
   -x "requirements-dev.txt" -x "pyproject.toml" -x "README.md" -x ".gitignore" \
-  -x ".venv/**" -x ".pytest_cache/**" -x "**/__pycache__/**" \
+  -x ".venv*/**" -x ".pytest_cache/**" -x "**/__pycache__/**" -x ".lumen-data/**" -x "manifest.json" \
   .
 echo "manifest.json written: $(python3 -c 'import json;m=json.load(open("manifest.json"));print(m["metadata"]["appmode"], m["metadata"]["entrypoint"], "python", m["python"]["version"], len(m["files"]), "files")')"

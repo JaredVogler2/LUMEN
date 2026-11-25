@@ -148,6 +148,11 @@ def test_sweep_of_photos_registers_end_to_end(sweep_cam, live_server):
         page.wait_for_selector('.busy', state="detached", timeout=60_000)
         assert_clean_text(page)
     assert "research prototype" in page.inner_text(".research-strip").lower() and "simulated" not in page.inner_text(".research-strip").lower()
+    # Five small video-size frames, no lens profile: an outline is shown as a preview with reasons.  It is not
+    # blocked: this is where a wrong "the floor datum is not on the panel face" used to stop a correct capture.
+    assert page.get_attribute(".status-hero", "data-status") == "research_preview", page.inner_text(".panel")[:600]
+    failed = {el.get_attribute("data-gate") for el in page.query_selector_all(".gate.fail")}
+    assert "lens_characterised" in failed and not {g for g in failed if g.endswith("_on_plane")}, failed
     shot(page, "place_real_mode")
     assert not page._lumen_errors
     page.context.close()

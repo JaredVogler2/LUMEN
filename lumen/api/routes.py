@@ -815,6 +815,17 @@ async def assistant(request: Request, sid: str) -> dict[str, Any]:
     return await run_in_threadpool(AssistantService(svc, adapter).ask, sid, body)
 
 
+@router.post("/sessions/{sid}/research/photometric")
+async def research_photometric(request: Request, sid: str) -> dict[str, Any]:
+    """Experimental torch-shading analysis of a rounded edge.  Research evidence only: nothing uses the result."""
+    from ..services.photometric import photometric_research
+
+    _session(request, sid)
+    svc = _svc(request)
+    record = await run_in_threadpool(photometric_research, svc, sid)
+    return {"photometric": record, "session": public_session(svc.get(sid))}
+
+
 @router.post("/sessions/{sid}/demo/verification")
 def demo_verification(request: Request, sid: str) -> dict[str, Any]:
     from ..services.demo import add_demo_verification

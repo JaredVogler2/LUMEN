@@ -194,6 +194,44 @@ export function mount(root, ctx) {
         d ? h('button', { class: 'btn sm ghost', type: 'button', 'aria-label': `Clear ${kind} datum`, onclick: () => clearDatum(kind) }, icon('trash')) : null));
   }
 
+  // Flashlight experiment: research evidence shown next to the outline method.  It never moves a datum.
+  function photometricCard() {
+    const sess = s();
+    if (!(state.config && state.config.features && state.config.features.photometric_research)) return null;
+    const def = datumDef('side');
+    const rec = (sess.research || {}).photometric || null;
+    const curved = def && (def.feature === 'curve_tangent' || def.feature === 'curve_outer_extreme');
+    if (!curved && !rec) return null;
+    const lit = sess.frames.filter((f) => f.torch === 'on' && f.selected !== false).length;
+    const body = [];
+    if (rec) {
+      const r = rec.result;
+      const deg = (v) => (v === null || v === undefined ? '—' : fmt(v, 3));
+      if (r.status === 'supported') {
+        const off = rec.offset_from_side_datum_mm;
+        const cmp = rec.comparison_with_outline_method;
+        body.push(h('div', { class: 'row wrap' }, chip('consistent shading model', 'info'), chip(`radius ${fmt(r.radius_mm, 1)} ± ${fmt(r.sigma_radius_mm, 1)} mm${r.radius_source === 'hint_fixed' ? ' (configured)' : ''}`, 'solid'), chip(`${r.n_views_used} photos used`, 'solid')),
+          h('div', { class: 'hint' }, off === null || off === undefined ? '' : `Start of the bend ${fmt(Math.abs(off), 2)} mm ${off > 0 ? 'further into the flat face than' : 'further out than'} the side datum in use (stated ±${fmt(r.sigma_tangent_mm, 2)} mm, direction ±${deg(r.sigma_angle_deg)}°).`),
+          cmp && cmp.available ? h('div', { class: 'hint' }, cmp.consistent
+            ? `Agrees with the outline method: ${fmt(cmp.offset_difference_mm, 2)} mm apart, ${fmt(cmp.z_offset, 1)} standard deviations.`
+            : `Disagrees with the outline method: ${fmt(cmp.offset_difference_mm, 2)} mm apart, ${fmt(cmp.z_offset, 1)} standard deviations. One of the two is wrong; they are not combined.`) : null);
+      } else {
+        body.push(h('div', { class: 'row wrap' }, chip(r.status === 'needs_view' ? 'needs other photos' : 'no result', 'warn')),
+          h('ul', { class: 'hint', style: { margin: '0', paddingLeft: '18px' } }, (r.suggestions && r.suggestions.length ? r.suggestions : r.reasons.map((x) => String(x).replace(/_/g, ' '))).map((t) => h('li', null, t))));
+      }
+    }
+    return h('div', { class: 'card tight', 'data-region': 'photometric' },
+      h('div', { class: 'row wrap' }, h('span', { class: 'eyebrow' }, 'Flashlight experiment'), chip('research only', 'info')),
+      h('p', { class: 'hint' }, 'Estimates where the rounded edge begins from how the phone light falls off around it, for comparison with the outline method. It is never used for a datum, a check or the target, and it can be wrong without noticing on patterned surfaces.'),
+      body,
+      h('div', { class: 'row wrap' },
+        h('button', { class: 'btn sm', type: 'button', 'data-action': 'photometric-run', onclick: async () => {
+          const b = busy('Analysing the photos taken with the light on…');
+          try { const out = await api('POST', `api/sessions/${sess.id}/research/photometric`, null, { timeout: 180000 }); setSession(out.session); renderPanel(); } catch (err) { showError(err, 'The experiment could not run'); } finally { b.done(); }
+        } }, icon('torch'), rec ? 'Analyse again' : 'Analyse torch photos'),
+        h('span', { class: 'hint' }, lit ? `${lit} photo${lit === 1 ? '' : 's'} with the light on` : 'No photo with the light on yet')));
+  }
+
   function renderPanel() {
     const sess = s();
     const reg = sess.registration;
@@ -246,6 +284,9 @@ export function mount(root, ctx) {
         h('div', { class: 'row wrap' }, h('span', { class: 'eyebrow' }, 'Rounded edge'), chip(`radius ${fmt(cyl.radius_mm, 1)} mm${cyl.radius_fixed ? ' (configured)' : ` ± ${fmt(cyl.sigma_radius_mm, 1)}`}`, 'solid'), chip(`${cyl.n_views} silhouettes`, 'solid')),
         h('div', { class: 'hint' }, `Tangent line located to ±${fmt(cyl.sigma_tangent_mm, 2)} mm; silhouettes agree with a cylinder within ${fmt(cyl.rms_mm, 2)} mm. A uniform rounded edge fixes the direction and the sideways position only — the floor datum fixes the height.`)));
     }
+
+    const exp = photometricCard();
+    if (exp) panel.append(exp);
 
     // --- local frame
     const lf = sess.local_frame;

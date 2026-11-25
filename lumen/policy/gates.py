@@ -130,6 +130,8 @@ class GateInputs:
 
     multiview: bool = False
     multiview_flags: list[str] | None = None
+    #: single tag observations left out of the multi-photo solution ("tag 41 in photo f005")
+    excluded_observations: list[str] | None = None
     coplanarity_verdict: str | None = None
     coplanarity_power_mm: float | None = None
     calibration_consistent: bool | None = None
@@ -260,6 +262,9 @@ def evaluate_gates(inp: GateInputs, policy: GatePolicy | None = None, placard_id
                      f"Coplanarity of the tags was verified in 3-D (could have seen {inp.coplanarity_power_mm:.1f} mm)." if inp.coplanarity_power_mm is not None else "Coplanarity of the tags was verified in 3-D.")
             elif inp.coplanarity_verdict == "not_established":
                 gate("plane_verified_3d", True, INFO, "The views are too similar to verify coplanarity in 3-D; the single-view cross-check applies.")
+            if inp.excluded_observations:
+                gate("observations_left_out", True, INFO,
+                     "Left out because it did not fit the other photos of the same tag: " + "; ".join(inp.excluded_observations) + ". The tag itself is kept.")
             if inp.calibration_consistent is not None:
                 gate("calibration_consistent", inp.calibration_consistent, W,
                      "The lens profile agrees with a focal length re-estimated from the tags." if inp.calibration_consistent

@@ -3,7 +3,7 @@ name = "lumen"
 version = "0.1.0"
 description = "Browser-based optical placard positioning research application (research prototype; not for product acceptance)."
 readme = "README.md"
-requires-python = ">=3.11,<3.14"
+requires-python = ">=3.12,<3.14"
 # Runtime dependencies are pinned exactly in requirements.txt (the file Posit
 # Connect installs from).  This table mirrors it for tooling.
 dependencies = [

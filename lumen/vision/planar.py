@@ -73,6 +73,9 @@ class TagObs:
     #: True when the dark-side edge shift of this observation was estimated
     #: from the tag interior and removed (see lumen.vision.markers)
     bias_corrected: bool = True
+    #: True when the shift could not be estimated on this tag and the value
+    #: measured on larger tags of the same camera was removed instead
+    bias_pooled: bool = False
 
     @staticmethod
     def from_detection(d: TagDetection) -> "TagObs":

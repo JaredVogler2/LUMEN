@@ -190,3 +190,71 @@ def test_tag_frame_convention():
 
 def test_no_tags_in_a_blank_image():
     assert detect_tags(np.full((480, 640, 3), 128, np.uint8)) == []
+
+
+# ---------------------------------------------------------------- tags too small for their own edge-shift estimate
+def _radial_of(res, det, corners):
+    gt_raw = np.array(next(t for t in res.truth["tags"] if t["id"] == det.tag_id)["corners_px"])
+    out = (gt_raw - gt_raw.mean(0)) / np.linalg.norm(gt_raw - gt_raw.mean(0), axis=1, keepdims=True)
+    return float(np.mean(np.sum((corners - gt_raw) * out, axis=1)))
+
+
+def test_small_tags_take_the_edge_shift_measured_on_larger_tags_of_the_same_photo():
+    """A tone curve shifts every edge.  Tags with fewer than about 6.5 px per cell cannot measure that shift on
+    themselves; the value measured on the larger tags of the photo is the same physical effect and is used instead."""
+    from lumen.services.frames import edge_shift_pool, marker_from_detection, tag_obs
+
+    big = (TagSticker(3, (120.0, 250.0), 10.0, size=80.0), TagSticker(7, (430.0, 420.0), 95.0, size=80.0))
+    small = (TagSticker(11, (300.0, 150.0), 200.0, size=36.0), TagSticker(20, (230.0, 480.0), 33.0, size=36.0))
+    scene = flat_panel_scene(tags=big + small)
+    cam = phone_camera((300, -820, 380), target=(280, 0, 310), width=W, height=H, roll_deg=2, blur_sigma=0.9, noise_shot=0.0, noise_read=0.0, tone_gamma=1.25)
+    res = render_cached(scene, cam)
+    sizes = TagSizeTable(50.0, {3: 80.0, 7: 80.0, 11: 36.0, 20: 36.0})
+    dets = {d.tag_id: d for d in detect_tags(res.image, sizes=sizes)}
+    assert all(d.accepted for d in dets.values())
+    assert dets[3].bias_applied and dets[7].bias_applied and not dets[11].bias_applied and not dets[20].bias_applied
+    assert all(d.scale_mode is not None and d.scale_mode.shape == (8,) for d in dets.values())
+    marks = {i: marker_from_detection(d) for i, d in dets.items()}
+    pool = edge_shift_pool(marks.values())
+    assert pool is not None and pool.n == 2
+    assert abs(pool.delta_px - np.mean([dets[3].bias_px, dets[7].bias_px])) < 0.03 and abs(pool.delta_px) > 0.08
+    assert pool.sigma_px >= 0.35 * abs(pool.delta_px), "part of a borrowed value is kept as uncertainty"
+    for i in (11, 20):
+        raw = _radial_of(res, dets[i], np.asarray(dets[i].corners_ideal))
+        t = tag_obs(marks[i], pool)
+        fixed = _radial_of(res, dets[i], t.corners)
+        assert t.bias_pooled and not t.bias_corrected
+        assert abs(raw) > 0.08, "uncorrected, the small tag is visibly too small or too large"
+        assert abs(fixed) < 0.5 * abs(raw) and abs(fixed) < 0.06, (raw, fixed)
+        # the borrowed value's uncertainty is one common move of the four border lines: it widens the size, not the place
+        g = dets[i].scale_mode
+        added = t.cov - np.asarray(dets[i].cov)
+        assert np.allclose(added, np.outer(g, g) * pool.sigma_px**2, atol=1e-12)
+        centre = np.tile(np.eye(2), 4) / 4.0  # (2, 8): mean of the four corners
+        assert np.trace(centre @ added @ centre.T) < 0.02 * np.trace(added) / 4.0
+    # a tag with its own estimate is left exactly as it is
+    t3 = tag_obs(marks[3], pool)
+    assert t3.bias_corrected and not t3.bias_pooled and np.array_equal(t3.corners, np.asarray(dets[3].corners_ideal)) and np.array_equal(t3.cov, np.asarray(dets[3].cov))
+    # without a pool nothing changes either
+    t11 = tag_obs(marks[11])
+    assert not t11.bias_pooled and np.array_equal(t11.corners, np.asarray(dets[11].corners_ideal))
+
+
+def test_edge_shift_pool_needs_donors_that_agree():
+    from lumen.schemas import MarkerObservation, Provenance
+    from lumen.services.frames import POOL_MAX_SPREAD_PX, edge_shift_pool
+
+    def m(bias, sigma, applied=True, accepted=True):
+        return MarkerObservation(tag_id=1, corners_px=[[0, 0]] * 4, corners_ideal=[[0, 0]] * 4, cov=np.eye(8).tolist(), corner_sigma_px=0.05, size_mm=50.0,
+                                 size_provenance=Provenance.MEASURED, accepted=accepted, bias_px=bias, bias_sigma_px=sigma, bias_applied=applied)
+
+    assert edge_shift_pool([]) is None
+    assert edge_shift_pool([m(0.2, 0.03, applied=False), m(0.2, 0.03, accepted=False)]) is None, "only accepted tags with their own estimate donate"
+    one = edge_shift_pool([m(0.20, 0.03)])
+    assert one is not None and one.n == 1 and one.delta_px == pytest.approx(0.20) and one.sigma_px == pytest.approx(np.sqrt(0.03**2 + (0.35 * 0.2) ** 2 + 0.03**2))
+    two = edge_shift_pool([m(0.18, 0.03), m(0.22, 0.03)])
+    assert two is not None and two.delta_px == pytest.approx(0.20) and two.sigma_px > 0.07
+    # the better donor counts for more
+    assert edge_shift_pool([m(0.10, 0.01), m(0.20, 0.10)]).delta_px < 0.12
+    # donors that contradict each other describe no common shift
+    assert edge_shift_pool([m(0.02, 0.02), m(0.02 + 2.5 * POOL_MAX_SPREAD_PX, 0.02)]) is None

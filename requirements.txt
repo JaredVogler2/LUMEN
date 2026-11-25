@@ -1,5 +1,6 @@
 # LUMEN runtime dependencies — exact pins (CPU-only, manylinux wheels, no GPU, no system OpenCV).
-# Verified in this repository on Python 3.11 / 3.12 / 3.13 (see docs/BUILD_LOG.md).
+# Python 3.12 or 3.13 (numpy 2.5 needs 3.12).  Verified: full test suite on 3.12, clean install and a
+# representative part of the suite on 3.13 (see docs/BUILD_LOG.md).
 fastapi==0.165.0
 starlette==1.10.0
 pydantic==2.14.4

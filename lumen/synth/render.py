@@ -699,7 +699,18 @@ class _Tracer:
         return out
 
     # -- image -----------------------------------------------------------
-    def render_linear(self, ss: int, adaptive: bool, chunk: int = 600_000) -> tuple[np.ndarray, np.ndarray]:
+    def render_linear(self, ss: int, adaptive: bool, chunk: int = 600_000, pattern: str = "grid") -> tuple[np.ndarray, np.ndarray]:
+        """Linear-light image and object ids.
+
+        ``pattern`` is how the ``ss * ss`` samples of a pixel are placed.  ``"grid"`` is a regular grid.  It is
+        cheap and exact for axis-parallel edges, but every pixel along an edge at 45 degrees (or at any slope
+        that is a small ratio) meets the grid at the same phase, so all of them carry the same rounding error:
+        the rendered edge is displaced by up to 0.2 px with ``ss = 2`` and 0.1 px with ``ss = 3``.
+        ``"lattice"`` places the samples on a golden-ratio lattice that is shifted by a different amount in every
+        pixel; the rounding error then differs from pixel to pixel and averages out along an edge.
+        """
+        if pattern not in ("grid", "lattice"):
+            raise ValueError("pattern must be 'grid' or 'lattice'")
         cam = self.cam
         W, H = cam.width, cam.height
         us, vs = np.meshgrid(np.arange(W, dtype=float), np.arange(H, dtype=float))
@@ -723,14 +734,28 @@ class _Tracer:
 
         offs = (np.arange(ss) + 0.5) / ss - 0.5
         sub = np.stack(np.meshgrid(offs, offs), axis=-1).reshape(-1, 2)
+        n_sub = sub.shape[0]
+        k = np.arange(n_sub)
+        lattice = np.stack([(k + 0.5) / n_sub, (k * 0.6180339887498949) % 1.0], axis=1)
+
+        def offsets(j: int, pixels: np.ndarray) -> np.ndarray:
+            """Sub-pixel position of sample ``j`` for the given pixels (flat indices), in [-0.5, 0.5)."""
+            if pattern == "grid":
+                return np.broadcast_to(sub[j], (pixels.size, 2))
+            # per-pixel shift of the lattice from a hash of the pixel index: the same picture every time
+            h1 = (pixels.astype(np.uint64) * np.uint64(0x9E3779B97F4A7C15)) >> np.uint64(40)
+            h2 = (pixels.astype(np.uint64) * np.uint64(0xC2B2AE3D27D4EB4F) + np.uint64(0x165667B19E3779F9)) >> np.uint64(40)
+            shift = np.stack([h1, h2], axis=1).astype(np.float64) / float(1 << 24)
+            return (lattice[j] + shift) % 1.0 - 0.5
 
         if not adaptive:
             acc = np.zeros((n, 3))
-            for o in sub:
-                c, i = trace_all(uv + o)
+            everything = np.arange(n)
+            for j in range(n_sub):
+                c, i = trace_all(uv + offsets(j, everything))
                 acc += c
                 ids = i
-            return (acc / sub.shape[0]).reshape(H, W, 3), ids.reshape(H, W)
+            return (acc / n_sub).reshape(H, W, 3), ids.reshape(H, W)
 
         img, ids = trace_all(uv)
         im2 = img.reshape(H, W, 3)
@@ -747,10 +772,10 @@ class _Tracer:
         if sel.size:
             acc = np.zeros((sel.size, 3))
             base = uv[sel]
-            for o in sub:
-                c, _ = trace_all(base + o)
+            for j in range(n_sub):
+                c, _ = trace_all(base + offsets(j, sel))
                 acc += c
-            img[sel] = acc / sub.shape[0]
+            img[sel] = acc / n_sub
         return img.reshape(H, W, 3), id2
 
 
@@ -858,11 +883,16 @@ def render(
     adaptive: bool = True,
     seed: int = 0,
     return_jpeg: bool = False,
+    pattern: str = "grid",
 ) -> RenderResult:
-    """Render ``scene`` as seen by ``cam``.  Fully deterministic for given inputs."""
+    """Render ``scene`` as seen by ``cam``.  Fully deterministic for given inputs.
+
+    ``pattern="lattice"`` avoids the coherent rounding of edges at 45 degrees and similar slopes that the
+    regular sub-pixel grid has (see :meth:`_Tracer.render_linear`).
+    """
     geom = SceneGeometry(scene)
     tracer = _Tracer(geom, cam)
-    lin, _ids = tracer.render_linear(ss=ss, adaptive=adaptive)
+    lin, _ids = tracer.render_linear(ss=ss, adaptive=adaptive, pattern=pattern)
     lin = lin * np.asarray(cam.white_balance)[None, None, :]
 
     exposure = float(cam.exposure)
@@ -920,7 +950,7 @@ def render(
             bgr = cv2.imdecode(buf, cv2.IMREAD_COLOR)
 
     truth = scene_truth(scene, cam)
-    truth["render"] = {"ss": ss, "adaptive": adaptive, "seed": seed, "exposure": exposure}
+    truth["render"] = {"ss": ss, "adaptive": adaptive, "pattern": pattern, "seed": seed, "exposure": exposure}
     return RenderResult(image=bgr, truth=truth, exposure=exposure, jpeg=jpeg)
 
 

@@ -194,3 +194,24 @@ def test_request_limits_and_health():
         # nothing in the configuration answer is a secret or a filesystem path
         text = json.dumps(cfg)
         assert "api_key" not in text.lower() and "/tmp" not in text and "data_dir" not in text
+
+
+def test_committed_manifest_matches_the_files_that_are_deployed():
+    """Git-backed publishing deploys what manifest.json lists; a manifest that lags behind the code deploys old code."""
+    import hashlib
+
+    p = ROOT / "manifest.json"
+    if not p.exists():
+        pytest.skip("no manifest.json: run scripts/write_manifest.sh before git-backed publishing")
+    m = json.loads(p.read_text())
+    assert m["metadata"]["appmode"] == "python-fastapi" and m["metadata"]["entrypoint"] == "app:app"
+    assert m["python"]["version"].startswith(("3.12", "3.13")), m["python"]["version"]
+    listed = set(m["files"])
+    expected = {"app.py", "requirements.txt"} | {
+        str(f.relative_to(ROOT)).replace("\\", "/") for f in (ROOT / "lumen").rglob("*") if f.is_file() and "__pycache__" not in f.parts
+    }
+    assert listed == expected, f"run scripts/write_manifest.sh (missing {sorted(expected - listed)[:5]}, extra {sorted(listed - expected)[:5]})"
+    stale = [f for f, meta in m["files"].items() if hashlib.md5((ROOT / f).read_bytes()).hexdigest() != meta["checksum"]]
+    assert not stale, f"run scripts/write_manifest.sh: {len(stale)} deployed file(s) changed since the manifest was written, e.g. {stale[:4]}"
+    # nothing that must not be deployed
+    assert not any(f.startswith(("tests/", "docs/", "prompt_series/", "scripts/", ".venv")) for f in listed)

@@ -116,7 +116,9 @@ class UncertaintyConfig:
     k: float = 2.0
     #: bound on the residual common-mode edge shift after bias correction (px)
     edge_bias_bound_px: float = 0.05
-    #: ... and when the correction could not be estimated for some tag
+    #: ... for a tag corrected with the shift measured on larger tags of the same camera
+    edge_bias_bound_pooled_px: float = 0.12
+    #: ... and when no tag of the capture was large enough to measure the shift at all
     edge_bias_bound_uncorrected_px: float = 0.25
     #: assumed bound of radial distortion without a calibration, as relative
     #: displacement at the image corner (1 % = 0.01)
@@ -152,8 +154,6 @@ class EvalContext:
     size_info: dict[int, tuple[str, float, float]] = field(default_factory=dict)
     #: calibration parameter standard deviations (fx, fy, cx, cy, k1, ...) when known
     calibration_sigma: list[float] | None = None
-    #: bias-corrected flag per tag observation (any False -> larger edge-bias bound)
-    all_bias_corrected: bool = True
     out_of_plane_bound_mm: float | None = None
 
 
@@ -386,13 +386,16 @@ def evaluate_uncertainty(ctx: EvalContext, cfg: UncertaintyConfig | None = None)
     # its bias was estimated from the tag interior, large when the tag was too
     # small in the image for that.
     def bound(t: TagObs) -> float:
-        return cfg.edge_bias_bound_px if t.bias_corrected else cfg.edge_bias_bound_uncorrected_px
+        if t.bias_corrected:
+            return cfg.edge_bias_bound_px
+        return cfg.edge_bias_bound_pooled_px if t.bias_pooled else cfg.edge_bias_bound_uncorrected_px
 
     def shift(v: PlanarView) -> PlanarView:
         return PlanarView(v.frame_id, [replace(t, corners=_scale_quad(t.corners, bound(t))) for t in v.tags], v.camera, v.mode)
 
     all_obs = [t for v in ctx.views for t in v.tags] + ([t for t in ext_view.tags] if ext_view is not None else [])
-    n_unc = sum(1 for t in all_obs if not t.bias_corrected)
+    n_unc = sum(1 for t in all_obs if not t.bias_corrected and not t.bias_pooled)
+    n_pool = sum(1 for t in all_obs if t.bias_pooled)
     r = scenario([shift(v) for v in ctx.views], shift(ext_view) if ext_view is not None else None, ctx.floor, ctx.side)
     if r is not None:
         add(
@@ -400,7 +403,8 @@ def evaluate_uncertainty(ctx: EvalContext, cfg: UncertaintyConfig | None = None)
             to_local_err(r[0]),
             "rectangular",
             f"tag borders shifted by {cfg.edge_bias_bound_px} px"
-            + (f"; {n_unc} of {len(all_obs)} tag observations too small for the interior correction: {cfg.edge_bias_bound_uncorrected_px} px" if n_unc else ""),
+            + (f"; {n_pool} of {len(all_obs)} tag observations corrected with the shift measured on larger tags: {cfg.edge_bias_bound_pooled_px} px" if n_pool else "")
+            + (f"; {n_unc} of {len(all_obs)} tag observations too small for any correction: {cfg.edge_bias_bound_uncorrected_px} px" if n_unc else ""),
         )
     else:
         notes.append("edge-bias scenario could not be evaluated")

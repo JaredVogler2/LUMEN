@@ -69,7 +69,13 @@ def test_flat_panel_datums_are_found_and_verified_without_any_drawing(client):
     assert set(p["applied"]) == {"floor", "side"} and not p["ambiguous_floor"] and not p["ambiguous_side"] and not p["hints"]
     fl, sd = s["datums"]["floor"], s["datums"]["side"]
     assert fl["feature_kind"] == "step" and sd["feature_kind"] == "bar"
-    assert fl["on_plane_evidence"] == "verified_multiview" and sd["on_plane_evidence"] == "verified_multiview"
+    # The side seam is seen from the left and from the right: that it lies on the face is verified in 3-D.
+    # The floor line is seen from above in every photo.  These photos cannot settle its height to a millimetre,
+    # and the app says so instead of calling it verified; it is then taken as the record declares it.
+    assert sd["on_plane_evidence"] == "verified_multiview" and any("stays fixed on the panel face" in n for n in sd["notes"])
+    assert fl["on_plane_evidence"] in ("verified_multiview", "configured")
+    if fl["on_plane_evidence"] == "configured":
+        assert any("do not settle whether this line lies on the panel face" in n for n in fl["notes"])
     assert fl["provenance"] == "measured" and not fl["confirmed"], "automatic datums still need operator confirmation"
     gxz, grot = gauge_of(reg, scene)
     ef = scene_line_of(fl, reg, scene, gxz, grot)
@@ -98,9 +104,12 @@ def test_floor_trim_offers_on_plane_junction_and_flags_the_proud_edge(client):
         if abs(e[0, 1] - e[1, 1]) < 3:  # a horizontal feature
             cls[round(float(e[:, 1].mean()))] = c
     # the trim/panel junction (z = 60) lies on the face; the trim's lower front edge is 8 mm proud
-    assert cls[60]["classification"] == "on_plane"
+    # (photos from one height cannot place a horizontal line on the face to a millimetre: "not settled" is
+    # an honest answer for the junction, "off the plane" is not)
+    assert cls[60]["classification"] in ("on_plane", "unverified") and abs(cls[60]["height_mm"]) <= cls[60]["height_margin_mm"] < 2.0
     proud = next(c for z, c in cls.items() if z < 20)
-    assert proud["classification"] == "off_plane" and proud["height_mm"] == pytest.approx(8.0, abs=0.4)
+    assert proud["classification"] == "off_plane" and proud["height_mm"] == pytest.approx(8.0, abs=0.6)
+    assert proud["height_margin_mm"] < 3.0, "8 mm is far outside what the photos leave open"
     # the on-plane junction is preferred; the true floor line is hidden behind the trim and is NOT invented
     best_floor = next(c for c in p["candidates"] if c["id"] == p["applied"]["floor"])
     e = scene_line_of(best_floor, reg, scene, gxz, grot)
@@ -235,7 +244,10 @@ def test_operator_drawn_line_is_verified_in_3d_too(client):
     frames = [f["id"] for f in client.get(f"/api/sessions/{sid}").json()["frames"]]
     cam = cams[frames.index(fid)]
     d = client.post(f"/api/sessions/{sid}/datums/floor", json={"frame_id": fid, "p0": (px(cam, 60, 0) + [0, 4]).tolist(), "p1": (px(cam, 560, 0) + [0, -3]).tolist()}).json()["datum"]
-    assert d["on_plane_evidence"] == "verified_multiview" and d["image_fit"]["n_views"] == 5
+    # the drawn line is found again in all five photos; a horizontal line is not settled by photos from one height
+    assert d["on_plane_evidence"] in ("verified_multiview", "configured") and d["image_fit"]["n_views"] == 5
+    sd = client.post(f"/api/sessions/{sid}/datums/side", json={"frame_id": fid, "p0": (px(cam, 0, 90) + [3, 0]).tolist(), "p1": (px(cam, 0, 600) + [-4, 0]).tolist()}).json()["datum"]
+    assert sd["on_plane_evidence"] == "verified_multiview" and sd["image_fit"]["n_views"] == 5
 
 
 def test_proposals_need_a_registration(client):

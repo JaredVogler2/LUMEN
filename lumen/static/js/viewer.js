@@ -320,6 +320,10 @@ export class Viewer {
           const bx = clampX(bx0 + dx), by = clampY(by0 + dy);
           if (free(bx, by, w, hgt)) { spot = [bx, by]; break; }
         }
+        if (!spot) {
+          // look further up and down before giving up (controls and the watermark sit along the edges)
+          for (let k = 4; k <= 8 && !spot; k++) for (const dy of [-k * sy, k * sy]) { const by = clampY(by0 + dy); if (free(bx0, by, w, hgt)) { spot = [bx0, by]; break; } }
+        }
         if (!spot) spot = [bx0, by0];        // nothing free: important labels are still shown
       }
       if (!spot) continue;
@@ -349,6 +353,37 @@ export class Viewer {
       want -= seg[i];
     }
     return v[0];
+  }
+  // As _along, but over the part of the polyline that is inside the view (a margin in from its edges).
+  // Returns null when none of it is visible: a line that is not on screen gets no label.
+  _alongVisible(pts, f, inset = 14) {
+    const r = this._box();
+    const x0 = inset, y0 = inset, x1 = r.width - inset, y1 = r.height - inset;
+    const v = pts.map((p) => this.toView(p[0], p[1]));
+    const parts = [];
+    let total = 0;
+    for (let i = 1; i < v.length; i++) {
+      // Liang-Barsky clip of the segment to the inset view box
+      const [ax, ay] = v[i - 1], dx = v[i][0] - ax, dy = v[i][1] - ay;
+      let t0 = 0, t1 = 1, ok = true;
+      for (const [pp, qq] of [[-dx, ax - x0], [dx, x1 - ax], [-dy, ay - y0], [dy, y1 - ay]]) {
+        if (Math.abs(pp) < 1e-9) { if (qq < 0) ok = false; continue; }
+        const t = qq / pp;
+        if (pp < 0) { if (t > t1) ok = false; else if (t > t0) t0 = t; } else if (t < t0) ok = false; else if (t < t1) t1 = t;
+      }
+      if (!ok || t1 <= t0) continue;
+      const a = [ax + dx * t0, ay + dy * t0], b = [ax + dx * t1, ay + dy * t1];
+      const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      if (len > 0) { parts.push([a, b, len]); total += len; }
+    }
+    if (total < 24) return null;
+    let want = f * total;
+    for (const [a, b, len] of parts) {
+      if (want <= len) return [a[0] + (b[0] - a[0]) * (want / len), a[1] + (b[1] - a[1]) * (want / len)];
+      want -= len;
+    }
+    const last = parts[parts.length - 1];
+    return last[1];
   }
   _arrowHead(ctx, a, b, color) {
     const [x0, y0] = this.toView(a[0], a[1]);
@@ -392,9 +427,9 @@ export class Viewer {
       if (pts.length < 2) return;
       const col = k === 'datum_floor' ? C.floor : C.side;
       this._stroke(ctx, pts, false, col, 3);
-      // label toward the far end of the visible stretch, clear of the origin
-      const [x, y] = this._along(pts, 0.78);
-      this._label(ctx, p.label, x, y - 16, col, { align: 'center', prio: 6 });
+      // label toward the far end of the stretch that is on screen, clear of the origin
+      const at = this._alongVisible(pts, 0.72);
+      if (at) this._label(ctx, p.label, at[0], at[1] - 16, col, { align: 'center', prio: 6 });
     } else if (k === 'axis_x' || k === 'axis_z') {
       if (pts.length < 2) return;
       const col = k === 'axis_x' ? C.ax : C.az;

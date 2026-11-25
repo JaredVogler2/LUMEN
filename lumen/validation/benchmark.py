@@ -42,10 +42,10 @@ import cv2
 import numpy as np
 
 from ..errors import LumenError
-from ..operations.library import OperationLibrary
+from ..operations.library import OperationLibrary, parse_operation
 from ..services.sessions import SessionService
 from ..storage.base import MemorySessionStore
-from ..synth import Box, CameraSpec, LightSpec, Scene, Seam, TagSticker, TrimSpec, project_points, render
+from ..synth import Box, CameraSpec, LightSpec, Scene, Seam, TagSticker, TrimSpec, project_points, render, scene_truth
 from ..synth.fixtures import curved_panel_scene, flat_panel_scene, phone_camera
 
 HELD_OUT_SEED = 9131
@@ -64,15 +64,19 @@ class Case:
     scene: Scene
     cams: list[CameraSpec]
     operation: str = "DEMO-FLAT-01"
+    revision: str | None = None
     placard: str = "PLC-DEMO-101"
+    #: the operator also measures the suggested distance between two tag corners with a rule (the true distance)
+    reference: bool = False
     target: tuple[tuple[float, float], ...] = TARGET_101
     calibrated: bool = True
     #: sizes the operator declares (id -> mm); the true size is in the scene
     declared: dict[int, float] = field(default_factory=dict)
     #: per-photo scene overrides (index -> scene), e.g. a tag moved after photo 3
     scene_at: dict[int, Scene] = field(default_factory=dict)
-    #: what a correct system does: "guidance", "not_guidance" (blocked or preview) or "accurate_or_refused"
-    expect: str = "guidance"
+    #: what a correct system does: "accurate" (an outline within its stated uncertainty, as guidance or as a
+    #: preview with a reason), "not_guidance" (blocked or preview), "accurate_or_refused", ...
+    expect: str = "accurate"
     note: str = ""
     seed: int = 0
 
@@ -81,22 +85,32 @@ class Case:
 # rendering with an on-disk cache
 # --------------------------------------------------------------------------
 class RenderCache:
-    def __init__(self, directory: str | Path | None, ss: int = 2) -> None:
+    """Benchmark photos, rendered once and kept on disk.
+
+    The photos use the renderer's ``"lattice"`` sampling.  With the regular sub-pixel grid, tag borders that
+    happen to lie at 45 degrees or at a slope of 1:2 are rendered up to 0.2 px away from where they are (every
+    pixel along such an edge is rounded the same way).  The measurement then reports, correctly, an edge that
+    is not where the scene description says, and a tag looks moved.  That is a property of the picture
+    generator, not of a camera, and must not be in a benchmark.
+    """
+
+    def __init__(self, directory: str | Path | None, ss: int = 3, pattern: str = "lattice") -> None:
         self.dir = Path(directory) if directory else None
         self.ss = ss
+        self.pattern = pattern
         if self.dir:
             self.dir.mkdir(parents=True, exist_ok=True)
 
     def __call__(self, scene: Scene, cam: CameraSpec, seed: int) -> np.ndarray:
         if self.dir is None:
-            return render(scene, cam, ss=self.ss, seed=seed).image
-        key = hashlib.sha256(repr((scene, cam, self.ss, seed, "bench-v1")).encode()).hexdigest()[:24]
+            return render(scene, cam, ss=self.ss, seed=seed, pattern=self.pattern).image
+        key = hashlib.sha256(repr((scene, cam, self.ss, self.pattern, seed, "bench-v2")).encode()).hexdigest()[:24]
         f = self.dir / f"{key}.png"
         if f.exists():
             img = cv2.imread(str(f), cv2.IMREAD_COLOR)
             if img is not None:
                 return img
-        img = render(scene, cam, ss=self.ss, seed=seed).image
+        img = render(scene, cam, ss=self.ss, seed=seed, pattern=self.pattern).image
         tmp = self.dir / f"{key}.{time.time_ns()}.tmp.png"
         cv2.imwrite(str(tmp), img)
         tmp.replace(f)
@@ -164,6 +178,16 @@ def _stations(rng: np.random.Generator, n: int, target: tuple[float, float, floa
     return cams
 
 
+#: In-camera processing of the nominal cases, by case number (no random draw is spent on it).  Phones sharpen and
+#: tone-map their pictures; both move edges, which is what the edge-shift correction of the tag measurement is for.
+ISP_VARIANTS: tuple[tuple[str, dict[str, Any]], ...] = (
+    ("plain", {}),
+    ("sharpened 0.6", {"sharpen": 0.6}),
+    ("tone curve", {"tone_gamma": 1.15, "tone_contrast": 0.3}),
+    ("sharpened 0.9 + contrast, JPEG 85", {"sharpen": 0.9, "tone_contrast": 0.4, "jpeg_quality": 85}),
+)
+
+
 def nominal_cases(n: int = 12, seed: int = HELD_OUT_SEED, size: tuple[int, int] = (1600, 1200)) -> list[Case]:
     rng = np.random.default_rng(seed)
     out = []
@@ -177,8 +201,10 @@ def nominal_cases(n: int = 12, seed: int = HELD_OUT_SEED, size: tuple[int, int] 
         noise = [(0.0006, 0.004), (0.0015, 0.006)][int(rng.integers(0, 2))]
         scene = flat_panel_scene(tags=tags, light=LightSpec(ambient=float(rng.uniform(0.66, 0.86))))
         cams = _stations(rng, n_views, (float(rng.uniform(230, 300)), 0.0, float(rng.uniform(270, 330))), size, dist_k, blur, noise, 0.15)
+        isp_name, isp = ISP_VARIANTS[i % len(ISP_VARIANTS)]
+        cams = [replace(c, **isp) for c in cams]
         out.append(Case(f"nominal-{i + 1:02d}", "nominal", scene, cams, declared={t.tag_id: 50.0 for t in tags}, seed=1000 + i,
-                        note=f"{n_tags} tags, {n_views} photos, k1 {k1:.3f}, blur {blur:.2f} px"))
+                        note=f"{n_tags} tags, {n_views} photos, k1 {k1:.3f}, blur {blur:.2f} px, {isp_name}"))
     return out
 
 
@@ -237,14 +263,48 @@ def negative_cases(seed: int = HELD_OUT_SEED + 1, size: tuple[int, int] = (1600,
     out.append(Case("proud-trim", "off_plane_floor_edge", trim, cams, declared={t.tag_id: 50.0 for t in tags}, expect="not_at_true_floor", seed=2011, note="an 8 mm proud trim hides the floor line; its lower edge is not on the panel face"))
 
     tags, cams = base()
-    dup = flat_panel_scene(tags=tags + (replace(tags[0], center=(tags[0].center[0], tags[0].center[1] + 0.0)),))
     dup = flat_panel_scene(tags=tuple(tags) + (TagSticker(tags[0].tag_id, (610.0, 620.0), 30.0),))
     out.append(Case("duplicate-id", "duplicate_id", dup, cams, declared={t.tag_id: 50.0 for t in tags}, expect="accurate_or_refused", seed=2012, note="two stickers carry the same ID"))
 
     tags, cams = base()
     glare = flat_panel_scene(tags=tuple(replace(t, spec_strength=2.5, shininess=30.0) for t in tags), light=LightSpec(ambient=0.55, flash=True, flash_strength=1.6))
     out.append(Case("flash-glare", "glare", glare, cams, declared={t.tag_id: 50.0 for t in tags}, expect="accurate_or_refused", seed=2013, note="glossy tags lit by a strong flash"))
+
+    tags, cams = base()
+    out.append(Case("all-sizes-wrong-ruler", "wrong_size_all_with_reference", flat_panel_scene(tags=tags), cams, declared={t.tag_id: 52.0 for t in tags}, reference=True, expect="not_guidance", seed=2014,
+                    note="every tag declared 52 mm (true 50), and the operator measures one distance between two tags with a rule"))
+
+    tags, cams = base()
+    out.append(Case("true-sizes-ruler", "reference_agrees", flat_panel_scene(tags=tags), cams, declared={t.tag_id: 50.0 for t in tags}, reference=True, expect="accurate", seed=2015,
+                    note="correct sizes and a rule measurement that agrees (control for the case above)"))
+
+    tags, cams = base()
+    out.append(Case("curved-target", "off_plane_target", flat_panel_scene(tags=tags), cams, operation=CURVED_TARGET_ID, revision="A", declared={t.tag_id: 50.0 for t in tags}, expect="not_guidance", seed=2016,
+                    note="the record says the placard sits on a curved surface: outside the planar method"))
+
+    tags, cams = base()
+    out.append(Case("draft-record", "unreleased_record", flat_panel_scene(tags=tags), cams, operation=DRAFT_ID, revision="A", declared={t.tag_id: 50.0 for t in tags}, expect="not_guidance", seed=2017,
+                    note="complete record that was never released"))
     return out
+
+
+CURVED_TARGET_ID = "BENCH-CURVED-TARGET"
+DRAFT_ID = "BENCH-DRAFT"
+
+
+def benchmark_library(directory: str | Path) -> OperationLibrary:
+    """The bundled sample records plus the records two fault cases need, in a scratch directory."""
+    lib = OperationLibrary(Path(__file__).resolve().parent.parent / "operations" / "data" / "operations.json", Path(directory))
+    base = lib.get("DEMO-FLAT-01").model_dump(mode="json")
+    for op_id, patch in ((CURVED_TARGET_ID, {"surface": {"target": "curved", "notes": "benchmark fault record"}}), (DRAFT_ID, {})):
+        if not lib.revisions(op_id):
+            rec = json.loads(json.dumps(base))
+            rec.update(operation_id=op_id, revision="A", status="draft", synthetic=False, title=f"Benchmark fault record ({op_id})", **patch)
+            rec["panel"]["barcodes"] = []
+            for pl in rec["placards"]:
+                pl["barcodes"] = []
+            lib.save(parse_operation(rec), author="benchmark")
+    return lib
 
 
 # --------------------------------------------------------------------------
@@ -256,21 +316,31 @@ def _service(library: OperationLibrary) -> SessionService:
     return SessionService(MemorySessionStore(), Settings(storage="memory"), library)
 
 
-def run_case(case: Case, mode: str, library: OperationLibrary, shoot: Callable[[Scene, CameraSpec, int], np.ndarray], operator_px: float = 2.5) -> dict[str, Any]:
-    """Run one case in one mode; returns a flat record (never raises for expected refusals)."""
+def run_case(case: Case, mode: str, library: OperationLibrary, shoot: Callable[[Scene, CameraSpec, int], np.ndarray], operator_px: float = 2.5,
+             profile_error: np.ndarray | None = None) -> dict[str, Any]:
+    """Run one case in one mode; returns a flat record (never raises for expected refusals).
+
+    ``profile_error`` (fx, fy, cx, cy, k1, k2) is added to the attached lens
+    profile, so that the profile differs from the camera that took the photos.
+    """
     rec: dict[str, Any] = {"case": case.name, "kind": case.kind, "mode": mode, "expect": case.expect, "status": None, "error": None, "note": case.note}
     svc = _service(library)
     t = {"detect": 0.0, "register": 0.0, "datums": 0.0, "overlay": 0.0}
     try:
         sid = svc.create().id
-        svc.set_operation(sid, case.operation, None, case.placard)
+        svc.set_operation(sid, case.operation, case.revision, case.placard)
         svc.set_tag_sizes(sid, {"nominal_mm": 50.0, "measured_mm": {str(k): v for k, v in case.declared.items()}})
         cams = case.cams if mode == "multi_auto" else case.cams[len(case.cams) // 2 : len(case.cams) // 2 + 1]
         idx = list(range(len(case.cams))) if mode == "multi_auto" else [len(case.cams) // 2]
         if case.calibrated:
             from ..schemas import Calibration
 
-            svc.set_calibration(sid, Calibration(**_profile(cams[0])))
+            prof = _profile(cams[0])
+            if profile_error is not None:
+                d = [float(x) for x in profile_error]
+                prof["fx"] += d[0]; prof["fy"] += d[1]; prof["cx"] += d[2]; prof["cy"] += d[3]  # noqa: E702
+                prof["dist"] = [prof["dist"][0] + d[4], prof["dist"][1] + d[5], *prof["dist"][2:]]
+            svc.set_calibration(sid, Calibration(**prof))
         t0 = time.perf_counter()
         fids = []
         for k, cam in zip(idx, cams):
@@ -285,6 +355,13 @@ def run_case(case: Case, mode: str, library: OperationLibrary, shoot: Callable[[
         rec["excluded_tags"] = sorted(int(k) for k in (reg.get("excluded_tags") or {}))
         ref = reg["reference_frame_id"]
         cam_ref = cams[fids.index(ref)]
+        if case.reference:
+            sug = svc.reference_suggestion(sid)
+            if sug is not None:
+                truth_tags = {t["id"]: np.array(t["corners_world"])[:, [0, 2]] for t in scene_truth(case.scene, cam_ref)["tags"]}
+                d_true = float(np.linalg.norm(truth_tags[sug["a"]["tag_id"]][sug["a"]["corner"]] - truth_tags[sug["b"]["tag_id"]][sug["b"]["corner"]]))
+                r0 = svc.add_reference_distance(sid, sug["a"], sug["b"], d_true, 0.5, "steel rule (simulated: the true distance)")
+                rec["reference"] = {"consistent": r0.get("consistent"), "relative_difference": r0.get("relative_difference")}
         t0 = time.perf_counter()
         if mode == "multi_auto":
             prop = svc.propose_datums(sid)
@@ -325,6 +402,10 @@ def run_case(case: Case, mode: str, library: OperationLibrary, shoot: Callable[[
         rec["failed_gates"] = [g["code"] for g in rep.get("gates", []) if not g["passed"]]
         unc = rep.get("uncertainty")
         rec["expanded_mm"] = None if not unc else float(unc["expanded_mm"])
+        # the three largest terms of the budget, so a report can say what limits the result
+        rec["budget_top"] = [] if not unc else [
+            {"name": c["name"], "mm": round(float(c["value_mm"]), 3)} for c in sorted(unc.get("components", []), key=lambda c: -float(c["value_mm"]))[:3]
+        ]
         tgt = next((p for p in ov["primitives"] if p["kind"].startswith("target") and p.get("corners") and p.get("active") is not False), None)
         if tgt is not None:
             truth = np.array([_px(cam_ref, x, z) for x, z in case.target])
@@ -361,8 +442,10 @@ def judge(rec: dict[str, Any]) -> bool:
     drawn_ok = err is not None and err <= max(U or 0.0, TOLERANCE_MM)
     if st == "failure":
         return False
-    if exp == "guidance":
-        return st in ("prototype_guidance", "validated") and drawn_ok
+    if exp == "accurate":
+        # the capture is sound: an outline must be drawn and be right.  Whether it is shown as guidance or as a
+        # preview depends on the uncertainty against the tolerance and is reported separately.
+        return st in ("prototype_guidance", "validated", "research_preview") and drawn_ok
     if exp == "not_guidance":
         return st in ("blocked", "research_preview", "refused")
     if exp == "accurate_or_refused":
@@ -397,35 +480,11 @@ def coverage_trials(case: Case, library: OperationLibrary, shoot: Callable[[Scen
         declared = {k: float(50.0 + common + rng.normal(0, 0.05)) for k in case.declared}
         d = rng.normal(0, 1, 6) * sig
 
-        def shifted(cam: CameraSpec) -> CameraSpec:
-            return cam
-
         c2 = replace(case, declared=declared, seed=case.seed + 100 * (i + 1), name=f"{case.name}#t{i + 1}")
-        rec = run_case(c2, mode, library, shoot, operator_px=2.5) if not case.calibrated else _run_with_profile_error(c2, mode, library, shoot, d)
+        rec = run_case(c2, mode, library, shoot, operator_px=2.5, profile_error=d if case.calibrated else None)
         rec["trial"] = i + 1
         out.append(rec)
     return out
-
-
-def _run_with_profile_error(case: Case, mode: str, library: OperationLibrary, shoot: Callable[[Scene, CameraSpec, int], np.ndarray], d: np.ndarray) -> dict[str, Any]:
-    """As ``run_case`` but the attached lens profile differs from the true camera by ``d`` (fx, fy, cx, cy, k1, k2)."""
-    import lumen.validation.benchmark as me
-
-    orig = me._profile
-
-    def off(cam: CameraSpec) -> dict[str, Any]:
-        p = orig(cam)
-        p["fx"] += float(d[0]); p["fy"] += float(d[1]); p["cx"] += float(d[2]); p["cy"] += float(d[3])
-        dist = list(p["dist"])
-        dist[0] += float(d[4]); dist[1] += float(d[5])
-        p["dist"] = dist
-        return p
-
-    me._profile = off  # type: ignore[assignment]
-    try:
-        return run_case(case, mode, library, shoot)
-    finally:
-        me._profile = orig  # type: ignore[assignment]
 
 
 # --------------------------------------------------------------------------
@@ -472,6 +531,8 @@ def summarise(records: list[dict[str, Any]]) -> dict[str, Any]:
 def to_markdown(records: list[dict[str, Any]], summary: dict[str, Any], coverage: list[dict[str, Any]] | None, meta: dict[str, Any]) -> str:
     f2 = lambda x: "—" if x is None else f"{x:.2f}"  # noqa: E731
     L = ["# Synthetic benchmark results", "", "Generated by `scripts/run_benchmark.py`. **Simulated data only**: these numbers describe the software on", "computer-generated photos. They are not physical accuracy and validate nothing about a real phone or panel.", ""]
+    if meta.get("note"):
+        L += [str(meta["note"]), ""]
     L += [f"* run: {meta.get('when')}  ·  algorithm {meta.get('algorithm')}  ·  seed {meta.get('seed')}  ·  photos {meta.get('size')}  ·  {meta.get('n_nominal')} held-out nominal cases, {meta.get('n_negative')} fault cases", f"* machine: {meta.get('machine')}", ""]
     L += ["## Nominal cases (calibrated lens, measured tags)", "", "| | single photo, hand-drawn datums | all photos, automatic datums |", "|---|---|---|"]
     a, b = summary.get("single_manual"), summary.get("multi_auto")
@@ -495,20 +556,26 @@ def to_markdown(records: list[dict[str, Any]], summary: dict[str, Any], coverage
         row("time: tags / register / datums / overlay, s (median)", lambda s: " / ".join(f"{s['seconds'][k]:.1f}" for k in ("detect", "register", "datums", "overlay"))),
         "",
     ]
-    L += ["### Each nominal case", "", "| case | configuration | mode | status | corner error mm | expanded mm | rotation ° |", "|---|---|---|---|---|---|---|"]
+    L += ["### Each nominal case", "", "| case | configuration | mode | status | corner error mm | expanded mm | rotation ° | largest term of the budget |", "|---|---|---|---|---|---|---|---|"]
     for r in records:
         if r["kind"] == "nominal":
-            L.append(f"| {r['case']} | {r['note']} | {r['mode']} | {r['status']}{'' if not r.get('error') else ' (' + r['error'] + ')'} | {f2(r.get('corner_error_mm'))} | {f2(r.get('expanded_mm'))} | {f2(r.get('rotation_error_deg'))} |")
-    L += ["", "## Fault cases", "", "A fault case is handled correctly when the system refuses or withholds guidance, or — where the fault can be",
-          "isolated (a moved, raised or mis-sized single tag) — excludes it and still gives an accurate result.", "",
-          "| case | fault | mode | status | failed checks | corner error mm | expanded mm | handled |", "|---|---|---|---|---|---|---|---|"]
-    for r in records:
-        if r["kind"] != "nominal":
+            top = (r.get("budget_top") or [None])[0]
+            L.append(f"| {r['case']} | {r['note']} | {r['mode']} | {r['status']}{'' if not r.get('error') else ' (' + r['error'] + ')'} | {f2(r.get('corner_error_mm'))} | {f2(r.get('expanded_mm'))} | {f2(r.get('rotation_error_deg'))} | {'—' if not top else top['name'] + ' ' + format(top['mm'], '.2f') + ' mm'} |")
+    faults = [r for r in records if r["kind"] != "nominal"]
+    if faults:
+        L += ["", "## Fault cases", "", "A fault case is handled correctly when the system refuses or withholds guidance, or — where the fault can be",
+              "isolated (a moved, raised or mis-sized single tag) — excludes it and still gives an accurate result.", "",
+              "| case | fault | mode | status | failed checks | corner error mm | expanded mm | handled |", "|---|---|---|---|---|---|---|---|"]
+        for r in faults:
             gates = ", ".join((r.get("failed_gates") or [])[:4]) or (r.get("error") or "")
             handled = "recorded only" if r["expect"] in ("undetectable_without_reference",) else ("yes" if r["outcome_ok"] else "**NO**")
             L.append(f"| {r['case']} | {r['note']} | {r['mode']} | {r['status']} | {gates} | {f2(r.get('corner_error_mm'))} | {f2(r.get('expanded_mm'))} | {handled} |")
-    n = summary["negative"]
-    L += ["", f"Handled correctly: {n['handled_correctly']} of {n['cases']} runs; false acceptances: {n['false_acceptance']}; unexpected failures: {n['failures']}.", ""]
+        n = summary["negative"]
+        known = [r["case"] for r in faults if r.get("false_acceptance") and r["expect"] == "undetectable_without_reference"]
+        unexpected = n["false_acceptance"] - len(known)
+        L += ["", f"Handled as expected: {n['handled_correctly']} of {n['cases']} runs. Wrong results shown as guidance: {n['false_acceptance']}"
+              + (f" ({', '.join(known)}: the fault that no check on the photos can see; {unexpected} other)" if known else "")
+              + f". Unexpected failures: {n['failures']}.", ""]
     if coverage:
         drawn = [r for r in coverage if r.get("corner_error_mm") is not None and r.get("expanded_mm")]
         ratio = [r["corner_error_mm"] / r["expanded_mm"] for r in drawn]
@@ -532,18 +599,18 @@ def to_markdown(records: list[dict[str, Any]], summary: dict[str, Any], coverage
           "  flatness, residual edge bias, lens distortion beyond the model). On synthetic data the true error is therefore",
           "  much smaller than the reported uncertainty; that is expected and is not evidence of the same margin on a real panel.",
           "* `all-sizes-wrong` shows a fault no internal check can see: every tag declared 4 % too large scales the whole",
-          "  result by 4 %. Only an independent length measurement can catch it (the reference-distance check in the",
-          "  interface exists for this).",
+          "  result by 4 %, with a clean report. `all-sizes-wrong-ruler` is the same fault with one rule measurement",
+          "  between two tag corners: the contradiction blocks the result. The rule measurement is optional in the interface.",
           "* Latency was measured on a shared build machine and varies with its load.", ""]
     return "\n".join(L)
 
 
 def run_benchmark(library: OperationLibrary, cache_dir: str | Path | None, n_nominal: int = 12, size: tuple[int, int] = (1600, 1200), modes: tuple[str, ...] = ("single_manual", "multi_auto"),
-                  with_negative: bool = True, coverage_n: int = 0, progress: Callable[[str], None] | None = None) -> dict[str, Any]:
+                  with_negative: bool = True, coverage_n: int = 0, progress: Callable[[str], None] | None = None, seed: int = HELD_OUT_SEED) -> dict[str, Any]:
     shoot = RenderCache(cache_dir)
     say = progress or (lambda s: None)
     records: list[dict[str, Any]] = []
-    noms = nominal_cases(n_nominal, size=size)
+    noms = nominal_cases(n_nominal, seed=seed, size=size)
     for c in noms:
         for m in modes:
             say(f"{c.name} [{m}]")
