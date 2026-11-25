@@ -156,3 +156,54 @@ def test_a_draft_or_superseded_record_stays_a_preview():
         assert status in g.message and g.suggestion
     # nothing is said about the record's status before a record is chosen
     assert "operation_record_released" not in {g.code for g in evaluate_gates(good(operation_selected=False)).gates}
+
+
+def test_a_step_beside_an_automatic_datum_withholds_guidance_until_the_operator_chooses():
+    # the trim's front corner: 8 mm proud, right at the line that was applied as the floor datum
+    nb = {"id": "c2", "height_mm": 7.9, "gap_mm": -0.4, "distance_mm": 7.9, "length_mm": 500.0, "relation": "beside"}
+    rep = evaluate_gates(good(datum_depth_neighbour=(nb, None)))
+    assert failed(rep) == {"datum_floor_no_step_beside"} and rep.status == "research_preview"
+    g = next(g for g in rep.gates if g.code == "datum_floor_no_step_beside")
+    assert "8 mm in front of the panel face" in g.message and "right beside the floor datum" in g.message and "Choose detected line" in g.suggestion
+    # the trim's front face ending at the floor, 60 mm further out; and a recess instead of a raised part
+    far = {**nb, "gap_mm": -60.2, "height_mm": -8.1, "relation": "beyond"}
+    g = next(g for g in evaluate_gates(good(datum_depth_neighbour=(None, far))).gates if g.code == "datum_side_no_step_beside")
+    assert "8 mm behind the panel face" in g.message and "60 mm beyond the side datum" in g.message
+    # no neighbour (the operator chose the line, or there is none): the check does not appear at all
+    assert not any(g.code.endswith("no_step_beside") for g in evaluate_gates(good()).gates)
+
+
+def test_scale_that_rests_on_declared_sizes_alone_is_said_not_hidden():
+    rep = evaluate_gates(good())
+    g = next(g for g in rep.gates if g.code == "scale_source")
+    # a caveat: it does not lower the status, but it is not a tick either, and it says how to close the gap
+    assert g.passed and g.caveat and g.severity == "info" and rep.status == "prototype_guidance"
+    assert "declared tag sizes alone" in g.message and "rule" in g.suggestion
+    assert g.suggestion not in rep.suggestions, "what to do next lists only what stands in the way"
+    # with a rule measurement the caveat is replaced by the check itself
+    ok = evaluate_gates(good(reference_consistent=True, reference_message="Scale agrees with an independent length measurement over 300 mm."))
+    codes = {g.code: g for g in ok.gates}
+    assert "scale_source" not in codes and codes["independent_length_check"].passed and not codes["independent_length_check"].caveat
+    bad = evaluate_gates(good(reference_consistent=False, reference_message="An independent length measurement contradicts the scale."))
+    assert bad.status == "blocked" and "independent_length_check" in failed(bad)
+    # ticks stay ticks
+    assert not next(g for g in rep.gates if g.code == "operation_selected").caveat
+
+
+def test_tags_that_were_set_aside_are_named_in_the_report():
+    rep = evaluate_gates(good(n_tags=3, excluded_tags={41: ["moved_or_misread"]}))
+    g = next(g for g in rep.gates if g.code == "tags_left_out")
+    assert g.passed and g.caveat and rep.status == "prototype_guidance"
+    assert "ID 41 (it moved between photos or was misread in one)" in g.message and "remaining 3" in g.message and "capture again" in g.suggestion
+    two = next(g for g in evaluate_gates(good(n_tags=2, excluded_tags={41: ["moved_or_misread"], 317: ["off_the_common_plane", "unknown_code"]})).gates if g.code == "tags_left_out")
+    assert two.message.startswith("Tags were left out") and "ID 317 (it is not on the plane of the other tags; unknown_code)" in two.message
+    assert not any(g.code == "tags_left_out" for g in evaluate_gates(good()).gates)
+
+
+def test_contradictions_that_setting_tags_aside_did_not_resolve_keep_it_a_preview():
+    base = dict(multiview=True, coplanarity_verdict="coplanar", coplanarity_power_mm=0.6)
+    assert not any(g.code == "photos_agree" for g in evaluate_gates(good(**base, multiview_flags=["off_plane_tags_excluded"])).gates)
+    rep = evaluate_gates(good(**base, multiview_flags=["inconsistent_observations"], n_tags=2, excluded_tags={77: ["moved_or_misread"], 233: ["moved_or_misread"]}))
+    assert failed(rep) == {"photos_agree"} and rep.status == "research_preview"
+    g = next(g for g in rep.gates if g.code == "photos_agree")
+    assert "still contradict" in g.message and "glare" in g.suggestion

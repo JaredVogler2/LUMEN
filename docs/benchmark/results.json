@@ -1,0 +1,4455 @@
+{
+ "records": [
+  {
+   "case": "nominal-01",
+   "kind": "nominal",
+   "mode": "single_manual",
+   "expect": "accurate",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "prototype_guidance",
+   "error": null,
+   "note": "4 tags, 5 photos, k1 0.073, blur 0.76 px, plain",
+   "n_photos": 1,
+   "n_tags": 4,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "failed_gates": [],
+   "expanded_mm": 0.9450379409509125,
+   "budget_top": [
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.495
+    },
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.308
+    },
+    {
+     "name": "tag size: common caliper error",
+     "mm": 0.198
+    }
+   ],
+   "corner_error_mm": 0.21615865539893697,
+   "centre_error_mm": 0.19096015344192885,
+   "rotation_error_deg": 1.776181550640862e-05,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 0.5,
+    "register": 0.03,
+    "datums": 0.44,
+    "overlay": 0.17
+   },
+   "outcome_ok": true
+  },
+  {
+   "case": "nominal-01",
+   "kind": "nominal",
+   "mode": "multi_auto",
+   "expect": "accurate",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "research_preview",
+   "error": null,
+   "note": "4 tags, 5 photos, k1 0.073, blur 0.76 px, plain",
+   "n_photos": 5,
+   "n_tags": 4,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "ambiguous": true,
+   "failed_gates": [
+    "datum_side_unambiguous"
+   ],
+   "expanded_mm": 0.9705921474103426,
+   "budget_top": [
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.504
+    },
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.314
+    },
+    {
+     "name": "panel flatness (out-of-plane x viewing angle)",
+     "mm": 0.296
+    }
+   ],
+   "corner_error_mm": 0.09895297000483103,
+   "centre_error_mm": 0.09229831269852276,
+   "rotation_error_deg": 0.0014304068684938536,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 2.46,
+    "register": 0.74,
+    "datums": 11.46,
+    "overlay": 0.28
+   },
+   "outcome_ok": true
+  },
+  {
+   "case": "nominal-02",
+   "kind": "nominal",
+   "mode": "single_manual",
+   "expect": "accurate",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "prototype_guidance",
+   "error": null,
+   "note": "5 tags, 5 photos, k1 0.063, blur 0.83 px, sharpened 0.6",
+   "n_photos": 1,
+   "n_tags": 5,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "failed_gates": [],
+   "expanded_mm": 0.9535649438211226,
+   "budget_top": [
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.441
+    },
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.285
+    },
+    {
+     "name": "pixel noise (tag corners, datum edges)",
+     "mm": 0.259
+    }
+   ],
+   "corner_error_mm": 0.09279881116193416,
+   "centre_error_mm": 0.08303573831243999,
+   "rotation_error_deg": 0.004693193053111643,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 0.65,
+    "register": 0.05,
+    "datums": 0.32,
+    "overlay": 0.18
+   },
+   "outcome_ok": true
+  },
+  {
+   "case": "nominal-02",
+   "kind": "nominal",
+   "mode": "multi_auto",
+   "expect": "accurate",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "research_preview",
+   "error": null,
+   "note": "5 tags, 5 photos, k1 0.063, blur 0.83 px, sharpened 0.6",
+   "n_photos": 5,
+   "n_tags": 5,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "ambiguous": true,
+   "failed_gates": [
+    "datum_side_unambiguous",
+    "uncertainty_vs_tolerance"
+   ],
+   "expanded_mm": 1.0465783303607272,
+   "budget_top": [
+    {
+     "name": "panel flatness (out-of-plane x viewing angle)",
+     "mm": 0.539
+    },
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.445
+    },
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.288
+    }
+   ],
+   "corner_error_mm": 0.07502763992203805,
+   "centre_error_mm": 0.07392270545209369,
+   "rotation_error_deg": 0.0006690946690309894,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 3.74,
+    "register": 1.04,
+    "datums": 12.3,
+    "overlay": 0.37
+   },
+   "outcome_ok": true
+  },
+  {
+   "case": "nominal-03",
+   "kind": "nominal",
+   "mode": "single_manual",
+   "expect": "accurate",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "research_preview",
+   "error": null,
+   "note": "5 tags, 7 photos, k1 0.016, blur 0.75 px, tone curve",
+   "n_photos": 1,
+   "n_tags": 5,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "failed_gates": [
+    "uncertainty_vs_tolerance"
+   ],
+   "expanded_mm": 1.2555242312620496,
+   "budget_top": [
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.558
+    },
+    {
+     "name": "pixel noise (tag corners, datum edges)",
+     "mm": 0.377
+    },
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.358
+    }
+   ],
+   "corner_error_mm": 0.2946076491523693,
+   "centre_error_mm": 0.2536813430698907,
+   "rotation_error_deg": 0.0200113459027933,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 0.71,
+    "register": 0.05,
+    "datums": 0.28,
+    "overlay": 0.21
+   },
+   "outcome_ok": true
+  },
+  {
+   "case": "nominal-03",
+   "kind": "nominal",
+   "mode": "multi_auto",
+   "expect": "accurate",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "research_preview",
+   "error": null,
+   "note": "5 tags, 7 photos, k1 0.016, blur 0.75 px, tone curve",
+   "n_photos": 7,
+   "n_tags": 5,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "ambiguous": false,
+   "failed_gates": [
+    "uncertainty_vs_tolerance"
+   ],
+   "expanded_mm": 1.0896476203951633,
+   "budget_top": [
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.567
+    },
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.349
+    },
+    {
+     "name": "panel flatness (out-of-plane x viewing angle)",
+     "mm": 0.248
+    }
+   ],
+   "corner_error_mm": 0.13213301998884752,
+   "centre_error_mm": 0.11863302355380341,
+   "rotation_error_deg": 0.0037039465818867576,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 4.4,
+    "register": 3.21,
+    "datums": 13.95,
+    "overlay": 0.51
+   },
+   "outcome_ok": true
+  },
+  {
+   "case": "nominal-04",
+   "kind": "nominal",
+   "mode": "single_manual",
+   "expect": "accurate",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "research_preview",
+   "error": null,
+   "note": "5 tags, 5 photos, k1 0.007, blur 0.89 px, sharpened 0.9 + contrast, JPEG 85",
+   "n_photos": 1,
+   "n_tags": 5,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "failed_gates": [
+    "uncertainty_vs_tolerance"
+   ],
+   "expanded_mm": 1.7656362893199204,
+   "budget_top": [
+    {
+     "name": "pixel noise (tag corners, datum edges)",
+     "mm": 0.789
+    },
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.439
+    },
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.271
+    }
+   ],
+   "corner_error_mm": 0.538511742333497,
+   "centre_error_mm": 0.4981716715656387,
+   "rotation_error_deg": 0.002081563869760763,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 0.76,
+    "register": 0.06,
+    "datums": 0.87,
+    "overlay": 0.19
+   },
+   "outcome_ok": true
+  },
+  {
+   "case": "nominal-04",
+   "kind": "nominal",
+   "mode": "multi_auto",
+   "expect": "accurate",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "research_preview",
+   "error": null,
+   "note": "5 tags, 5 photos, k1 0.007, blur 0.89 px, sharpened 0.9 + contrast, JPEG 85",
+   "n_photos": 5,
+   "n_tags": 5,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "ambiguous": false,
+   "failed_gates": [
+    "uncertainty_vs_tolerance"
+   ],
+   "expanded_mm": 1.0562223285383874,
+   "budget_top": [
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.463
+    },
+    {
+     "name": "pixel noise (tag corners, datum edges)",
+     "mm": 0.33
+    },
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.27
+    }
+   ],
+   "corner_error_mm": 0.254977747745855,
+   "centre_error_mm": 0.2444467054627276,
+   "rotation_error_deg": 0.011177347808892544,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 3.66,
+    "register": 1.18,
+    "datums": 12.02,
+    "overlay": 0.37
+   },
+   "outcome_ok": true
+  },
+  {
+   "case": "nominal-05",
+   "kind": "nominal",
+   "mode": "single_manual",
+   "expect": "accurate",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "research_preview",
+   "error": null,
+   "note": "4 tags, 7 photos, k1 0.006, blur 0.99 px, plain",
+   "n_photos": 1,
+   "n_tags": 4,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "failed_gates": [
+    "uncertainty_vs_tolerance"
+   ],
+   "expanded_mm": 1.0911238772297096,
+   "budget_top": [
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.459
+    },
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.424
+    },
+    {
+     "name": "tag size: common caliper error",
+     "mm": 0.198
+    }
+   ],
+   "corner_error_mm": 0.19775887376695084,
+   "centre_error_mm": 0.1788153033983943,
+   "rotation_error_deg": 0.002381322004953768,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 0.47,
+    "register": 0.03,
+    "datums": 0.27,
+    "overlay": 0.16
+   },
+   "outcome_ok": true
+  },
+  {
+   "case": "nominal-05",
+   "kind": "nominal",
+   "mode": "multi_auto",
+   "expect": "accurate",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "research_preview",
+   "error": null,
+   "note": "4 tags, 7 photos, k1 0.006, blur 0.99 px, plain",
+   "n_photos": 7,
+   "n_tags": 4,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "ambiguous": false,
+   "failed_gates": [
+    "uncertainty_vs_tolerance"
+   ],
+   "expanded_mm": 1.081461648392172,
+   "budget_top": [
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.46
+    },
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.43
+    },
+    {
+     "name": "panel flatness (out-of-plane x viewing angle)",
+     "mm": 0.214
+    }
+   ],
+   "corner_error_mm": 0.01806435848110138,
+   "centre_error_mm": 0.01226712692185495,
+   "rotation_error_deg": 0.002296890777359143,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 3.38,
+    "register": 1.57,
+    "datums": 10.13,
+    "overlay": 0.39
+   },
+   "outcome_ok": true
+  },
+  {
+   "case": "nominal-06",
+   "kind": "nominal",
+   "mode": "single_manual",
+   "expect": "accurate",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "research_preview",
+   "error": null,
+   "note": "3 tags, 5 photos, k1 0.103, blur 0.98 px, sharpened 0.6",
+   "n_photos": 1,
+   "n_tags": 3,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "failed_gates": [
+    "uncertainty_vs_tolerance"
+   ],
+   "expanded_mm": 1.3816146589444946,
+   "budget_top": [
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.476
+    },
+    {
+     "name": "pixel noise (tag corners, datum edges)",
+     "mm": 0.427
+    },
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.381
+    }
+   ],
+   "corner_error_mm": 0.3542657057343721,
+   "centre_error_mm": 0.3175633166410641,
+   "rotation_error_deg": 0.009845813455278395,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 0.47,
+    "register": 0.02,
+    "datums": 0.43,
+    "overlay": 0.14
+   },
+   "outcome_ok": true
+  },
+  {
+   "case": "nominal-06",
+   "kind": "nominal",
+   "mode": "multi_auto",
+   "expect": "accurate",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "research_preview",
+   "error": null,
+   "note": "3 tags, 5 photos, k1 0.103, blur 0.98 px, sharpened 0.6",
+   "n_photos": 5,
+   "n_tags": 3,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "ambiguous": false,
+   "failed_gates": [
+    "uncertainty_vs_tolerance"
+   ],
+   "expanded_mm": 1.2195171966764011,
+   "budget_top": [
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.468
+    },
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.393
+    },
+    {
+     "name": "pixel noise (tag corners, datum edges)",
+     "mm": 0.275
+    }
+   ],
+   "corner_error_mm": 0.19611430630220156,
+   "centre_error_mm": 0.17679389401420895,
+   "rotation_error_deg": 0.005915173931105358,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 2.31,
+    "register": 0.5,
+    "datums": 8.35,
+    "overlay": 0.4
+   },
+   "outcome_ok": true
+  },
+  {
+   "case": "nominal-07",
+   "kind": "nominal",
+   "mode": "single_manual",
+   "expect": "accurate",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "research_preview",
+   "error": null,
+   "note": "3 tags, 7 photos, k1 0.090, blur 1.07 px, tone curve",
+   "n_photos": 1,
+   "n_tags": 3,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "failed_gates": [
+    "uncertainty_vs_tolerance"
+   ],
+   "expanded_mm": 1.2246748853445268,
+   "budget_top": [
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.451
+    },
+    {
+     "name": "pixel noise (tag corners, datum edges)",
+     "mm": 0.389
+    },
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.368
+    }
+   ],
+   "corner_error_mm": 0.3005993891496171,
+   "centre_error_mm": 0.2719199487397403,
+   "rotation_error_deg": 0.011373781355808825,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 0.44,
+    "register": 0.02,
+    "datums": 0.51,
+    "overlay": 0.15
+   },
+   "outcome_ok": true
+  },
+  {
+   "case": "nominal-07",
+   "kind": "nominal",
+   "mode": "multi_auto",
+   "expect": "accurate",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "research_preview",
+   "error": null,
+   "note": "3 tags, 7 photos, k1 0.090, blur 1.07 px, tone curve",
+   "n_photos": 7,
+   "n_tags": 3,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "ambiguous": false,
+   "failed_gates": [
+    "uncertainty_vs_tolerance"
+   ],
+   "expanded_mm": 1.0561575917797512,
+   "budget_top": [
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.442
+    },
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.362
+    },
+    {
+     "name": "pixel noise (tag corners, datum edges)",
+     "mm": 0.247
+    }
+   ],
+   "corner_error_mm": 0.16760015200964246,
+   "centre_error_mm": 0.14221791921967197,
+   "rotation_error_deg": 0.0033337537877176494,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 2.88,
+    "register": 1.14,
+    "datums": 9.55,
+    "overlay": 0.25
+   },
+   "outcome_ok": true
+  },
+  {
+   "case": "nominal-08",
+   "kind": "nominal",
+   "mode": "single_manual",
+   "expect": "accurate",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "research_preview",
+   "error": null,
+   "note": "4 tags, 5 photos, k1 0.060, blur 1.02 px, sharpened 0.9 + contrast, JPEG 85",
+   "n_photos": 1,
+   "n_tags": 4,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "failed_gates": [
+    "uncertainty_vs_tolerance"
+   ],
+   "expanded_mm": 3.062963163732911,
+   "budget_top": [
+    {
+     "name": "pixel noise (tag corners, datum edges)",
+     "mm": 1.366
+    },
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.624
+    },
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.446
+    }
+   ],
+   "corner_error_mm": 0.8939020905220177,
+   "centre_error_mm": 0.8368825226186916,
+   "rotation_error_deg": 0.007805048645054081,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 0.51,
+    "register": 0.03,
+    "datums": 0.35,
+    "overlay": 0.16
+   },
+   "outcome_ok": true
+  },
+  {
+   "case": "nominal-08",
+   "kind": "nominal",
+   "mode": "multi_auto",
+   "expect": "accurate",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "research_preview",
+   "error": null,
+   "note": "4 tags, 5 photos, k1 0.060, blur 1.02 px, sharpened 0.9 + contrast, JPEG 85",
+   "n_photos": 5,
+   "n_tags": 4,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "ambiguous": false,
+   "failed_gates": [
+    "uncertainty_vs_tolerance"
+   ],
+   "expanded_mm": 2.0687462621788706,
+   "budget_top": [
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.727
+    },
+    {
+     "name": "pixel noise (tag corners, datum edges)",
+     "mm": 0.642
+    },
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.462
+    }
+   ],
+   "corner_error_mm": 0.33559779358050895,
+   "centre_error_mm": 0.31778975977325846,
+   "rotation_error_deg": 0.009604676379670374,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 2.62,
+    "register": 0.76,
+    "datums": 7.55,
+    "overlay": 0.33
+   },
+   "outcome_ok": true
+  },
+  {
+   "case": "nominal-09",
+   "kind": "nominal",
+   "mode": "single_manual",
+   "expect": "accurate",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "research_preview",
+   "error": null,
+   "note": "5 tags, 7 photos, k1 0.105, blur 1.33 px, plain",
+   "n_photos": 1,
+   "n_tags": 5,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "failed_gates": [
+    "uncertainty_vs_tolerance"
+   ],
+   "expanded_mm": 1.454082044863091,
+   "budget_top": [
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.63
+    },
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.427
+    },
+    {
+     "name": "pixel noise (tag corners, datum edges)",
+     "mm": 0.235
+    }
+   ],
+   "corner_error_mm": 0.05485850077012653,
+   "centre_error_mm": 0.044471301817795746,
+   "rotation_error_deg": 0.004251251301925298,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 0.65,
+    "register": 0.05,
+    "datums": 0.47,
+    "overlay": 0.17
+   },
+   "outcome_ok": true
+  },
+  {
+   "case": "nominal-09",
+   "kind": "nominal",
+   "mode": "multi_auto",
+   "expect": "accurate",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "research_preview",
+   "error": null,
+   "note": "5 tags, 7 photos, k1 0.105, blur 1.33 px, plain",
+   "n_photos": 7,
+   "n_tags": 5,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "ambiguous": false,
+   "failed_gates": [
+    "uncertainty_vs_tolerance"
+   ],
+   "expanded_mm": 1.4413365065780022,
+   "budget_top": [
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.64
+    },
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.432
+    },
+    {
+     "name": "panel flatness (out-of-plane x viewing angle)",
+     "mm": 0.26
+    }
+   ],
+   "corner_error_mm": 0.06154794432915864,
+   "centre_error_mm": 0.05789690075539857,
+   "rotation_error_deg": 0.0002629568222112139,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 4.37,
+    "register": 2.17,
+    "datums": 16.37,
+    "overlay": 0.45
+   },
+   "outcome_ok": true
+  },
+  {
+   "case": "nominal-10",
+   "kind": "nominal",
+   "mode": "single_manual",
+   "expect": "accurate",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "research_preview",
+   "error": null,
+   "note": "3 tags, 7 photos, k1 0.046, blur 0.92 px, sharpened 0.6",
+   "n_photos": 1,
+   "n_tags": 3,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "failed_gates": [
+    "uncertainty_vs_tolerance"
+   ],
+   "expanded_mm": 1.4661207820738495,
+   "budget_top": [
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.48
+    },
+    {
+     "name": "pixel noise (tag corners, datum edges)",
+     "mm": 0.472
+    },
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.452
+    }
+   ],
+   "corner_error_mm": 0.03372421729453078,
+   "centre_error_mm": 0.023361301997645037,
+   "rotation_error_deg": 0.0022838579672145357,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 0.46,
+    "register": 0.02,
+    "datums": 0.58,
+    "overlay": 0.16
+   },
+   "outcome_ok": true
+  },
+  {
+   "case": "nominal-10",
+   "kind": "nominal",
+   "mode": "multi_auto",
+   "expect": "accurate",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "research_preview",
+   "error": null,
+   "note": "3 tags, 7 photos, k1 0.046, blur 0.92 px, sharpened 0.6",
+   "n_photos": 7,
+   "n_tags": 3,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "ambiguous": false,
+   "failed_gates": [
+    "uncertainty_vs_tolerance"
+   ],
+   "expanded_mm": 1.288628672472714,
+   "budget_top": [
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.465
+    },
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.442
+    },
+    {
+     "name": "pixel noise (tag corners, datum edges)",
+     "mm": 0.322
+    }
+   ],
+   "corner_error_mm": 0.08539909799301305,
+   "centre_error_mm": 0.0804086787987159,
+   "rotation_error_deg": 0.003876065311146439,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 3.34,
+    "register": 1.15,
+    "datums": 13.56,
+    "overlay": 0.28
+   },
+   "outcome_ok": true
+  },
+  {
+   "case": "nominal-11",
+   "kind": "nominal",
+   "mode": "single_manual",
+   "expect": "accurate",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "prototype_guidance",
+   "error": null,
+   "note": "4 tags, 3 photos, k1 0.049, blur 0.92 px, tone curve",
+   "n_photos": 1,
+   "n_tags": 4,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "failed_gates": [],
+   "expanded_mm": 0.9390440381994711,
+   "budget_top": [
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.411
+    },
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.367
+    },
+    {
+     "name": "tag size: common caliper error",
+     "mm": 0.198
+    }
+   ],
+   "corner_error_mm": 0.1735442347052865,
+   "centre_error_mm": 0.16337091013470273,
+   "rotation_error_deg": 0.0053712488189055765,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 0.6,
+    "register": 0.03,
+    "datums": 0.24,
+    "overlay": 0.15
+   },
+   "outcome_ok": true
+  },
+  {
+   "case": "nominal-11",
+   "kind": "nominal",
+   "mode": "multi_auto",
+   "expect": "accurate",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "prototype_guidance",
+   "error": null,
+   "note": "4 tags, 3 photos, k1 0.049, blur 0.92 px, tone curve",
+   "n_photos": 3,
+   "n_tags": 4,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "ambiguous": false,
+   "failed_gates": [],
+   "expanded_mm": 0.9361529292598343,
+   "budget_top": [
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.406
+    },
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.357
+    },
+    {
+     "name": "tag size: common caliper error",
+     "mm": 0.198
+    }
+   ],
+   "corner_error_mm": 0.12202973671071743,
+   "centre_error_mm": 0.11173464116885357,
+   "rotation_error_deg": 0.0025772137893912707,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 1.59,
+    "register": 0.27,
+    "datums": 6.17,
+    "overlay": 0.28
+   },
+   "outcome_ok": true
+  },
+  {
+   "case": "nominal-12",
+   "kind": "nominal",
+   "mode": "single_manual",
+   "expect": "accurate",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "research_preview",
+   "error": null,
+   "note": "5 tags, 7 photos, k1 0.040, blur 0.97 px, sharpened 0.9 + contrast, JPEG 85",
+   "n_photos": 1,
+   "n_tags": 5,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "failed_gates": [
+    "uncertainty_vs_tolerance"
+   ],
+   "expanded_mm": 1.0060835552302052,
+   "budget_top": [
+    {
+     "name": "pixel noise (tag corners, datum edges)",
+     "mm": 0.396
+    },
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.37
+    },
+    {
+     "name": "tag size: common caliper error",
+     "mm": 0.198
+    }
+   ],
+   "corner_error_mm": 0.12224595835087261,
+   "centre_error_mm": 0.10590341479174722,
+   "rotation_error_deg": 0.011928858760414579,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 0.73,
+    "register": 0.05,
+    "datums": 1.05,
+    "overlay": 0.18
+   },
+   "outcome_ok": true
+  },
+  {
+   "case": "nominal-12",
+   "kind": "nominal",
+   "mode": "multi_auto",
+   "expect": "accurate",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "prototype_guidance",
+   "error": null,
+   "note": "5 tags, 7 photos, k1 0.040, blur 0.97 px, sharpened 0.9 + contrast, JPEG 85",
+   "n_photos": 7,
+   "n_tags": 5,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "ambiguous": false,
+   "failed_gates": [],
+   "expanded_mm": 0.9055735313189044,
+   "budget_top": [
+    {
+     "name": "panel flatness (out-of-plane x viewing angle)",
+     "mm": 0.438
+    },
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.403
+    },
+    {
+     "name": "pixel noise (tag corners, datum edges)",
+     "mm": 0.2
+    }
+   ],
+   "corner_error_mm": 0.4185083251202648,
+   "centre_error_mm": 0.3936038113893037,
+   "rotation_error_deg": 0.011433088265905209,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 5.23,
+    "register": 2.58,
+    "datums": 22.62,
+    "overlay": 0.53
+   },
+   "outcome_ok": true
+  },
+  {
+   "case": "no-scale",
+   "kind": "no_tags",
+   "mode": "multi_auto",
+   "expect": "not_guidance",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "refused",
+   "error": "no_tags",
+   "note": "no tag on the panel: nothing gives scale",
+   "n_photos": 5,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 0.3,
+    "register": 0.0,
+    "datums": 0.0,
+    "overlay": 0.0
+   },
+   "outcome_ok": true
+  },
+  {
+   "case": "moved-tag",
+   "kind": "moved_tag",
+   "mode": "multi_auto",
+   "expect": "accurate_or_refused",
+   "must_fail": [],
+   "faulty_tags": [
+    58
+   ],
+   "status": "research_preview",
+   "error": null,
+   "note": "one tag re-stuck 8.5 mm away before the last two photos",
+   "n_photos": 5,
+   "n_tags": 3,
+   "excluded_tags": [
+    58
+   ],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "ambiguous": false,
+   "failed_gates": [
+    "uncertainty_vs_tolerance"
+   ],
+   "expanded_mm": 1.793725479605081,
+   "budget_top": [
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.76
+    },
+    {
+     "name": "panel flatness (out-of-plane x viewing angle)",
+     "mm": 0.464
+    },
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.408
+    }
+   ],
+   "corner_error_mm": 0.08648572508198313,
+   "centre_error_mm": 0.07051193059799804,
+   "rotation_error_deg": 0.011448858491655398,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 2.51,
+    "register": 1.37,
+    "datums": 12.07,
+    "overlay": 0.18
+   },
+   "outcome_ok": true
+  },
+  {
+   "case": "one-size-wrong",
+   "kind": "wrong_size_one",
+   "mode": "multi_auto",
+   "expect": "accurate_or_refused",
+   "must_fail": [],
+   "faulty_tags": [
+    317
+   ],
+   "status": "research_preview",
+   "error": null,
+   "note": "one tag declared 52 mm (true 50)",
+   "n_photos": 5,
+   "n_tags": 3,
+   "excluded_tags": [
+    317
+   ],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "ambiguous": false,
+   "failed_gates": [
+    "uncertainty_vs_tolerance"
+   ],
+   "expanded_mm": 1.1149577663825112,
+   "budget_top": [
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.503
+    },
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.411
+    },
+    {
+     "name": "tag size: common caliper error",
+     "mm": 0.198
+    }
+   ],
+   "corner_error_mm": 0.11480686335142516,
+   "centre_error_mm": 0.09393081636029804,
+   "rotation_error_deg": 0.011905043126744126,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 2.7,
+    "register": 1.14,
+    "datums": 14.41,
+    "overlay": 0.33
+   },
+   "outcome_ok": true
+  },
+  {
+   "case": "all-sizes-wrong",
+   "kind": "wrong_size_all",
+   "mode": "multi_auto",
+   "expect": "undetectable_without_reference",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "research_preview",
+   "error": null,
+   "note": "every tag declared 52 mm (true 50): a common scale error that no tag-to-tag check can see",
+   "n_photos": 5,
+   "n_tags": 4,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "ambiguous": false,
+   "failed_gates": [
+    "uncertainty_vs_tolerance"
+   ],
+   "expanded_mm": 1.3456488264606574,
+   "budget_top": [
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.588
+    },
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.435
+    },
+    {
+     "name": "tag size: common caliper error",
+     "mm": 0.19
+    }
+   ],
+   "corner_error_mm": 17.868760214412468,
+   "centre_error_mm": 15.046193024662063,
+   "rotation_error_deg": 0.14952403452447996,
+   "covered": false,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 2.74,
+    "register": 0.84,
+    "datums": 21.59,
+    "overlay": 0.42
+   },
+   "outcome_ok": true
+  },
+  {
+   "case": "undeclared-tags",
+   "kind": "nominal_sizes",
+   "mode": "multi_auto",
+   "expect": "not_guidance",
+   "must_fail": [
+    "tag_sizes_measured"
+   ],
+   "faulty_tags": [],
+   "status": "research_preview",
+   "error": null,
+   "note": "no measured sizes entered: nominal 50 mm only",
+   "n_photos": 5,
+   "n_tags": 4,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "ambiguous": false,
+   "failed_gates": [
+    "tag_sizes_measured",
+    "independent_check_sensitive",
+    "uncertainty_vs_tolerance"
+   ],
+   "expanded_mm": 7.647937125290877,
+   "budget_top": [
+    {
+     "name": "tag size: nominal (unmeasured) tags",
+     "mm": 6.6
+    },
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.452
+    },
+    {
+     "name": "panel flatness (out-of-plane x viewing angle)",
+     "mm": 0.252
+    }
+   ],
+   "corner_error_mm": 0.016508669810276155,
+   "centre_error_mm": 0.014537603558129233,
+   "rotation_error_deg": 0.001427191964381608,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 2.87,
+    "register": 0.73,
+    "datums": 15.6,
+    "overlay": 0.18
+   },
+   "outcome_ok": true
+  },
+  {
+   "case": "twin-seams",
+   "kind": "ambiguous_side",
+   "mode": "multi_auto",
+   "expect": "not_guidance",
+   "must_fail": [
+    "datum_side_unambiguous"
+   ],
+   "faulty_tags": [],
+   "status": "research_preview",
+   "error": null,
+   "note": "a second identical seam 48 mm beside the datum seam",
+   "n_photos": 5,
+   "n_tags": 4,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "ambiguous": true,
+   "failed_gates": [
+    "datum_side_unambiguous"
+   ],
+   "expanded_mm": 0.9461338342869926,
+   "budget_top": [
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.44
+    },
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.342
+    },
+    {
+     "name": "tag size: common caliper error",
+     "mm": 0.198
+    }
+   ],
+   "corner_error_mm": 0.013852651847837473,
+   "centre_error_mm": 0.00949465774220967,
+   "rotation_error_deg": 0.0008484238583441761,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 2.62,
+    "register": 0.77,
+    "datums": 18.77,
+    "overlay": 0.42
+   },
+   "outcome_ok": true
+  },
+  {
+   "case": "floor-not-in-view",
+   "kind": "missing_origin",
+   "mode": "multi_auto",
+   "expect": "not_guidance",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "blocked",
+   "error": null,
+   "note": "no photo shows the floor line",
+   "n_photos": 5,
+   "n_tags": 3,
+   "excluded_tags": [],
+   "datums_found": [],
+   "ambiguous": false,
+   "failed_gates": [
+    "datums_defined"
+   ],
+   "expanded_mm": null,
+   "budget_top": [],
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 2.46,
+    "register": 0.58,
+    "datums": 3.44,
+    "overlay": 0.0
+   },
+   "outcome_ok": true
+  },
+  {
+   "case": "leaning-edge",
+   "kind": "nonorthogonal_axes",
+   "mode": "multi_auto",
+   "expect": "not_guidance",
+   "must_fail": [
+    "local_frame_valid"
+   ],
+   "faulty_tags": [],
+   "status": "blocked",
+   "error": null,
+   "note": "side edge leans 5 degrees: axes are not perpendicular",
+   "n_photos": 7,
+   "n_tags": 4,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "ambiguous": false,
+   "failed_gates": [
+    "local_frame_valid"
+   ],
+   "expanded_mm": null,
+   "budget_top": [],
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 2.8,
+    "register": 1.62,
+    "datums": 4.92,
+    "overlay": 0.0
+   },
+   "outcome_ok": true
+  },
+  {
+   "case": "raised-tag",
+   "kind": "off_plane_tag",
+   "mode": "multi_auto",
+   "expect": "accurate_or_refused",
+   "must_fail": [],
+   "faulty_tags": [
+    317
+   ],
+   "status": "research_preview",
+   "error": null,
+   "note": "one tag sits on an 8 mm shim",
+   "n_photos": 5,
+   "n_tags": 3,
+   "excluded_tags": [
+    317
+   ],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "ambiguous": false,
+   "failed_gates": [
+    "uncertainty_vs_tolerance"
+   ],
+   "expanded_mm": 1.9762074131428187,
+   "budget_top": [
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.867
+    },
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.486
+    },
+    {
+     "name": "pixel noise (tag corners, datum edges)",
+     "mm": 0.335
+    }
+   ],
+   "corner_error_mm": 0.16110798094680542,
+   "centre_error_mm": 0.14020235164603817,
+   "rotation_error_deg": 0.0162894393112216,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 2.29,
+    "register": 1.2,
+    "datums": 17.31,
+    "overlay": 0.22
+   },
+   "outcome_ok": true
+  },
+  {
+   "case": "faint-seam",
+   "kind": "low_contrast",
+   "mode": "multi_auto",
+   "expect": "accurate_or_refused",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "blocked",
+   "error": null,
+   "note": "side seam is barely visible (6 % darker, 1.2 mm wide)",
+   "n_photos": 5,
+   "n_tags": 4,
+   "excluded_tags": [],
+   "datums_found": [],
+   "ambiguous": false,
+   "failed_gates": [
+    "datums_defined"
+   ],
+   "expanded_mm": null,
+   "budget_top": [],
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 2.33,
+    "register": 0.91,
+    "datums": 7.68,
+    "overlay": 0.0
+   },
+   "outcome_ok": true
+  },
+  {
+   "case": "proud-trim",
+   "kind": "off_plane_floor_edge",
+   "mode": "multi_auto",
+   "expect": "not_guidance",
+   "must_fail": [
+    "datum_floor_no_step_beside"
+   ],
+   "faulty_tags": [],
+   "status": "research_preview",
+   "error": null,
+   "note": "an 8 mm proud trim hides the floor line; the trim's upper edge lies on the panel face and looks like a floor line",
+   "n_photos": 5,
+   "n_tags": 4,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "ambiguous": false,
+   "failed_gates": [
+    "datum_floor_no_step_beside",
+    "uncertainty_vs_tolerance"
+   ],
+   "expanded_mm": 1.0253967365954817,
+   "budget_top": [
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.411
+    },
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.408
+    },
+    {
+     "name": "panel flatness (out-of-plane x viewing angle)",
+     "mm": 0.253
+    }
+   ],
+   "corner_error_mm": 61.193916522202294,
+   "centre_error_mm": 57.53871525270942,
+   "rotation_error_deg": 1.181741868542836,
+   "covered": false,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 2.85,
+    "register": 0.85,
+    "datums": 21.33,
+    "overlay": 0.39
+   },
+   "outcome_ok": true
+  },
+  {
+   "case": "duplicate-id",
+   "kind": "duplicate_id",
+   "mode": "multi_auto",
+   "expect": "accurate_or_refused",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "research_preview",
+   "error": null,
+   "note": "two stickers carry the same ID",
+   "n_photos": 5,
+   "n_tags": 3,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "ambiguous": false,
+   "failed_gates": [
+    "uncertainty_vs_tolerance"
+   ],
+   "expanded_mm": 1.2995009298824851,
+   "budget_top": [
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.532
+    },
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.503
+    },
+    {
+     "name": "pixel noise (tag corners, datum edges)",
+     "mm": 0.243
+    }
+   ],
+   "corner_error_mm": 0.08142218425697346,
+   "centre_error_mm": 0.0609799278497026,
+   "rotation_error_deg": 0.0009049441214616197,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 3.46,
+    "register": 0.69,
+    "datums": 11.1,
+    "overlay": 0.24
+   },
+   "outcome_ok": true
+  },
+  {
+   "case": "flash-glare",
+   "kind": "glare",
+   "mode": "multi_auto",
+   "expect": "accurate_or_refused",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "research_preview",
+   "error": null,
+   "note": "glossy tags lit by a strong flash",
+   "n_photos": 5,
+   "n_tags": 2,
+   "excluded_tags": [
+    77,
+    233
+   ],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "ambiguous": false,
+   "failed_gates": [
+    "photos_agree",
+    "uncertainty_vs_tolerance"
+   ],
+   "expanded_mm": 2.2067211877828283,
+   "budget_top": [
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.795
+    },
+    {
+     "name": "pixel noise (tag corners, datum edges)",
+     "mm": 0.692
+    },
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.497
+    }
+   ],
+   "corner_error_mm": 0.6350239103944334,
+   "centre_error_mm": 0.5238844322922904,
+   "rotation_error_deg": 0.16421989449676183,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 2.17,
+    "register": 1.38,
+    "datums": 13.8,
+    "overlay": 0.18
+   },
+   "outcome_ok": true
+  },
+  {
+   "case": "all-sizes-wrong-ruler",
+   "kind": "wrong_size_all_with_reference",
+   "mode": "multi_auto",
+   "expect": "not_guidance",
+   "must_fail": [
+    "independent_length_check"
+   ],
+   "faulty_tags": [],
+   "status": "blocked",
+   "error": null,
+   "note": "every tag declared 52 mm (true 50), and the operator measures one distance between two tags with a rule",
+   "n_photos": 5,
+   "n_tags": 4,
+   "excluded_tags": [],
+   "reference": {
+    "consistent": false,
+    "relative_difference": 0.040053746241286235
+   },
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "ambiguous": false,
+   "failed_gates": [
+    "independent_length_check"
+   ],
+   "expanded_mm": 0.809710854590059,
+   "budget_top": [
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.416
+    },
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.281
+    },
+    {
+     "name": "tag size: common caliper error",
+     "mm": 0.19
+    }
+   ],
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 2.6,
+    "register": 0.84,
+    "datums": 14.03,
+    "overlay": 0.3
+   },
+   "outcome_ok": true
+  },
+  {
+   "case": "true-sizes-ruler",
+   "kind": "reference_agrees",
+   "mode": "multi_auto",
+   "expect": "accurate",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "research_preview",
+   "error": null,
+   "note": "correct sizes and a rule measurement that agrees (control for the case above)",
+   "n_photos": 5,
+   "n_tags": 4,
+   "excluded_tags": [],
+   "reference": {
+    "consistent": true,
+    "relative_difference": -4.203959319505846e-05
+   },
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "ambiguous": false,
+   "failed_gates": [
+    "uncertainty_vs_tolerance"
+   ],
+   "expanded_mm": 1.250192307724068,
+   "budget_top": [
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.523
+    },
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.471
+    },
+    {
+     "name": "tag size: common caliper error",
+     "mm": 0.198
+    }
+   ],
+   "corner_error_mm": 0.03595643624896457,
+   "centre_error_mm": 0.028949873523472443,
+   "rotation_error_deg": 0.0013556137936091021,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 2.69,
+    "register": 0.82,
+    "datums": 13.56,
+    "overlay": 0.36
+   },
+   "outcome_ok": true
+  },
+  {
+   "case": "curved-target",
+   "kind": "off_plane_target",
+   "mode": "multi_auto",
+   "expect": "not_guidance",
+   "must_fail": [
+    "surface_supported"
+   ],
+   "faulty_tags": [],
+   "status": "blocked",
+   "error": null,
+   "note": "the record says the placard sits on a curved surface: outside the planar method",
+   "n_photos": 5,
+   "n_tags": 4,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "ambiguous": true,
+   "failed_gates": [
+    "surface_supported",
+    "operation_record_released",
+    "datum_side_unambiguous",
+    "uncertainty_vs_tolerance"
+   ],
+   "expanded_mm": 1.2195930220412246,
+   "budget_top": [
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.515
+    },
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.441
+    },
+    {
+     "name": "panel flatness (out-of-plane x viewing angle)",
+     "mm": 0.382
+    }
+   ],
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 2.85,
+    "register": 0.74,
+    "datums": 17.55,
+    "overlay": 0.42
+   },
+   "outcome_ok": true
+  },
+  {
+   "case": "draft-record",
+   "kind": "unreleased_record",
+   "mode": "multi_auto",
+   "expect": "not_guidance",
+   "must_fail": [
+    "operation_record_released"
+   ],
+   "faulty_tags": [],
+   "status": "research_preview",
+   "error": null,
+   "note": "complete record that was never released",
+   "n_photos": 5,
+   "n_tags": 4,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "ambiguous": false,
+   "failed_gates": [
+    "operation_record_released",
+    "uncertainty_vs_tolerance"
+   ],
+   "expanded_mm": 1.0442991300987068,
+   "budget_top": [
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.435
+    },
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.418
+    },
+    {
+     "name": "panel flatness (out-of-plane x viewing angle)",
+     "mm": 0.207
+    }
+   ],
+   "corner_error_mm": 0.04606825020129465,
+   "centre_error_mm": 0.03777540149360703,
+   "rotation_error_deg": 0.00938179595197088,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 2.65,
+    "register": 0.74,
+    "datums": 14.09,
+    "overlay": 0.32
+   },
+   "outcome_ok": true
+  }
+ ],
+ "summary": {
+  "multi_auto": {
+   "cases": 12,
+   "status": {
+    "prototype_guidance": 2,
+    "research_preview": 10
+   },
+   "corner_error_mm": {
+    "n": 12,
+    "median": 0.12708137834978248,
+    "p95": 0.37290753277339905,
+    "max": 0.4185083251202648
+   },
+   "centre_error_mm": {
+    "n": 12,
+    "median": 0.11518383236132848,
+    "p95": 0.35190608300047876,
+    "max": 0.3936038113893037
+   },
+   "rotation_error_deg": {
+    "n": 12,
+    "median": 0.0035188501848022035,
+    "p95": 0.011292431014548243,
+    "max": 0.011433088265905209
+   },
+   "expanded_mm": {
+    "n": 12,
+    "median": 1.0688419884652798,
+    "p95": 1.7236708965983925,
+    "max": 2.0687462621788706
+   },
+   "coverage": {
+    "covered": 12,
+    "of": 12
+   },
+   "error_over_expanded": {
+    "n": 12,
+    "median": 0.12580725441281698,
+    "p95": 0.3407392229297511,
+    "max": 0.4621472587772489
+   },
+   "false_acceptance": 0,
+   "failures": 0,
+   "seconds": {
+    "detect": 3.36,
+    "register": 1.145,
+    "datums": 11.74,
+    "overlay": 0.37
+   }
+  },
+  "single_manual": {
+   "cases": 12,
+   "status": {
+    "prototype_guidance": 3,
+    "research_preview": 9
+   },
+   "corner_error_mm": {
+    "n": 12,
+    "median": 0.2069587645829439,
+    "p95": 0.698437399018331,
+    "max": 0.8939020905220177
+   },
+   "centre_error_mm": {
+    "n": 12,
+    "median": 0.18488772842016157,
+    "p95": 0.6505915545395122,
+    "max": 0.8368825226186916
+   },
+   "rotation_error_deg": {
+    "n": 12,
+    "median": 0.00503222093600861,
+    "p95": 0.015565977974484998,
+    "max": 0.0200113459027933
+   },
+   "expanded_mm": {
+    "n": 12,
+    "median": 1.2400995583032883,
+    "p95": 2.349433382805765,
+    "max": 3.062963163732911
+   },
+   "coverage": {
+    "covered": 12,
+    "of": 12
+   },
+   "error_over_expanded": {
+    "n": 12,
+    "median": 0.2067698042500386,
+    "p95": 0.29776137561209454,
+    "max": 0.3049958508390867
+   },
+   "false_acceptance": 0,
+   "failures": 0,
+   "seconds": {
+    "detect": 0.5549999999999999,
+    "register": 0.03,
+    "datums": 0.435,
+    "overlay": 0.165
+   }
+  },
+  "negative": {
+   "cases": 17,
+   "handled_correctly": 17,
+   "false_acceptance": 0,
+   "failures": 0
+  }
+ },
+ "coverage": [
+  {
+   "case": "nominal-01#t1",
+   "kind": "nominal",
+   "mode": "single_manual",
+   "expect": "accurate",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "prototype_guidance",
+   "error": null,
+   "note": "4 tags, 5 photos, k1 0.073, blur 0.76 px, plain",
+   "n_photos": 1,
+   "n_tags": 4,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "failed_gates": [],
+   "expanded_mm": 0.9969046567624312,
+   "budget_top": [
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.495
+    },
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.306
+    },
+    {
+     "name": "pixel noise (tag corners, datum edges)",
+     "mm": 0.243
+    }
+   ],
+   "corner_error_mm": 0.8877539948867185,
+   "centre_error_mm": 0.823670292410365,
+   "rotation_error_deg": 0.017252829001906767,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 0.51,
+    "register": 0.04,
+    "datums": 0.34,
+    "overlay": 0.18
+   },
+   "outcome_ok": true,
+   "trial": 1
+  },
+  {
+   "case": "nominal-01#t2",
+   "kind": "nominal",
+   "mode": "single_manual",
+   "expect": "accurate",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "prototype_guidance",
+   "error": null,
+   "note": "4 tags, 5 photos, k1 0.073, blur 0.76 px, plain",
+   "n_photos": 1,
+   "n_tags": 4,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "failed_gates": [],
+   "expanded_mm": 0.9367926141645748,
+   "budget_top": [
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.495
+    },
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.31
+    },
+    {
+     "name": "tag size: common caliper error",
+     "mm": 0.198
+    }
+   ],
+   "corner_error_mm": 0.4621271211174655,
+   "centre_error_mm": 0.4264472513427799,
+   "rotation_error_deg": 0.03724929220306485,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 0.49,
+    "register": 0.03,
+    "datums": 0.32,
+    "overlay": 0.17
+   },
+   "outcome_ok": true,
+   "trial": 2
+  },
+  {
+   "case": "nominal-01#t3",
+   "kind": "nominal",
+   "mode": "single_manual",
+   "expect": "accurate",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "research_preview",
+   "error": null,
+   "note": "4 tags, 5 photos, k1 0.073, blur 0.76 px, plain",
+   "n_photos": 1,
+   "n_tags": 4,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "failed_gates": [
+    "uncertainty_vs_tolerance"
+   ],
+   "expanded_mm": 1.0027729579527251,
+   "budget_top": [
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.494
+    },
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.319
+    },
+    {
+     "name": "pixel noise (tag corners, datum edges)",
+     "mm": 0.235
+    }
+   ],
+   "corner_error_mm": 0.22698778448648357,
+   "centre_error_mm": 0.19144264406115902,
+   "rotation_error_deg": 0.013505879995274986,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 0.48,
+    "register": 0.03,
+    "datums": 0.32,
+    "overlay": 0.16
+   },
+   "outcome_ok": true,
+   "trial": 3
+  },
+  {
+   "case": "nominal-01#t4",
+   "kind": "nominal",
+   "mode": "single_manual",
+   "expect": "accurate",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "prototype_guidance",
+   "error": null,
+   "note": "4 tags, 5 photos, k1 0.073, blur 0.76 px, plain",
+   "n_photos": 1,
+   "n_tags": 4,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "failed_gates": [],
+   "expanded_mm": 0.944488301510737,
+   "budget_top": [
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.494
+    },
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.306
+    },
+    {
+     "name": "tag size: common caliper error",
+     "mm": 0.198
+    }
+   ],
+   "corner_error_mm": 0.10841570364169088,
+   "centre_error_mm": 0.0968375497068751,
+   "rotation_error_deg": 0.025472359653161337,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 0.5,
+    "register": 0.03,
+    "datums": 0.33,
+    "overlay": 0.17
+   },
+   "outcome_ok": true,
+   "trial": 4
+  },
+  {
+   "case": "nominal-01#t5",
+   "kind": "nominal",
+   "mode": "single_manual",
+   "expect": "accurate",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "prototype_guidance",
+   "error": null,
+   "note": "4 tags, 5 photos, k1 0.073, blur 0.76 px, plain",
+   "n_photos": 1,
+   "n_tags": 4,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "failed_gates": [],
+   "expanded_mm": 0.959355998745026,
+   "budget_top": [
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.495
+    },
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.309
+    },
+    {
+     "name": "tag size: common caliper error",
+     "mm": 0.198
+    }
+   ],
+   "corner_error_mm": 0.6386278452355855,
+   "centre_error_mm": 0.556222149376035,
+   "rotation_error_deg": 0.029217476560020068,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 0.53,
+    "register": 0.03,
+    "datums": 0.33,
+    "overlay": 0.23
+   },
+   "outcome_ok": true,
+   "trial": 5
+  },
+  {
+   "case": "nominal-01#t6",
+   "kind": "nominal",
+   "mode": "single_manual",
+   "expect": "accurate",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "prototype_guidance",
+   "error": null,
+   "note": "4 tags, 5 photos, k1 0.073, blur 0.76 px, plain",
+   "n_photos": 1,
+   "n_tags": 4,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "failed_gates": [],
+   "expanded_mm": 0.9404447180890162,
+   "budget_top": [
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.493
+    },
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.3
+    },
+    {
+     "name": "tag size: common caliper error",
+     "mm": 0.198
+    }
+   ],
+   "corner_error_mm": 0.15169788299485867,
+   "centre_error_mm": 0.10634740937788432,
+   "rotation_error_deg": 0.02029049437519144,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 0.52,
+    "register": 0.03,
+    "datums": 0.35,
+    "overlay": 0.17
+   },
+   "outcome_ok": true,
+   "trial": 6
+  },
+  {
+   "case": "nominal-01#t7",
+   "kind": "nominal",
+   "mode": "single_manual",
+   "expect": "accurate",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "prototype_guidance",
+   "error": null,
+   "note": "4 tags, 5 photos, k1 0.073, blur 0.76 px, plain",
+   "n_photos": 1,
+   "n_tags": 4,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "failed_gates": [],
+   "expanded_mm": 0.9501374577734172,
+   "budget_top": [
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.495
+    },
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.312
+    },
+    {
+     "name": "tag size: common caliper error",
+     "mm": 0.198
+    }
+   ],
+   "corner_error_mm": 0.40384790428132034,
+   "centre_error_mm": 0.3730144751255574,
+   "rotation_error_deg": 0.039274172055949734,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 0.49,
+    "register": 0.03,
+    "datums": 0.34,
+    "overlay": 0.17
+   },
+   "outcome_ok": true,
+   "trial": 7
+  },
+  {
+   "case": "nominal-01#t8",
+   "kind": "nominal",
+   "mode": "single_manual",
+   "expect": "accurate",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "prototype_guidance",
+   "error": null,
+   "note": "4 tags, 5 photos, k1 0.073, blur 0.76 px, plain",
+   "n_photos": 1,
+   "n_tags": 4,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "failed_gates": [],
+   "expanded_mm": 0.9354717790697282,
+   "budget_top": [
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.495
+    },
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.31
+    },
+    {
+     "name": "tag size: common caliper error",
+     "mm": 0.198
+    }
+   ],
+   "corner_error_mm": 0.38021543962790794,
+   "centre_error_mm": 0.31817316177967847,
+   "rotation_error_deg": 0.006077421306307145,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 0.48,
+    "register": 0.03,
+    "datums": 0.33,
+    "overlay": 0.17
+   },
+   "outcome_ok": true,
+   "trial": 8
+  },
+  {
+   "case": "nominal-01#t9",
+   "kind": "nominal",
+   "mode": "single_manual",
+   "expect": "accurate",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "prototype_guidance",
+   "error": null,
+   "note": "4 tags, 5 photos, k1 0.073, blur 0.76 px, plain",
+   "n_photos": 1,
+   "n_tags": 4,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "failed_gates": [],
+   "expanded_mm": 0.9303536777385139,
+   "budget_top": [
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.495
+    },
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.306
+    },
+    {
+     "name": "tag size: common caliper error",
+     "mm": 0.198
+    }
+   ],
+   "corner_error_mm": 0.5193076378189576,
+   "centre_error_mm": 0.47223771701900513,
+   "rotation_error_deg": 0.008183718869773612,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 0.48,
+    "register": 0.03,
+    "datums": 0.35,
+    "overlay": 0.17
+   },
+   "outcome_ok": true,
+   "trial": 9
+  },
+  {
+   "case": "nominal-01#t10",
+   "kind": "nominal",
+   "mode": "single_manual",
+   "expect": "accurate",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "prototype_guidance",
+   "error": null,
+   "note": "4 tags, 5 photos, k1 0.073, blur 0.76 px, plain",
+   "n_photos": 1,
+   "n_tags": 4,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "failed_gates": [],
+   "expanded_mm": 0.9366358552284063,
+   "budget_top": [
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.495
+    },
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.311
+    },
+    {
+     "name": "tag size: common caliper error",
+     "mm": 0.198
+    }
+   ],
+   "corner_error_mm": 0.7720848414440761,
+   "centre_error_mm": 0.7097735915818596,
+   "rotation_error_deg": 0.04990034535509358,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 0.53,
+    "register": 0.03,
+    "datums": 0.48,
+    "overlay": 0.18
+   },
+   "outcome_ok": true,
+   "trial": 10
+  },
+  {
+   "case": "nominal-01#t11",
+   "kind": "nominal",
+   "mode": "single_manual",
+   "expect": "accurate",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "prototype_guidance",
+   "error": null,
+   "note": "4 tags, 5 photos, k1 0.073, blur 0.76 px, plain",
+   "n_photos": 1,
+   "n_tags": 4,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "failed_gates": [],
+   "expanded_mm": 0.9420574259323634,
+   "budget_top": [
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.495
+    },
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.308
+    },
+    {
+     "name": "tag size: common caliper error",
+     "mm": 0.198
+    }
+   ],
+   "corner_error_mm": 0.45996501820409097,
+   "centre_error_mm": 0.4024577576208378,
+   "rotation_error_deg": 0.010690479320053245,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 0.56,
+    "register": 0.03,
+    "datums": 0.51,
+    "overlay": 0.21
+   },
+   "outcome_ok": true,
+   "trial": 11
+  },
+  {
+   "case": "nominal-01#t12",
+   "kind": "nominal",
+   "mode": "single_manual",
+   "expect": "accurate",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "prototype_guidance",
+   "error": null,
+   "note": "4 tags, 5 photos, k1 0.073, blur 0.76 px, plain",
+   "n_photos": 1,
+   "n_tags": 4,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "failed_gates": [],
+   "expanded_mm": 0.9299776312524635,
+   "budget_top": [
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.495
+    },
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.307
+    },
+    {
+     "name": "tag size: common caliper error",
+     "mm": 0.198
+    }
+   ],
+   "corner_error_mm": 0.37699069120789835,
+   "centre_error_mm": 0.2736483130854231,
+   "rotation_error_deg": 0.00999408181541928,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 0.55,
+    "register": 0.03,
+    "datums": 0.46,
+    "overlay": 0.17
+   },
+   "outcome_ok": true,
+   "trial": 12
+  },
+  {
+   "case": "nominal-01#t13",
+   "kind": "nominal",
+   "mode": "single_manual",
+   "expect": "accurate",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "prototype_guidance",
+   "error": null,
+   "note": "4 tags, 5 photos, k1 0.073, blur 0.76 px, plain",
+   "n_photos": 1,
+   "n_tags": 4,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "failed_gates": [],
+   "expanded_mm": 0.9831715013413196,
+   "budget_top": [
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.495
+    },
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.307
+    },
+    {
+     "name": "pixel noise (tag corners, datum edges)",
+     "mm": 0.229
+    }
+   ],
+   "corner_error_mm": 0.20042857922505114,
+   "centre_error_mm": 0.14611807835889487,
+   "rotation_error_deg": 0.025308718465542494,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 0.53,
+    "register": 0.03,
+    "datums": 0.48,
+    "overlay": 0.18
+   },
+   "outcome_ok": true,
+   "trial": 13
+  },
+  {
+   "case": "nominal-01#t14",
+   "kind": "nominal",
+   "mode": "single_manual",
+   "expect": "accurate",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "research_preview",
+   "error": null,
+   "note": "4 tags, 5 photos, k1 0.073, blur 0.76 px, plain",
+   "n_photos": 1,
+   "n_tags": 4,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "failed_gates": [
+    "uncertainty_vs_tolerance"
+   ],
+   "expanded_mm": 1.0193593129960943,
+   "budget_top": [
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.495
+    },
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.311
+    },
+    {
+     "name": "pixel noise (tag corners, datum edges)",
+     "mm": 0.261
+    }
+   ],
+   "corner_error_mm": 0.1405258663637413,
+   "centre_error_mm": 0.11151756982897132,
+   "rotation_error_deg": 0.009915618503888531,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 0.58,
+    "register": 0.04,
+    "datums": 0.5,
+    "overlay": 0.18
+   },
+   "outcome_ok": true,
+   "trial": 14
+  },
+  {
+   "case": "nominal-01#t15",
+   "kind": "nominal",
+   "mode": "single_manual",
+   "expect": "accurate",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "research_preview",
+   "error": null,
+   "note": "4 tags, 5 photos, k1 0.073, blur 0.76 px, plain",
+   "n_photos": 1,
+   "n_tags": 4,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "failed_gates": [
+    "uncertainty_vs_tolerance"
+   ],
+   "expanded_mm": 1.0983913384157753,
+   "budget_top": [
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.495
+    },
+    {
+     "name": "pixel noise (tag corners, datum edges)",
+     "mm": 0.334
+    },
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.312
+    }
+   ],
+   "corner_error_mm": 0.45774079012028673,
+   "centre_error_mm": 0.3740111147045592,
+   "rotation_error_deg": 0.0325648936670476,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 0.62,
+    "register": 0.04,
+    "datums": 0.47,
+    "overlay": 0.18
+   },
+   "outcome_ok": true,
+   "trial": 15
+  },
+  {
+   "case": "nominal-01#t16",
+   "kind": "nominal",
+   "mode": "single_manual",
+   "expect": "accurate",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "prototype_guidance",
+   "error": null,
+   "note": "4 tags, 5 photos, k1 0.073, blur 0.76 px, plain",
+   "n_photos": 1,
+   "n_tags": 4,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "failed_gates": [],
+   "expanded_mm": 0.9376297052276924,
+   "budget_top": [
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.495
+    },
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.307
+    },
+    {
+     "name": "tag size: common caliper error",
+     "mm": 0.198
+    }
+   ],
+   "corner_error_mm": 0.13952742786576514,
+   "centre_error_mm": 0.10133873209364264,
+   "rotation_error_deg": 0.018134115774301768,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 0.57,
+    "register": 0.03,
+    "datums": 0.48,
+    "overlay": 0.18
+   },
+   "outcome_ok": true,
+   "trial": 16
+  },
+  {
+   "case": "nominal-01#t17",
+   "kind": "nominal",
+   "mode": "single_manual",
+   "expect": "accurate",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "prototype_guidance",
+   "error": null,
+   "note": "4 tags, 5 photos, k1 0.073, blur 0.76 px, plain",
+   "n_photos": 1,
+   "n_tags": 4,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "failed_gates": [],
+   "expanded_mm": 0.933813363916663,
+   "budget_top": [
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.495
+    },
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.31
+    },
+    {
+     "name": "tag size: common caliper error",
+     "mm": 0.198
+    }
+   ],
+   "corner_error_mm": 0.12473314516645227,
+   "centre_error_mm": 0.08026143782656003,
+   "rotation_error_deg": 0.01733609898601086,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 0.62,
+    "register": 0.03,
+    "datums": 0.52,
+    "overlay": 0.17
+   },
+   "outcome_ok": true,
+   "trial": 17
+  },
+  {
+   "case": "nominal-01#t18",
+   "kind": "nominal",
+   "mode": "single_manual",
+   "expect": "accurate",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "prototype_guidance",
+   "error": null,
+   "note": "4 tags, 5 photos, k1 0.073, blur 0.76 px, plain",
+   "n_photos": 1,
+   "n_tags": 4,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "failed_gates": [],
+   "expanded_mm": 0.9322558873521045,
+   "budget_top": [
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.495
+    },
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.309
+    },
+    {
+     "name": "tag size: common caliper error",
+     "mm": 0.198
+    }
+   ],
+   "corner_error_mm": 0.8401463299327006,
+   "centre_error_mm": 0.7521739079249806,
+   "rotation_error_deg": 0.04052039470995823,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 0.59,
+    "register": 0.03,
+    "datums": 0.5,
+    "overlay": 0.17
+   },
+   "outcome_ok": true,
+   "trial": 18
+  },
+  {
+   "case": "nominal-01#t19",
+   "kind": "nominal",
+   "mode": "single_manual",
+   "expect": "accurate",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "prototype_guidance",
+   "error": null,
+   "note": "4 tags, 5 photos, k1 0.073, blur 0.76 px, plain",
+   "n_photos": 1,
+   "n_tags": 4,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "failed_gates": [],
+   "expanded_mm": 0.9753105189780109,
+   "budget_top": [
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.495
+    },
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.305
+    },
+    {
+     "name": "pixel noise (tag corners, datum edges)",
+     "mm": 0.22
+    }
+   ],
+   "corner_error_mm": 0.09288608745453832,
+   "centre_error_mm": 0.07430080386440088,
+   "rotation_error_deg": 0.007234768729256337,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 0.55,
+    "register": 0.03,
+    "datums": 0.48,
+    "overlay": 0.17
+   },
+   "outcome_ok": true,
+   "trial": 19
+  },
+  {
+   "case": "nominal-01#t20",
+   "kind": "nominal",
+   "mode": "single_manual",
+   "expect": "accurate",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "prototype_guidance",
+   "error": null,
+   "note": "4 tags, 5 photos, k1 0.073, blur 0.76 px, plain",
+   "n_photos": 1,
+   "n_tags": 4,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "failed_gates": [],
+   "expanded_mm": 0.9672780870876905,
+   "budget_top": [
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.495
+    },
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.307
+    },
+    {
+     "name": "pixel noise (tag corners, datum edges)",
+     "mm": 0.208
+    }
+   ],
+   "corner_error_mm": 0.7030635356475187,
+   "centre_error_mm": 0.5930789100905742,
+   "rotation_error_deg": 0.05080020625060486,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 0.52,
+    "register": 0.03,
+    "datums": 0.5,
+    "overlay": 0.17
+   },
+   "outcome_ok": true,
+   "trial": 20
+  },
+  {
+   "case": "nominal-01#t21",
+   "kind": "nominal",
+   "mode": "single_manual",
+   "expect": "accurate",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "prototype_guidance",
+   "error": null,
+   "note": "4 tags, 5 photos, k1 0.073, blur 0.76 px, plain",
+   "n_photos": 1,
+   "n_tags": 4,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "failed_gates": [],
+   "expanded_mm": 0.9344162639006558,
+   "budget_top": [
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.495
+    },
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.308
+    },
+    {
+     "name": "tag size: common caliper error",
+     "mm": 0.198
+    }
+   ],
+   "corner_error_mm": 0.14342559661868323,
+   "centre_error_mm": 0.13425449519116936,
+   "rotation_error_deg": 0.014621762344914212,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 0.6,
+    "register": 0.03,
+    "datums": 0.48,
+    "overlay": 0.2
+   },
+   "outcome_ok": true,
+   "trial": 21
+  },
+  {
+   "case": "nominal-01#t22",
+   "kind": "nominal",
+   "mode": "single_manual",
+   "expect": "accurate",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "prototype_guidance",
+   "error": null,
+   "note": "4 tags, 5 photos, k1 0.073, blur 0.76 px, plain",
+   "n_photos": 1,
+   "n_tags": 4,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "failed_gates": [],
+   "expanded_mm": 0.9387913527316121,
+   "budget_top": [
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.495
+    },
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.307
+    },
+    {
+     "name": "tag size: common caliper error",
+     "mm": 0.198
+    }
+   ],
+   "corner_error_mm": 0.1788330853464895,
+   "centre_error_mm": 0.1389246350335575,
+   "rotation_error_deg": 0.030351195993653792,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 0.53,
+    "register": 0.03,
+    "datums": 0.45,
+    "overlay": 0.23
+   },
+   "outcome_ok": true,
+   "trial": 22
+  },
+  {
+   "case": "nominal-01#t23",
+   "kind": "nominal",
+   "mode": "single_manual",
+   "expect": "accurate",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "research_preview",
+   "error": null,
+   "note": "4 tags, 5 photos, k1 0.073, blur 0.76 px, plain",
+   "n_photos": 1,
+   "n_tags": 4,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "failed_gates": [
+    "uncertainty_vs_tolerance"
+   ],
+   "expanded_mm": 1.0000751114296593,
+   "budget_top": [
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.495
+    },
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.312
+    },
+    {
+     "name": "pixel noise (tag corners, datum edges)",
+     "mm": 0.24
+    }
+   ],
+   "corner_error_mm": 0.2506062701186908,
+   "centre_error_mm": 0.2054501241453284,
+   "rotation_error_deg": 0.037114412578485315,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 0.54,
+    "register": 0.04,
+    "datums": 0.33,
+    "overlay": 0.17
+   },
+   "outcome_ok": true,
+   "trial": 23
+  },
+  {
+   "case": "nominal-01#t24",
+   "kind": "nominal",
+   "mode": "single_manual",
+   "expect": "accurate",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "prototype_guidance",
+   "error": null,
+   "note": "4 tags, 5 photos, k1 0.073, blur 0.76 px, plain",
+   "n_photos": 1,
+   "n_tags": 4,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "failed_gates": [],
+   "expanded_mm": 0.9452670513621533,
+   "budget_top": [
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.495
+    },
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.31
+    },
+    {
+     "name": "tag size: common caliper error",
+     "mm": 0.198
+    }
+   ],
+   "corner_error_mm": 0.14659529572109797,
+   "centre_error_mm": 0.08538531727546601,
+   "rotation_error_deg": 0.01350587999530043,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 0.48,
+    "register": 0.03,
+    "datums": 0.33,
+    "overlay": 0.16
+   },
+   "outcome_ok": true,
+   "trial": 24
+  },
+  {
+   "case": "nominal-01#t25",
+   "kind": "nominal",
+   "mode": "single_manual",
+   "expect": "accurate",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "prototype_guidance",
+   "error": null,
+   "note": "4 tags, 5 photos, k1 0.073, blur 0.76 px, plain",
+   "n_photos": 1,
+   "n_tags": 4,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "failed_gates": [],
+   "expanded_mm": 0.95309042412269,
+   "budget_top": [
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.494
+    },
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.311
+    },
+    {
+     "name": "tag size: common caliper error",
+     "mm": 0.198
+    }
+   ],
+   "corner_error_mm": 0.2664644127580949,
+   "centre_error_mm": 0.19926864888334175,
+   "rotation_error_deg": 0.03643251613810956,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 0.54,
+    "register": 0.03,
+    "datums": 0.5,
+    "overlay": 0.17
+   },
+   "outcome_ok": true,
+   "trial": 25
+  },
+  {
+   "case": "nominal-01#t26",
+   "kind": "nominal",
+   "mode": "single_manual",
+   "expect": "accurate",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "prototype_guidance",
+   "error": null,
+   "note": "4 tags, 5 photos, k1 0.073, blur 0.76 px, plain",
+   "n_photos": 1,
+   "n_tags": 4,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "failed_gates": [],
+   "expanded_mm": 0.9420863532851653,
+   "budget_top": [
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.495
+    },
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.314
+    },
+    {
+     "name": "tag size: common caliper error",
+     "mm": 0.198
+    }
+   ],
+   "corner_error_mm": 0.40627051603955994,
+   "centre_error_mm": 0.3335046796184151,
+   "rotation_error_deg": 0.003832681999686204,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 0.48,
+    "register": 0.04,
+    "datums": 0.37,
+    "overlay": 0.17
+   },
+   "outcome_ok": true,
+   "trial": 26
+  },
+  {
+   "case": "nominal-01#t27",
+   "kind": "nominal",
+   "mode": "single_manual",
+   "expect": "accurate",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "prototype_guidance",
+   "error": null,
+   "note": "4 tags, 5 photos, k1 0.073, blur 0.76 px, plain",
+   "n_photos": 1,
+   "n_tags": 4,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "failed_gates": [],
+   "expanded_mm": 0.942384384214369,
+   "budget_top": [
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.495
+    },
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.311
+    },
+    {
+     "name": "tag size: common caliper error",
+     "mm": 0.198
+    }
+   ],
+   "corner_error_mm": 0.3376358209694579,
+   "centre_error_mm": 0.30392023885279573,
+   "rotation_error_deg": 0.02063491540405513,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 0.48,
+    "register": 0.03,
+    "datums": 0.33,
+    "overlay": 0.16
+   },
+   "outcome_ok": true,
+   "trial": 27
+  },
+  {
+   "case": "nominal-01#t28",
+   "kind": "nominal",
+   "mode": "single_manual",
+   "expect": "accurate",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "prototype_guidance",
+   "error": null,
+   "note": "4 tags, 5 photos, k1 0.073, blur 0.76 px, plain",
+   "n_photos": 1,
+   "n_tags": 4,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "failed_gates": [],
+   "expanded_mm": 0.962925833236025,
+   "budget_top": [
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.495
+    },
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.309
+    },
+    {
+     "name": "pixel noise (tag corners, datum edges)",
+     "mm": 0.201
+    }
+   ],
+   "corner_error_mm": 1.0887954203225694,
+   "centre_error_mm": 0.9585578967688935,
+   "rotation_error_deg": 0.020277190786717473,
+   "covered": false,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 0.5,
+    "register": 0.03,
+    "datums": 0.32,
+    "overlay": 0.16
+   },
+   "outcome_ok": true,
+   "trial": 28
+  },
+  {
+   "case": "nominal-01#t29",
+   "kind": "nominal",
+   "mode": "single_manual",
+   "expect": "accurate",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "prototype_guidance",
+   "error": null,
+   "note": "4 tags, 5 photos, k1 0.073, blur 0.76 px, plain",
+   "n_photos": 1,
+   "n_tags": 4,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "failed_gates": [],
+   "expanded_mm": 0.9319675171872236,
+   "budget_top": [
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.495
+    },
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.309
+    },
+    {
+     "name": "tag size: common caliper error",
+     "mm": 0.198
+    }
+   ],
+   "corner_error_mm": 0.150194505111269,
+   "centre_error_mm": 0.12761669197525355,
+   "rotation_error_deg": 0.012866854635101902,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 0.46,
+    "register": 0.03,
+    "datums": 0.33,
+    "overlay": 0.16
+   },
+   "outcome_ok": true,
+   "trial": 29
+  },
+  {
+   "case": "nominal-01#t30",
+   "kind": "nominal",
+   "mode": "single_manual",
+   "expect": "accurate",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "research_preview",
+   "error": null,
+   "note": "4 tags, 5 photos, k1 0.073, blur 0.76 px, plain",
+   "n_photos": 1,
+   "n_tags": 4,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "failed_gates": [
+    "uncertainty_vs_tolerance"
+   ],
+   "expanded_mm": 1.014222206829671,
+   "budget_top": [
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.495
+    },
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.303
+    },
+    {
+     "name": "pixel noise (tag corners, datum edges)",
+     "mm": 0.265
+    }
+   ],
+   "corner_error_mm": 0.13748514988857052,
+   "centre_error_mm": 0.11642427956100118,
+   "rotation_error_deg": 0.009673509444714078,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 0.46,
+    "register": 0.03,
+    "datums": 0.33,
+    "overlay": 0.16
+   },
+   "outcome_ok": true,
+   "trial": 30
+  },
+  {
+   "case": "nominal-01#t31",
+   "kind": "nominal",
+   "mode": "single_manual",
+   "expect": "accurate",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "prototype_guidance",
+   "error": null,
+   "note": "4 tags, 5 photos, k1 0.073, blur 0.76 px, plain",
+   "n_photos": 1,
+   "n_tags": 4,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "failed_gates": [],
+   "expanded_mm": 0.958600811619315,
+   "budget_top": [
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.494
+    },
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.309
+    },
+    {
+     "name": "tag size: common caliper error",
+     "mm": 0.198
+    }
+   ],
+   "corner_error_mm": 0.7950990236946845,
+   "centre_error_mm": 0.7141289394495318,
+   "rotation_error_deg": 0.08461291330481334,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 0.48,
+    "register": 0.03,
+    "datums": 0.34,
+    "overlay": 0.17
+   },
+   "outcome_ok": true,
+   "trial": 31
+  },
+  {
+   "case": "nominal-01#t32",
+   "kind": "nominal",
+   "mode": "single_manual",
+   "expect": "accurate",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "prototype_guidance",
+   "error": null,
+   "note": "4 tags, 5 photos, k1 0.073, blur 0.76 px, plain",
+   "n_photos": 1,
+   "n_tags": 4,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "failed_gates": [],
+   "expanded_mm": 0.9365023476222225,
+   "budget_top": [
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.495
+    },
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.311
+    },
+    {
+     "name": "tag size: common caliper error",
+     "mm": 0.198
+    }
+   ],
+   "corner_error_mm": 0.17722787072927718,
+   "centre_error_mm": 0.128128551510517,
+   "rotation_error_deg": 0.003983459646077034,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 0.48,
+    "register": 0.03,
+    "datums": 0.32,
+    "overlay": 0.16
+   },
+   "outcome_ok": true,
+   "trial": 32
+  },
+  {
+   "case": "nominal-01#t33",
+   "kind": "nominal",
+   "mode": "single_manual",
+   "expect": "accurate",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "prototype_guidance",
+   "error": null,
+   "note": "4 tags, 5 photos, k1 0.073, blur 0.76 px, plain",
+   "n_photos": 1,
+   "n_tags": 4,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "failed_gates": [],
+   "expanded_mm": 0.937581884123521,
+   "budget_top": [
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.495
+    },
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.311
+    },
+    {
+     "name": "tag size: common caliper error",
+     "mm": 0.198
+    }
+   ],
+   "corner_error_mm": 0.37236574093130786,
+   "centre_error_mm": 0.28593302190747566,
+   "rotation_error_deg": 0.03993127257051289,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 0.47,
+    "register": 0.03,
+    "datums": 0.33,
+    "overlay": 0.17
+   },
+   "outcome_ok": true,
+   "trial": 33
+  },
+  {
+   "case": "nominal-01#t34",
+   "kind": "nominal",
+   "mode": "single_manual",
+   "expect": "accurate",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "prototype_guidance",
+   "error": null,
+   "note": "4 tags, 5 photos, k1 0.073, blur 0.76 px, plain",
+   "n_photos": 1,
+   "n_tags": 4,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "failed_gates": [],
+   "expanded_mm": 0.9510896333579135,
+   "budget_top": [
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.494
+    },
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.309
+    },
+    {
+     "name": "tag size: common caliper error",
+     "mm": 0.198
+    }
+   ],
+   "corner_error_mm": 0.32599091949921555,
+   "centre_error_mm": 0.25675331346578506,
+   "rotation_error_deg": 0.0384229992662038,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 0.51,
+    "register": 0.03,
+    "datums": 0.53,
+    "overlay": 0.19
+   },
+   "outcome_ok": true,
+   "trial": 34
+  },
+  {
+   "case": "nominal-01#t35",
+   "kind": "nominal",
+   "mode": "single_manual",
+   "expect": "accurate",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "prototype_guidance",
+   "error": null,
+   "note": "4 tags, 5 photos, k1 0.073, blur 0.76 px, plain",
+   "n_photos": 1,
+   "n_tags": 4,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "failed_gates": [],
+   "expanded_mm": 0.9951355020561335,
+   "budget_top": [
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.495
+    },
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.308
+    },
+    {
+     "name": "pixel noise (tag corners, datum edges)",
+     "mm": 0.239
+    }
+   ],
+   "corner_error_mm": 0.2935090564983177,
+   "centre_error_mm": 0.25491256973336573,
+   "rotation_error_deg": 0.00561161391020498,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 0.54,
+    "register": 0.04,
+    "datums": 0.46,
+    "overlay": 0.17
+   },
+   "outcome_ok": true,
+   "trial": 35
+  },
+  {
+   "case": "nominal-01#t36",
+   "kind": "nominal",
+   "mode": "single_manual",
+   "expect": "accurate",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "prototype_guidance",
+   "error": null,
+   "note": "4 tags, 5 photos, k1 0.073, blur 0.76 px, plain",
+   "n_photos": 1,
+   "n_tags": 4,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "failed_gates": [],
+   "expanded_mm": 0.9861079234051338,
+   "budget_top": [
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.494
+    },
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.31
+    },
+    {
+     "name": "pixel noise (tag corners, datum edges)",
+     "mm": 0.227
+    }
+   ],
+   "corner_error_mm": 0.5569913812956953,
+   "centre_error_mm": 0.47794144028018576,
+   "rotation_error_deg": 0.021954839417095633,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 0.6,
+    "register": 0.03,
+    "datums": 0.43,
+    "overlay": 0.16
+   },
+   "outcome_ok": true,
+   "trial": 36
+  },
+  {
+   "case": "nominal-01#t37",
+   "kind": "nominal",
+   "mode": "single_manual",
+   "expect": "accurate",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "prototype_guidance",
+   "error": null,
+   "note": "4 tags, 5 photos, k1 0.073, blur 0.76 px, plain",
+   "n_photos": 1,
+   "n_tags": 4,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "failed_gates": [],
+   "expanded_mm": 0.9421611686790886,
+   "budget_top": [
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.495
+    },
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.312
+    },
+    {
+     "name": "tag size: common caliper error",
+     "mm": 0.198
+    }
+   ],
+   "corner_error_mm": 0.23652115504036975,
+   "centre_error_mm": 0.22974998490302798,
+   "rotation_error_deg": 0.002533768620824258,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 0.48,
+    "register": 0.03,
+    "datums": 0.37,
+    "overlay": 0.16
+   },
+   "outcome_ok": true,
+   "trial": 37
+  },
+  {
+   "case": "nominal-01#t38",
+   "kind": "nominal",
+   "mode": "single_manual",
+   "expect": "accurate",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "prototype_guidance",
+   "error": null,
+   "note": "4 tags, 5 photos, k1 0.073, blur 0.76 px, plain",
+   "n_photos": 1,
+   "n_tags": 4,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "failed_gates": [],
+   "expanded_mm": 0.940964416552529,
+   "budget_top": [
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.495
+    },
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.314
+    },
+    {
+     "name": "tag size: common caliper error",
+     "mm": 0.198
+    }
+   ],
+   "corner_error_mm": 0.43911024700057794,
+   "centre_error_mm": 0.39294336767586013,
+   "rotation_error_deg": 0.018134115774301768,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 0.49,
+    "register": 0.03,
+    "datums": 0.37,
+    "overlay": 0.17
+   },
+   "outcome_ok": true,
+   "trial": 38
+  },
+  {
+   "case": "nominal-01#t39",
+   "kind": "nominal",
+   "mode": "single_manual",
+   "expect": "accurate",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "prototype_guidance",
+   "error": null,
+   "note": "4 tags, 5 photos, k1 0.073, blur 0.76 px, plain",
+   "n_photos": 1,
+   "n_tags": 4,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "failed_gates": [],
+   "expanded_mm": 0.9375740664802474,
+   "budget_top": [
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.495
+    },
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.311
+    },
+    {
+     "name": "tag size: common caliper error",
+     "mm": 0.198
+    }
+   ],
+   "corner_error_mm": 0.11561237140339585,
+   "centre_error_mm": 0.10501672634371824,
+   "rotation_error_deg": 0.0025699249723529663,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 0.5,
+    "register": 0.03,
+    "datums": 0.39,
+    "overlay": 0.17
+   },
+   "outcome_ok": true,
+   "trial": 39
+  },
+  {
+   "case": "nominal-01#t40",
+   "kind": "nominal",
+   "mode": "single_manual",
+   "expect": "accurate",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "prototype_guidance",
+   "error": null,
+   "note": "4 tags, 5 photos, k1 0.073, blur 0.76 px, plain",
+   "n_photos": 1,
+   "n_tags": 4,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "failed_gates": [],
+   "expanded_mm": 0.9898012264837948,
+   "budget_top": [
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.494
+    },
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.31
+    },
+    {
+     "name": "pixel noise (tag corners, datum edges)",
+     "mm": 0.233
+    }
+   ],
+   "corner_error_mm": 0.8304091463533495,
+   "centre_error_mm": 0.7790055053960947,
+   "rotation_error_deg": 0.01350587999530043,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 0.53,
+    "register": 0.03,
+    "datums": 0.35,
+    "overlay": 0.17
+   },
+   "outcome_ok": true,
+   "trial": 40
+  },
+  {
+   "case": "nominal-01#t1",
+   "kind": "nominal",
+   "mode": "multi_auto",
+   "expect": "accurate",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "research_preview",
+   "error": null,
+   "note": "4 tags, 5 photos, k1 0.073, blur 0.76 px, plain",
+   "n_photos": 5,
+   "n_tags": 4,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "ambiguous": true,
+   "failed_gates": [
+    "calibration_consistent",
+    "datum_side_unambiguous",
+    "uncertainty_vs_tolerance"
+   ],
+   "expanded_mm": 1.0215258283295632,
+   "budget_top": [
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.503
+    },
+    {
+     "name": "panel flatness (out-of-plane x viewing angle)",
+     "mm": 0.377
+    },
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.316
+    }
+   ],
+   "corner_error_mm": 1.011887574097736,
+   "centre_error_mm": 0.9132791752422189,
+   "rotation_error_deg": 0.016137930605533462,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 2.79,
+    "register": 0.77,
+    "datums": 16.68,
+    "overlay": 0.32
+   },
+   "outcome_ok": true,
+   "trial": 1
+  },
+  {
+   "case": "nominal-01#t2",
+   "kind": "nominal",
+   "mode": "multi_auto",
+   "expect": "accurate",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "research_preview",
+   "error": null,
+   "note": "4 tags, 5 photos, k1 0.073, blur 0.76 px, plain",
+   "n_photos": 5,
+   "n_tags": 4,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "ambiguous": true,
+   "failed_gates": [
+    "calibration_consistent",
+    "datum_side_unambiguous"
+   ],
+   "expanded_mm": 0.9286926324149156,
+   "budget_top": [
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.505
+    },
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.308
+    },
+    {
+     "name": "tag size: common caliper error",
+     "mm": 0.198
+    }
+   ],
+   "corner_error_mm": 0.5377436525143663,
+   "centre_error_mm": 0.4878246005599466,
+   "rotation_error_deg": 0.05011665118126704,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 2.53,
+    "register": 0.89,
+    "datums": 14.84,
+    "overlay": 0.32
+   },
+   "outcome_ok": true,
+   "trial": 2
+  },
+  {
+   "case": "nominal-01#t3",
+   "kind": "nominal",
+   "mode": "multi_auto",
+   "expect": "accurate",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "research_preview",
+   "error": null,
+   "note": "4 tags, 5 photos, k1 0.073, blur 0.76 px, plain",
+   "n_photos": 5,
+   "n_tags": 4,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "ambiguous": true,
+   "failed_gates": [
+    "datum_side_unambiguous"
+   ],
+   "expanded_mm": 0.9347804237350028,
+   "budget_top": [
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.504
+    },
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.309
+    },
+    {
+     "name": "tag size: common caliper error",
+     "mm": 0.198
+    }
+   ],
+   "corner_error_mm": 0.22511769704437826,
+   "centre_error_mm": 0.16539503854076346,
+   "rotation_error_deg": 0.004965441319634458,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 2.54,
+    "register": 0.77,
+    "datums": 14.33,
+    "overlay": 0.33
+   },
+   "outcome_ok": true,
+   "trial": 3
+  },
+  {
+   "case": "nominal-01#t4",
+   "kind": "nominal",
+   "mode": "multi_auto",
+   "expect": "accurate",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "research_preview",
+   "error": null,
+   "note": "4 tags, 5 photos, k1 0.073, blur 0.76 px, plain",
+   "n_photos": 5,
+   "n_tags": 4,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "ambiguous": true,
+   "failed_gates": [
+    "datum_side_unambiguous"
+   ],
+   "expanded_mm": 0.9272535764189788,
+   "budget_top": [
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.505
+    },
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.308
+    },
+    {
+     "name": "tag size: common caliper error",
+     "mm": 0.198
+    }
+   ],
+   "corner_error_mm": 0.30876248807483503,
+   "centre_error_mm": 0.26320159576315716,
+   "rotation_error_deg": 0.03784037129477916,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 2.46,
+    "register": 0.86,
+    "datums": 15.36,
+    "overlay": 0.39
+   },
+   "outcome_ok": true,
+   "trial": 4
+  },
+  {
+   "case": "nominal-01#t5",
+   "kind": "nominal",
+   "mode": "multi_auto",
+   "expect": "accurate",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "research_preview",
+   "error": null,
+   "note": "4 tags, 5 photos, k1 0.073, blur 0.76 px, plain",
+   "n_photos": 5,
+   "n_tags": 4,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "ambiguous": true,
+   "failed_gates": [
+    "datum_side_unambiguous"
+   ],
+   "expanded_mm": 0.9430489031721648,
+   "budget_top": [
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.505
+    },
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.31
+    },
+    {
+     "name": "panel flatness (out-of-plane x viewing angle)",
+     "mm": 0.2
+    }
+   ],
+   "corner_error_mm": 0.6821647276513091,
+   "centre_error_mm": 0.6106594221551614,
+   "rotation_error_deg": 0.013178653392539414,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 2.38,
+    "register": 0.82,
+    "datums": 13.67,
+    "overlay": 0.39
+   },
+   "outcome_ok": true,
+   "trial": 5
+  },
+  {
+   "case": "nominal-01#t6",
+   "kind": "nominal",
+   "mode": "multi_auto",
+   "expect": "accurate",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "research_preview",
+   "error": null,
+   "note": "4 tags, 5 photos, k1 0.073, blur 0.76 px, plain",
+   "n_photos": 5,
+   "n_tags": 4,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "ambiguous": true,
+   "failed_gates": [
+    "datum_side_unambiguous"
+   ],
+   "expanded_mm": 0.931132060657821,
+   "budget_top": [
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.505
+    },
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.31
+    },
+    {
+     "name": "tag size: common caliper error",
+     "mm": 0.198
+    }
+   ],
+   "corner_error_mm": 0.20089152505431293,
+   "centre_error_mm": 0.15561437985119767,
+   "rotation_error_deg": 0.013029234996012252,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 2.72,
+    "register": 0.87,
+    "datums": 16.88,
+    "overlay": 0.31
+   },
+   "outcome_ok": true,
+   "trial": 6
+  },
+  {
+   "case": "nominal-01#t7",
+   "kind": "nominal",
+   "mode": "multi_auto",
+   "expect": "accurate",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "prototype_guidance",
+   "error": null,
+   "note": "4 tags, 5 photos, k1 0.073, blur 0.76 px, plain",
+   "n_photos": 5,
+   "n_tags": 4,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "ambiguous": false,
+   "failed_gates": [],
+   "expanded_mm": 0.9279673524685288,
+   "budget_top": [
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.504
+    },
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.311
+    },
+    {
+     "name": "tag size: common caliper error",
+     "mm": 0.198
+    }
+   ],
+   "corner_error_mm": 0.33050819567305334,
+   "centre_error_mm": 0.29758722491051526,
+   "rotation_error_deg": 0.0321744198726253,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 2.45,
+    "register": 0.73,
+    "datums": 15.86,
+    "overlay": 0.33
+   },
+   "outcome_ok": true,
+   "trial": 7
+  },
+  {
+   "case": "nominal-01#t8",
+   "kind": "nominal",
+   "mode": "multi_auto",
+   "expect": "accurate",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "research_preview",
+   "error": null,
+   "note": "4 tags, 5 photos, k1 0.073, blur 0.76 px, plain",
+   "n_photos": 5,
+   "n_tags": 4,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "ambiguous": true,
+   "failed_gates": [
+    "datum_side_unambiguous"
+   ],
+   "expanded_mm": 0.9273743488931108,
+   "budget_top": [
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.506
+    },
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.308
+    },
+    {
+     "name": "tag size: common caliper error",
+     "mm": 0.198
+    }
+   ],
+   "corner_error_mm": 0.32612515504592754,
+   "centre_error_mm": 0.2896504884171691,
+   "rotation_error_deg": 0.003944468750375103,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 2.44,
+    "register": 0.79,
+    "datums": 15.15,
+    "overlay": 0.42
+   },
+   "outcome_ok": true,
+   "trial": 8
+  },
+  {
+   "case": "nominal-01#t9",
+   "kind": "nominal",
+   "mode": "multi_auto",
+   "expect": "accurate",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "research_preview",
+   "error": null,
+   "note": "4 tags, 5 photos, k1 0.073, blur 0.76 px, plain",
+   "n_photos": 5,
+   "n_tags": 4,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "ambiguous": true,
+   "failed_gates": [
+    "datum_side_unambiguous"
+   ],
+   "expanded_mm": 0.9618844785866959,
+   "budget_top": [
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.504
+    },
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.309
+    },
+    {
+     "name": "panel flatness (out-of-plane x viewing angle)",
+     "mm": 0.286
+    }
+   ],
+   "corner_error_mm": 0.6222287867763651,
+   "centre_error_mm": 0.5698809829057715,
+   "rotation_error_deg": 0.004742506497121914,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 2.4,
+    "register": 0.77,
+    "datums": 18.25,
+    "overlay": 0.4
+   },
+   "outcome_ok": true,
+   "trial": 9
+  },
+  {
+   "case": "nominal-01#t10",
+   "kind": "nominal",
+   "mode": "multi_auto",
+   "expect": "accurate",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "research_preview",
+   "error": null,
+   "note": "4 tags, 5 photos, k1 0.073, blur 0.76 px, plain",
+   "n_photos": 5,
+   "n_tags": 4,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "ambiguous": false,
+   "failed_gates": [
+    "calibration_consistent"
+   ],
+   "expanded_mm": 0.9463656181490884,
+   "budget_top": [
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.504
+    },
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.31
+    },
+    {
+     "name": "panel flatness (out-of-plane x viewing angle)",
+     "mm": 0.22
+    }
+   ],
+   "corner_error_mm": 0.732825033879243,
+   "centre_error_mm": 0.6826167854234635,
+   "rotation_error_deg": 0.03688843968316926,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 2.69,
+    "register": 0.83,
+    "datums": 14.89,
+    "overlay": 0.34
+   },
+   "outcome_ok": true,
+   "trial": 10
+  }
+ ],
+ "n_nominal": 12,
+ "n_negative": 17,
+ "meta": {
+  "when": "2026-11-25 19:59 UTC",
+  "application": "0.1.0",
+  "algorithm": "lumen-algo-2026.11.2",
+  "seed": 9131,
+  "size": "1600x1200",
+  "note": "First set of layouts (seed 9131). Six of them were run at a reduced size before the first report and led to two fixes; reading the fault cases of the first report (algorithm lumen-algo-2026.11.1) led to further fixes (see docs/BUILD_LOG.md). The second set in RESULTS_SECOND_SET.md never led to a change.",
+  "n_nominal": 12,
+  "n_negative": 17,
+  "machine": "x86_64, 4 logical CPUs, Python 3.12.3, OpenCV 4.14.0, load average 1.6 at start; run time 742 s"
+ }
+}

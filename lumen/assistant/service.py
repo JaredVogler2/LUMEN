@@ -88,7 +88,7 @@ def build_context(svc: "SessionService", sid: str, req: AssistantRequest) -> dic
             "prototype_guidance": "all computed gates pass; not physically validated; not acceptance",
             "validated": "inside an administrator-supplied validated domain; still not acceptance",
         }.get(str(rep.status), ""),
-        "gates": [{"code": g.code, "passed": g.passed, "severity": g.severity, "message": g.message, "suggestion": g.suggestion} for g in rep.gates],
+        "gates": [{"code": g.code, "passed": g.passed, "caveat": g.caveat, "severity": g.severity, "message": g.message, "suggestion": g.suggestion} for g in rep.gates],
         "reasons": list(rep.reasons),
         "uncertainty": None if rep.uncertainty is None else {
             "expanded_mm": round(rep.uncertainty.expanded_mm, 2), "k": rep.uncertainty.k,

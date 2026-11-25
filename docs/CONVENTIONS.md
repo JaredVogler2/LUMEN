@@ -74,6 +74,15 @@ A datum has an optional configured offset from the feature that is observed
 (along the positive axis), for cases where the datum is not the visible line
 itself.
 
+Which line of a feature is the datum:
+
+* an edge between two surfaces (the foot of the panel on the floor): the edge;
+* a seam, a joint or a scribed line up to 6 mm wide: its **centre line**,
+  whether a photo shows it as a thin line or resolves it into its two edges.
+  A record that means one edge of such a seam states the offset of half its
+  width;
+* anything wider: its two edges are two features, and the operator chooses.
+
 **Placard rectangle.** Width along local `+x` at rotation 0, height along
 `+z`. A positive rotation turns the width direction from `+x` toward `+z`
 (whether that looks clockwise in a photo depends on which side the side datum
@@ -105,6 +114,13 @@ interface shows it:
 | `research_preview` | Geometry can be computed but a qualifying check is not met. The outline is drawn dashed and labelled. |
 | `prototype_guidance` | Every computed check passed. Still research output: the checks are backed by synthetic tests only. |
 | `validated` | As above and inside a physically validated domain supplied by an administrator. None ships with LUMEN, so this status cannot occur. |
+
+Each check in a report has a `severity`: `blocking` (failing it gives
+`blocked`), `warning` (failing it gives `research_preview`) or `info`. A
+check with `caveat: true` passed but states something that was **not**
+checked, for example that the scale rests on the declared tag sizes alone or
+that a datum is on the face by the record's word only. Caveats do not change
+the status; the interface shows them with an "i" instead of a tick.
 
 ## Uncertainty
 

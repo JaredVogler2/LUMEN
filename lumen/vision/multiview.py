@@ -684,6 +684,27 @@ def solve_multiview(
         counts = {i: sum(1 for v in vs if any(t.tag_id == i for t in v.tags)) for i in ids}
         return sorted(ids, key=lambda i: (-counts[i], i))[0]
 
+    def still_bad_without(tag_id: int, vs_all: list[MVView], g_now: int) -> tuple[int, float] | None:
+        """How contradictory the capture remains when ``tag_id`` is left out: (bad observations, their chi-square sum)."""
+        vs = [MVView(v.frame_id, [t for t in v.tags if t.tag_id != tag_id], v.camera, v.raw, v.image_size) for v in vs_all]
+        vs = [v for v in vs if v.tags]
+        if len({t.tag_id for v in vs for t in v.tags}) < 2:
+            return None
+        g = pick_gauge(vs, None if g_now == tag_id else g_now)
+        try:
+            cams_t, tags_t, _alts, _unreachable, _lost = _initialise(vs, K, g)
+            if not cams_t:
+                return None
+            trial = _BA(vs, cams_t, tags_t, g, cam0, refine, use_raw=use_raw)
+            if trial.n_res < trial.n_params:
+                return None
+            trial, rr, _J, _w, _ = _optimise(trial, cfg)
+        except (GeometryError, np.linalg.LinAlgError, ValueError):
+            return None
+        chis = [float(np.mean(rr[8 * k : 8 * k + 8] ** 2)) for k in range(len(trial.obs))]
+        badc = [c for c in chis if c > cfg.max_obs_chi2]
+        return len(badc), float(sum(badc))
+
     gauge = pick_gauge(views, gauge)
     excluded_tags: dict[int, list[str]] = {}
     excluded_views: dict[str, list[str]] = {}
@@ -769,6 +790,18 @@ def solve_multiview(
             views = [v for v in views if v.tags]
         elif len(ba.tags) >= 3:
             worst = max(by_tag, key=lambda i: by_tag[i])
+            # The tag with the largest residuals is not always the one at fault: the adjustment spreads a
+            # contradiction over everything the photos show.  (Seen in a benchmark layout: three tags in five
+            # photos, one of them moved before the last two.  The largest share fell on a sound tag; with that
+            # one out, the remaining two contradicted each other one against one and the second sound tag went
+            # as well.)  So, as for the plane check, the question is asked the other way round: without which
+            # tag do the remaining ones agree?
+            trials = {i: still_bad_without(i, views, gauge) for i in sorted(ba.tags)}
+            trials = {i: t for i, t in trials.items() if t is not None}
+            if trials:
+                best = min(trials, key=lambda i: (trials[i][0], trials[i][1], -by_tag.get(i, 0.0), i))
+                if trials[best] < trials.get(worst, (10**9, float("inf"))):
+                    worst = best
             # Would a different size explain it?  Free the tag sizes and look
             # at this tag's own residuals again.
             reason = "moved_or_misread"

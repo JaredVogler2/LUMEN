@@ -31,6 +31,7 @@ published browser behaviour and the messages the app shows.
 | edge disturbed | something crosses the tag's border (a seam, a shadow edge, a finger) | move the tag or the obstruction |
 | "Tags contradict each other" | sizes or positions do not fit one plane | check each entered size against the right ID; all tags must be flat on the same face; do not move tags between photos |
 | "A registered tag appears to have moved" | a tag is somewhere else than in the registration photos | start the capture again |
+| "A tag was excluded" on the Datums screen, "A tag was left out of the measurement" in the list of checks | one tag contradicts all the others (it moved between photos, is not on the same plane, or its entered size is wrong) and was set aside; the result rests on the remaining tags and the reason is given beside the ID | look at that tag: re-stick it flat, correct its size, or capture again without touching the tags. With fewer tags the uncertainty is larger |
 | Two stickers with the same ID | the ID is ambiguous | remove one |
 
 ## Analysis and datums
@@ -42,7 +43,9 @@ published browser behaviour and the messages the app shows.
 | "Two different camera poses explain the tags almost equally well" | add a tag, or take the photo from closer or from more to the side |
 | "The views are too similar to verify coplanarity" | move further between photos (about a step) |
 | No floor line or side line is proposed | make sure the line is in at least one photo with the tags; draw it by hand with snap on |
+| "Only one straight line was found in the photos" (or "N straight lines were found … but no two of them fit together") | a floor line and a side line that meet at the record's angle are both needed, and one of them is too faint, hidden or outside the photos. From one line LUMEN cannot tell which. Retake with both clearly in view, or draw the lines by hand with snap on |
 | "A competing edge of similar strength nearby" | zoom in and draw the line on the edge the record names |
+| "Is this the right line?" on a datum (check: "A fixed edge about … mm in front of the panel face runs … the floor datum") | the line LUMEN found lies on the face, but a raised or recessed edge runs along it, as at the top of a kick strip or beside a moulding. The line may be the edge of that part and not the feature the record means, and LUMEN cannot know which. Look at the photo: if it is the right line, tap **Choose detected line** and select it yourself; if not, draw the datum on the right feature. Until then the result stays a preview |
 | A datum is marked "declared on the face (not verified)" with the note "the photos do not settle whether this line lies on the panel face" | nothing is wrong: all photos saw that line from similar heights (or similar sides), so they cannot show whether it is on the face to a millimetre, and the record's statement is used. To have it verified, add photos from clearly different heights for a horizontal line, or from further left and right for a vertical one |
 | A datum is marked "NOT on the face" | the photos show the whole feature clear of the panel face (a proud trim, an edge behind the face): choose a feature on the face |
 | "Left out because it did not fit the other photos of the same tag" | one tag was mis-measured in one photo (glare on an edge, something in front of it); that observation is ignored and the tag is kept. If it happens for several tags, retake the photo |
@@ -64,7 +67,14 @@ each with what to do. The usual ones:
 | datums not confirmed | review and confirm them |
 | uncertainty exceeds the share of the tolerance | move closer or use full-resolution photos (larger tags), put tags around the target, add photos; the list of budget terms shows which term dominates. Tags under about 52 px across cannot measure their own edge shift: the Capture screen warns ("The tags are small in the photos") |
 | target far from the tags | put a tag near the target |
+| tag observations still contradict the other photos | glare on a tag, or more than one tag was moved, or too few tags are left to tell which one is wrong: retake without glare and without touching the tags; with a third or fourth tag a faulty one can be identified and set aside |
+| "Is this the right line?" (a raised edge beside a datum) | see "Analysis and datums" above: choose the line yourself |
 | record incomplete or draft | the record has to be completed and released |
+
+Entries with an "i" in that list passed, but say what was not checked: for
+example that the scale rests on the entered tag sizes alone because no rule
+measurement was made, or that a datum is on the face by the record's word
+only. They do not lower the status; each says how to close the gap.
 
 ## Verification
 

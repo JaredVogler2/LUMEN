@@ -63,8 +63,13 @@ and exposure, and four kinds of in-camera processing, from a seeded generator
 The set was not untouched. Before the first full run, six of its layouts were
 run at a reduced size and exposed two faults in the multi-photo path, which
 were then fixed (`docs/BUILD_LOG.md`, "Held-out layouts find two faults").
-The report therefore also contains a second set from another seed that was
-not looked at before its run; compare the two.
+Reading the fault cases of the first full report later led to four more
+(same file, "First full benchmark: four faults behind 'handled'"). The report
+therefore also contains a second set from another seed (9132). No change was
+ever made because of a result of that set: it was run once before anything
+of it had been seen, and once more with the final algorithm version. Compare
+the two
+sets.
 
 ## 4. What the benchmark measures
 
@@ -74,6 +79,13 @@ Two modes on the same photos:
   with a few pixels of error and fitted to the edge;
 * **all photos, automatic datums:** every photo; datums found automatically
   and checked in 3-D.
+
+Four layouts of the first set are also run at 4032x3024, the size of a
+phone's full-resolution photo (`RESULTS_FULL_RES.md`). A feature can look
+different at another photo size. The first run at full resolution had every
+target 1.0 mm off and outside its stated uncertainty: the 2 mm side seam is
+seven pixels wide there, it was taken as two edges, and one of them became
+the datum (`docs/BUILD_LOG.md`). Nothing at 1600x1200 could have shown that.
 
 For each: the largest target corner error, the centre (translation) error and
 the rotation error against the renderer's truth; the status; the stated
@@ -86,22 +98,42 @@ Fault cases, each with what a correct system does:
 | Fault | Expected |
 |---|---|
 | no tag on the panel | refuse |
-| one tag moved between photos | exclude it or refuse |
-| one tag declared 2 mm too large | exclude it or refuse |
+| one tag moved between photos | set exactly that tag aside and measure with the rest, or refuse |
+| one tag declared 2 mm too large | set exactly that tag aside and measure with the rest, or refuse |
 | all tags declared 2 mm too large | cannot be seen from photos: recorded as a wrong result with a clean report |
 | the same, with one rule measurement between two tags | blocked |
 | correct sizes with a rule measurement (control) | guidance |
 | no measured sizes entered | no guidance |
 | a second identical seam beside the datum seam | no guidance without the operator's choice |
 | floor line in no photo | no guidance; the line is not invented |
-| side edge leaning 5 degrees | no guidance |
-| one tag on an 8 mm shim | exclude it or refuse |
+| side edge leaning 5 degrees | blocked, because the two datums do not meet at the record's angle |
+| one tag on an 8 mm shim | set exactly that tag aside and measure with the rest, or refuse |
 | side seam barely visible | accurate or refused |
-| proud trim hiding the floor line | no target relative to the hidden line |
+| proud trim hiding the floor line; the trim's upper edge is on the panel face | no guidance until the operator has chosen the line |
 | two stickers with the same ID | accurate or refused |
-| glossy tags under a strong flash | accurate or refused |
+| glossy tags under a strong flash | accurate or refused; contradictions that remain keep it a preview |
 | record declares a curved target surface | blocked |
 | record never released | preview only |
+
+A safe outcome is not the same as a right one. At the benchmark's photo size
+the stated uncertainty alone often makes a result a preview, and "blocked"
+can have a wrong cause. The first full report counted four cases as handled
+that were not right inside: a trim's upper edge taken for the floor line, a
+reference plane that still contained the tag that had been set aside, a
+moved tag that was kept while two sound ones were thrown out, and a floor
+line that was in every photo and was not found (`docs/BUILD_LOG.md`). The
+judging was tightened afterwards:
+
+* for seven cases (undeclared sizes, twin seams, leaning side edge, proud
+  trim, rule measurement, curved target, unreleased record) the case counts
+  as handled only when the check that belongs to the fault is among the
+  failed ones;
+* where the fault is about one tag, a drawn result counts only when that tag
+  was set aside, and the report shows whether exactly that tag was left out
+  (✓) or a sound one went with it or instead of it (✗).
+
+A refusal still counts as handled in every fault case: refusing is safe. The
+"set aside" column is there so that a refusal for the wrong reason is seen.
 
 Coverage trials repeat one layout with errors drawn from what the budget
 says it covers (tag sizes, lens profile, image noise, the operator's hand) and
@@ -109,10 +141,16 @@ count how often the stated uncertainty contains the error.
 
 ## 5. Results
 
-The numbers are in `docs/benchmark/RESULTS.md` (generated; do not edit) and
-`docs/benchmark/results.json` (every record). They are restated in
-`docs/BUILD_LOG.md` with the date of the run. Rerun the benchmark after any
-change that bumps `ALGORITHM_VERSION`.
+The numbers are in `docs/benchmark/` (generated; do not edit):
+
+| File | Content |
+|---|---|
+| `RESULTS.md`, `results.json` | first set (seed 9131): 12 layouts, the fault cases, coverage trials |
+| `RESULTS_SECOND_SET.md`, `results_second_set.json` | second set (seed 9132): 12 layouts |
+| `RESULTS_FULL_RES.md`, `results_full_res.json` | four layouts of the first set at 4032x3024 |
+
+They are restated in `docs/BUILD_LOG.md` with the date of the run. Rerun the
+benchmark after any change that bumps `ALGORITHM_VERSION`.
 
 How to read them:
 
@@ -124,6 +162,16 @@ How to read them:
   same way) is a property of the method, not a defect of one run: scale comes
   only from the declared sizes. The rule measurement that catches it is
   optional in the interface.
+* The largest errors of the nominal cases belong to the heaviest in-camera
+  processing (strong sharpening, contrast curve and JPEG 85 together). Tag
+  borders are corrected for the edge shift this causes; datum edges are not,
+  and the budget carries a bound for it.
+* "Handled" in the fault table is about the outcome. Read the "set aside" and
+  "failed checks" columns for whether the reason was the right one.
+* `RESULTS_FULL_RES.md` repeats four layouts at 4032x3024, the size of a
+  phone's full-resolution photo. Part of the stated uncertainty at 1600x1200
+  is pixel-related; the full-resolution run shows how much of it remains.
+  Four layouts with one seam width are a spot check, not a study.
 * Latency was measured on a shared four-core build machine.
 
 ## 6. What has not been tested at all

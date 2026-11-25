@@ -112,6 +112,25 @@ def test_moving_tag_is_detected_and_excluded(sweep):
     assert cam_err < 1.0 and tag_err < 0.3
 
 
+def test_the_tag_that_moved_is_found_also_when_it_is_the_reference_tag(sweep):
+    """The reference tag (seen in every photo, lowest ID) is the one that moves; tag 20 is not seen afterwards.
+
+    The solver has to give up its own reference, choose another one and keep the three sound tags.  (This
+    layout was also solved correctly when the tag to leave out was chosen by its residuals alone.  The layout
+    on which that rule kept the moved tag and threw out two sound ones is a benchmark fault case, where the
+    moved tag was not the reference; the test for it is
+    ``test_a_moved_and_a_raised_tag_are_set_aside_and_the_rest_still_measures``.)
+    """
+    scene, cams = sweep
+    moved = flat_panel_scene(tags=tuple(TagSticker(t, ((c[0] + 8.0, c[1] - 3.0) if t == 3 else c), r) for t, c, r in DEMO_TAGS))
+    hidden = tuple((i, 20) for i in (3, 4, 5))
+    sol = solve_multiview(make_views(scene, cams, swap={3: moved, 4: moved, 5: moved}, drop=hidden))
+    assert sol.excluded_tags == {3: ["moved_or_misread"]}, sol.excluded_tags
+    assert sorted(sol.tags) == [7, 11, 20] and sol.gauge_id != 3
+    cam_err, tag_err = errors(scene, cams, sol)
+    assert cam_err < 1.0 and tag_err < 0.3
+
+
 def test_one_disturbed_observation_is_left_out_and_the_tag_is_kept(sweep):
     """A tag that fits in five photos and not in the sixth has not moved: only that observation is dropped."""
     scene, cams = sweep

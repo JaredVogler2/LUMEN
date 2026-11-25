@@ -297,6 +297,7 @@ main#view.flush { padding: 0; gap: 0; overflow: hidden; }
 .gate:first-child { border-top: 0; }
 .gate svg { width: 20px; height: 20px; margin-top: 1px; }
 .gate.pass svg { color: var(--ok); }
+.gate.pass.caveat svg { color: var(--text-dim); }
 .gate.fail.blocking svg { color: var(--danger); }
 .gate.fail.warning svg { color: var(--warn); }
 .gate .fix { color: var(--text-dim); font-size: 13.5px; margin-top: 2px; }

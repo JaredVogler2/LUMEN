@@ -143,7 +143,7 @@ def test_height_of_a_line_is_found_when_the_photos_see_it_from_different_sides()
     # a vertical seam (along y) seen from the left and from the right: strong parallax across it
     cams = [(x, 300.0, 750.0) for x in (-300.0, -100.0, 150.0, 400.0, 650.0)]
     for true_h in (0.0, 8.0, -5.0):
-        h, shift, sig, _ = _classified([(0.0, 80.0, true_h), (0.0, 600.0, true_h)], cams, noise_px=0.0)
+        h, shift, sig, _, _ = _classified([(0.0, 80.0, true_h), (0.0, 600.0, true_h)], cams, noise_px=0.0)
         assert h == pytest.approx([true_h, true_h], abs=0.02)
         assert max(shift) < 0.25 and max(sig) < 0.05, "well resolved: a quarter-pixel common shift can fake only a fraction of a millimetre"
 
@@ -153,10 +153,10 @@ def test_a_common_edge_shift_fakes_a_height_when_all_photos_look_from_similar_he
     # and only a little in height above the line: this is the geometry of an ordinary sweep
     cams = [(x, 430.0 + dy, 760.0) for x, dy in ((-200.0, 40.0), (50.0, -50.0), (300.0, 10.0), (500.0, 60.0), (750.0, -40.0))]
     line = [(-100.0, 0.0, 0.0), (700.0, 0.0, 0.0)]
-    h0, shift, sig, _ = _classified(line, cams, noise_px=0.0)
+    h0, shift, sig, _, _ = _classified(line, cams, noise_px=0.0)
     assert h0 == pytest.approx([0.0, 0.0], abs=0.02), "exact image lines give the true height"
     # every image line a quarter of a pixel to one side: the same in all photos, as a tone curve or blur does it
-    h1, _, _, _ = _classified(line, cams, shift_px=0.25)
+    h1, _, _, _, _ = _classified(line, cams, shift_px=0.25)
     faked = max(abs(a) for a in h1)
     assert faked > 0.15, "the shift looks like a height (otherwise this geometry would not be a problem)"
     assert np.abs(h1) == pytest.approx(shift, abs=0.01), "the stated margin is exactly what such a shift fakes"
@@ -166,12 +166,73 @@ def test_a_common_edge_shift_fakes_a_height_when_all_photos_look_from_similar_he
     flat = [(x, 430.0 + dy, 760.0) for x, dy in ((-200.0, 12.0), (50.0, -15.0), (300.0, 3.0), (500.0, 15.0), (750.0, -10.0))]
     assert max(_classified(line, flat, noise_px=0.0)[2]) > 3 * max(sig)
     # the same photos resolve an 8 mm proud edge without doubt
-    h8, shift8, sig8, _ = _classified([(-100.0, 0.0, 8.0), (700.0, 0.0, 8.0)], cams, noise_px=0.0)
+    h8, shift8, sig8, _, _ = _classified([(-100.0, 0.0, 8.0), (700.0, 0.0, 8.0)], cams, noise_px=0.0)
     assert h8 == pytest.approx([8.0, 8.0], abs=0.05) and min(abs(a) - (b + 2 * c) for a, b, c in zip(h8, shift8, sig8)) > 1.0
 
 
 def test_no_height_is_claimed_when_the_photos_cannot_separate_it_from_a_sideways_offset():
     # all cameras on one line through the feature's direction of sight: the view planes are (almost) the same plane
     cams = [(300.0, 430.0, 760.0 + 0.01 * k) for k in range(4)]
-    h, shift, sig, _ = _classified([(-100.0, 0.0, 0.0), (700.0, 0.0, 0.0)], cams, noise_px=0.0)
+    h, shift, sig, _, _ = _classified([(-100.0, 0.0, 0.0), (700.0, 0.0, 0.0)], cams, noise_px=0.0)
     assert h is None or max(b + 2 * c for b, c in zip(shift, sig)) > 50.0
+
+
+# ---------------------------------------------------------------------------
+# a fixed edge at another depth beside a datum line (a trim, a moulding, a recess)
+# ---------------------------------------------------------------------------
+def _cand(cid, p0, p1, cls="on_plane", height=0.0, foot=(0.0, 0.0)):
+    from lumen.vision.datums import LineCandidate
+    from lumen.vision.edgefit import EdgeFit
+
+    ends = np.array([p0, p1], float)
+    d = (ends[1] - ends[0]) / np.linalg.norm(ends[1] - ends[0])
+    n = np.array([-d[1], d[0]])
+    c = LineCandidate(id=cid, frame_id="f0", kind="step", fit=EdgeFit(ok=True), line=Line2D(n, float(n @ ends[0])), endpoints=ends,
+                      length_mm=float(np.linalg.norm(ends[1] - ends[0])), contrast=0.3, sigma_blur_px=1.0, distinctness=5.0)
+    c.classification, c.height_mm, c.foot_offsets_mm = cls, height, foot
+    return c
+
+
+def test_a_trim_gives_itself_away_by_an_edge_at_another_depth():
+    from lumen.vision.datums import depth_neighbours, step_beside
+
+    tags = np.array([300.0, 300.0])
+    junction = _cand("c0", (0, 60), (600, 60))  # upper edge of a trim: on the panel face
+    # the trim's front corner, 8 mm proud.  The home photo shows it 4 mm lower; its foot is at the junction
+    corner = _cand("c1", (50, 56), (550, 56), cls="off_plane", height=8.0, foot=(4.0, 4.0))
+    nb = step_beside(junction, [junction, corner], tags)
+    assert nb is not None and nb["id"] == "c1" and nb["relation"] == "beside"
+    assert nb["gap_mm"] == pytest.approx(0.0, abs=1e-6) and nb["distance_mm"] == pytest.approx(8.0)
+    # the trim's front face ending at the floor: 8 mm proud, 60 mm further out than the junction
+    foot_edge = _cand("c2", (50, -5), (550, -5), cls="off_plane", height=8.0, foot=(5.0, 5.0))
+    nb = step_beside(junction, [junction, foot_edge], tags)
+    assert nb is not None and nb["relation"] == "beyond" and nb["gap_mm"] == pytest.approx(-60.0)
+    # the nearest one is reported when both are seen
+    assert step_beside(junction, [junction, foot_edge, corner], tags)["id"] == "c1"
+    assert [r["id"] for r in depth_neighbours(junction, [junction, foot_edge, corner], tags)] == ["c1", "c2"]
+
+
+def test_what_belongs_to_a_real_floor_line_is_not_taken_for_a_trim():
+    from lumen.vision.datums import step_beside
+
+    tags = np.array([300.0, 300.0])
+    floor = _cand("c0", (0, 0), (600, 0))  # the panel meets the floor here
+    # a joint in the floor 100 mm out from the panel: straight "above" the floor line as seen from the face
+    joint = _cand("c1", (0, -70), (600, -70), cls="off_plane", height=100.0, foot=(71.5, 71.5))
+    assert step_beside(floor, [floor, joint], tags) is None
+    # the same on a floor that falls away at 100 degrees to the panel (foot 17 mm beyond the line)
+    sloping = _cand("c2", (0, -90), (600, -90), cls="off_plane", height=98.5, foot=(72.6, 72.6))
+    assert step_beside(floor, [floor, sloping], tags) is None
+    # a raised part between the line and the tags does not put the line in doubt
+    handle = _cand("c3", (100, 150), (500, 150), cls="off_plane", height=12.0, foot=(0.0, 0.0))
+    assert step_beside(floor, [floor, handle], tags) is None
+    # an edge that is not parallel, or not beside the same stretch, is something else
+    crossing = _cand("c4", (0, -40), (600, 60), cls="off_plane", height=8.0, foot=(0.0, 0.0))
+    elsewhere = _cand("c5", (900, -3), (1500, -3), cls="off_plane", height=8.0, foot=(3.0, 3.0))
+    assert step_beside(floor, [floor, crossing, elsewhere], tags) is None
+    # a second line ON the face is a matter for the ambiguity check, not for this one
+    twin = _cand("c6", (0, -20), (600, -20))
+    assert step_beside(floor, [floor, twin], tags) is None
+    # ... but a joint in the floor only 12 mm from the panel is too close to tell from a step: ask
+    close = _cand("c7", (0, -8), (600, -8), cls="off_plane", height=12.0, foot=(8.0, 8.0))
+    assert step_beside(floor, [floor, close], tags)["relation"] == "beside"

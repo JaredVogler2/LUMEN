@@ -814,3 +814,243 @@ not true:
 
 The files and documents now say Python 3.12 or 3.13. Other versions of the
 libraries, and OpenCV 5, were not tried.
+
+## 2026-11-25 — First full benchmark: four faults behind "handled" (prompts 05, 06, 10, 13)
+
+`scripts/run_benchmark.py` was run in full for the first time (algorithm
+`lumen-algo-2026.11.1`, photos 1600x1200, rendered with the lattice sampling
+of the entry above): 12 layouts of set 9131 with 17 fault cases and coverage
+trials, and 12 layouts of set 9132, which had not been looked at.
+
+| First run | single photo, hand-drawn datums | all photos, automatic datums |
+|---|---|---|
+| set 9131: corner error, median / max | 0.21 / 0.89 mm | 0.13 / 0.42 mm |
+| set 9132: corner error, median / max | 0.15 / 0.38 mm | 0.10 / 0.61 mm |
+| error within the stated uncertainty | 24 of 24 | 24 of 24 |
+| wrong result shown as guidance | 0 | 0 |
+| fault cases "handled as expected" | — | 17 of 17 |
+
+The last line was not true in the sense that matters. The verdict column said
+"handled" because the outcome was safe (blocked, or a preview). The columns
+beside it, read case by case, showed four cases that were wrong inside:
+
+| Case | What the report showed | What had happened |
+|---|---|---|
+| proud trim | preview, error 61 mm, only `uncertainty_vs_tolerance` failed | The trim's front edge was measured 7.9 mm in front of the face (true 8.0) and rejected as a datum. The trim's upper edge, which does lie on the face, was then taken as the floor line without a word. It was a preview only because the uncertainty exceeded half the tolerance at this photo size; with larger tags it would have been shown as guidance, 61 mm from where the record's floor line puts the target. |
+| raised tag | blocked: "floor datum NOT on the target plane", "side datum NOT on the target plane", uncertainty 6.8 mm | The raised tag had been identified and left out of the planar solution, but the 3-D solution, its plane "through all tags", the flatness figures and the datum heights measured from that plane still contained it. The plane was tilted and 3 mm off; the datum lines appeared 8.4 and 3.6 mm behind it. Blocked for a reason that was false. |
+| moved tag | blocked, tags 41 and 317 set aside | The tag that had moved was tag 58. Three tags were in all five photos and a fourth in one. The solver chose the tag to leave out by the size of its residuals; the adjustment had spread the contradiction over all of them and the largest share fell on a sound tag. With that one out, the two that remained contradicted each other one against one, and the second sound tag went as well. The moved tag was kept, together with the tag seen in a single photo, which could not contradict it. |
+| leaning side edge | blocked: "Missing datum: floor", with the hint to tilt the phone down | The floor line was in all seven photos, 900 mm of it. The line finder had merged the foot of the panel with the edge of the floor beyond the panel's corner into one segment of 1490 px, about a quarter of it beyond the corner. The edge fit over the whole diverged, the thin-line fit did not hold piece by piece, and the floor line was not offered at all. The case never reached the question it is about (two datums that do not meet at the record's angle). |
+
+Why the benchmark had not caught them: its judge accepted "blocked or
+preview" for these faults, and at 1600x1200 almost every result is a preview
+anyway. The unit tests had not caught them either: on the test layout (all
+four tags in every photo, so that a moved tag is one against three; a floor
+line that ends inside the picture) every one of these paths gives the right
+answer.
+
+Changes:
+
+| Fault | Change |
+|---|---|
+| a line on the face that is the edge of a raised part | For every datum candidate the 3-D height is solved together with the place on the plane directly under it. A line that was applied automatically and has a fixed edge at another depth right beside it (within 30 mm in space), or further out with little depth against its distance (a face continuing past the line, as a trim's front does), carries the new check `datum_floor_no_step_beside` / `datum_side_no_step_beside`: the result stays a preview and the Datums screen asks "Is this the right line?". The operator's own choice of the line ("Choose detected line", or drawing it) settles it; the system cannot know which feature a record means. Features of a floor that meets the panel at the line have the opposite proportion (much depth, little distance) and do not raise it. |
+| plane after a tag was set aside | When the 3-D check names tags off the common plane, the capture is solved again without them (up to twice). Plane, flatness figures and datum heights now describe the tags that carry the result. If the rest still does not lie on one plane, the surface is "violated" and the result is blocked. |
+| which tag to leave out | As in the plane check, the question is asked the other way round: each tag is left out in turn and the one without which the rest agree is chosen (fewest remaining contradictions, then their size). Residual size only breaks ties. |
+| a segment that runs over two features | When neither model fits a merged segment, its middle half and its two halves are measured in turn; the line of a part that fits is laid over the whole segment and the stretch that follows it is kept and measured again. A feature found in another photo may be described by either model (edge or thin line) as long as it is the one used in the home photo. |
+| the judge | A fault with a check of its own must fail that check (seven cases). Where the fault is about one tag, a drawn result counts only when that tag was set aside, and the report shows whether exactly that tag was left out. A refusal still counts as handled. |
+
+Reading the remaining cases the same way gave two smaller findings:
+
+* Glossy tags under a flash: after two tags had been set aside, the solver
+  still flagged observations that contradict each other
+  (`inconsistent_observations`), and no check looked at that flag. New check
+  `photos_agree` (warning): the result stays a preview.
+* Faint seam, floor outside the photos: one line was found and its partner
+  was not, and the hint said "No floor line was found: tilt the phone down"
+  although the line that was missing could as well be the other one. The hint
+  now says what is known: one line, no second one that fits it.
+
+Two things the report did not say are now said in the list of checks, as
+entries that pass but carry an "i" instead of a tick (`caveat` in the API):
+
+* `scale_source`: no independent length was measured, so the scale rests on
+  the declared tag sizes alone. This is the one fault of the benchmark that
+  no check on the photos can see (all sizes wrong in the same way: 17.9 mm of
+  error with a clean report).
+* `tags_left_out`: which tags were set aside, why, and how many remain.
+
+The notes that already existed (coplanarity not established, a single
+observation left out, a datum on the face by the record's word only) are
+marked the same way. A caveat does not change the status.
+
+Also fixed: `RuntimeWarning: overflow encountered in exp` in the edge fit
+(a wild trial step of the solver; the value was clamped afterwards, the
+logarithm is clamped now). The result of the fit is unchanged.
+
+`ALGORITHM_VERSION` is now `lumen-algo-2026.11.2`.
+
+### After the changes
+
+Both sets and the fault cases again, with the final code (`lumen-algo-2026.11.2`,
+runs of 2026-11-25 19:47 and 19:59 UTC, photos 1600x1200, four shared cores;
+reports in `docs/benchmark/`). These are the runs after the change of the
+next entry as well; that change did not alter any figure here:
+
+| Final run | single photo, hand-drawn datums | all photos, automatic datums |
+|---|---|---|
+| set 9131, 12 layouts: guidance / preview | 3 / 9 | 2 / 10 |
+| set 9131: corner error, median / 95th / max | 0.21 / 0.70 / 0.89 mm | 0.13 / 0.37 / 0.42 mm |
+| set 9131: stated expanded uncertainty, median / max | 1.24 / 3.06 mm | 1.07 / 2.07 mm |
+| set 9132, 12 layouts: guidance / preview | 3 / 9 | 6 / 6 |
+| set 9132: corner error, median / 95th / max | 0.15 / 0.34 / 0.38 mm | 0.10 / 0.53 / 0.61 mm |
+| set 9132: stated expanded uncertainty, median / max | 1.22 / 2.10 mm | 1.07 / 1.61 mm |
+| rotation error, largest | 0.04° | 0.04° |
+| error within the stated uncertainty | 24 of 24 | 24 of 24 |
+| largest error ÷ stated uncertainty | 0.45 | 0.61 |
+| wrong result shown as guidance | 0 | 0 |
+| time per capture, median: tags / registration / datums / overlay | 0.6 / 0.0 / 0.4 / 0.2 s | 3.4 / 1.1 / 11.7 / 0.4 s |
+
+The nominal figures are the same as in the first run, to the last digit
+shown: none of the changes touches a sound capture. No nominal layout has a
+tag set aside, a raised edge beside a datum or an unresolved contradiction;
+one has a single observation left out.
+
+Why most results are previews at this photo size: the stated uncertainty
+exceeds half of the sample record's ±2 mm tolerance in 18 of 24 single-photo
+and 15 of 24 multi-photo results, and in 3 multi-photo results a second line
+of similar strength makes the side datum a question for the operator (in the
+layout that was looked at, the outer edge of the panel, which runs parallel
+to the seam 400 mm away). The
+largest term of the budget is the bound on residual edge shift in 24 of the
+48 results, the per-tag size measurement in 12 (0.05 mm on a 50 mm tag is
+0.1 % of every distance from the tags), pixel noise in 8 and the bound on
+panel flatness in 4.
+
+By in-camera processing, both sets together (corner error, median / max):
+
+| Processing of the photo | single photo | all photos |
+|---|---|---|
+| none | 0.16 / 0.22 mm | 0.08 / 0.37 mm |
+| sharpened 0.6 | 0.13 / 0.35 mm | 0.08 / 0.20 mm |
+| tone curve | 0.16 / 0.30 mm | 0.13 / 0.22 mm |
+| sharpened 0.9, contrast curve, JPEG 85 | 0.34 / 0.89 mm | 0.38 / 0.61 mm |
+
+The heaviest processing accounts for the largest errors in both modes. Tag
+borders are corrected for the edge shift it causes; datum edges are not, and
+the budget carries a bound for that.
+
+Fault cases after the changes (17 of 17 handled, none shown as guidance, no
+failure), with the reason beside the verdict:
+
+| Case | Outcome | Reason shown |
+|---|---|---|
+| moved tag | preview, error 0.09 mm (stated ±1.79) | tag 58, the one that moved, set aside; the other three measure |
+| one size wrong | preview, 0.11 mm (±1.11) | the mis-sized tag set aside |
+| raised tag | preview, 0.16 mm (±1.98) | the raised tag set aside; datums on the face of the other three |
+| leaning side edge | blocked | `local_frame_valid`: the datums do not meet at the record's angle |
+| proud trim | preview | `datum_floor_no_step_beside`; the outline is 61 mm from where the hidden floor line would put it, and the operator is asked which line is meant |
+| glossy tags, flash | preview, 0.64 mm (±2.21) | two tags set aside, and `photos_agree`: contradictions remain |
+| all sizes wrong | recorded only: 17.87 mm at a stated ±1.35 | nothing: no check on the photos can see it. A preview here only because of the uncertainty. `scale_source` now says so on every result without a rule measurement |
+| the same with one rule measurement | blocked | `independent_length_check` |
+| no tag; floor outside the photos; faint seam | refused or blocked | no scale; a datum is missing |
+| no measured sizes; twin seams; curved target; draft record | preview or blocked | the check that belongs to each |
+| duplicate ID; correct sizes with a rule | preview, 0.08 and 0.04 mm | only the uncertainty against the tolerance |
+
+Coverage trials (errors drawn from what the budget says it covers): the
+stated uncertainty contained the error in 39 of 40 single-photo trials
+(largest error ÷ stated uncertainty 1.13) and in 10 of 10 multi-photo trials
+(0.99).
+
+## 2026-11-25 — Full resolution: a seam measured at one of its edges (prompts 04, 06, 13)
+
+The benchmark had only ever been run at 1600x1200. Four layouts of the first
+set were then run at 4032x3024, the size of a phone's full-resolution photo,
+with scenes, camera positions and in-camera processing unchanged:
+
+| First run at 4032x3024 | single photo, hand-drawn datums | all photos, automatic datums |
+|---|---|---|
+| corner error, median / max | 1.04 / 1.18 mm | 1.03 / 1.07 mm |
+| stated expanded uncertainty, median | 0.70 mm | 0.65 mm |
+| error within the stated uncertainty | 0 of 4 | 0 of 4 |
+| rotation error, largest | 0.01° | 0.00° |
+
+Every target was displaced by one millimetre without rotation, in both
+modes: one cause for all. The side datum of these scenes is a seam 2 mm wide.
+At 1600x1200 (1.36 px/mm) it is 2.7 px wide and is fitted as a thin line, at
+its centre (measured offset 0.000 mm). At 4032x3024 (3.43 px/mm) it is 6.9 px
+wide. The snap looks for the strongest transition, which is one of the seam's
+two edges, and the edge model fits that edge without complaint. The datum was
+1.00 mm from the seam's centre: half its width. The floor line, an edge, was
+within 0.001 mm in the same photo.
+
+This is not a peculiarity of rendered photos. A joint a few millimetres wide
+is resolved by any 12-megapixel photo taken from arm's length; on a phone it
+would have been the normal case, and the error was outside the stated
+uncertainty.
+
+Change:
+
+* `fit_trench` in `lumen/vision/edgefit.py`: a box of half-width `h` blurred
+  by `sigma` on a base level, that is, two opposite edges with the same level
+  outside both. Accepted only when the edges are resolved (`h >= 1.2 sigma`);
+  a thinner line stays with the thin-line model.
+* When a snap has chosen an edge, it looks across that edge for a partner of
+  the opposite direction and comparable strength within 6 mm
+  (`max_line_width_mm`), with the same level outside both. If there is one,
+  the two are fitted together and the centre line is returned as the line;
+  the single edge stays available. An edge between two different surfaces has
+  different levels on its two sides and stays an edge.
+* Used in the automatic search, in finding a line again in the other photos
+  and in the manual snap. The datum card says "a line about 2.0 mm wide,
+  resolved into its two edges: the datum is its centre line".
+* `docs/CONVENTIONS.md` now states which line of a feature is the datum.
+
+After the change, the same photos (run of 2026-11-25 20:19 UTC,
+`docs/benchmark/RESULTS_FULL_RES.md`):
+
+| After the change, 4032x3024 | single photo, hand-drawn datums | all photos, automatic datums |
+|---|---|---|
+| guidance / preview | 4 / 0 | 2 / 2 |
+| corner error, median / max | 0.03 / 0.14 mm | 0.02 / 0.12 mm |
+| stated expanded uncertainty, median / max | 0.70 / 0.90 mm | 0.65 / 0.68 mm |
+| error within the stated uncertainty | 4 of 4 | 4 of 4 |
+| largest error ÷ stated uncertainty | 0.15 | 0.18 |
+| time, median: tags / registration / datums / overlay | 1.3 / 0.1 / 2.4 / 0.2 s | 7.1 / 1.3 / 91 / 0.4 s |
+
+The two multi-photo previews are the two layouts in which the outer edge of
+the panel competes with the seam for the side datum; they are previews at
+1600x1200 for the same reason. At this photo size the largest term of the
+budget is the caliper uncertainty of the tag sizes in seven of the eight
+results.
+
+At 1600x1200 nothing changed: both sets and the fault cases were run again
+after this change, and every figure of the entry above is the same.
+
+What this is and is not. Four layouts, one seam width (2 mm, 6.9 px). Other
+widths were tried as synthetic profiles only: lines 1 to 19 px wide at three
+blurs, snapped from either edge, come out within 0.1 px of their centre
+(`tests/unit/test_edgefit.py`); 4 to 5 px wide in a sharp photo is the worst
+place, up to 0.08 px. Finding the datums automatically took 74 to 103 s per
+capture at this size. And the fault itself says something about the
+benchmark: one photo size had been taken for the method.
+
+## 2026-11-25 — Deployment manifest; tests on the final code (prompts 14, 15)
+
+`scripts/write_manifest.sh` as it stood after the last change did not run:
+one of its exclusion patterns contained `**` twice, which the publishing tool
+rejects. The sentence in the deployment guide about a manifest of 94 files
+came from a run before those patterns were added. The script is corrected and
+`manifest.json` (Python 3.12.3, pip 24.0, 102 files: `app.py`,
+`requirements.txt` and the `lumen` package) is now in the repository; a test
+fails when it no longer matches the deployed files. Publishing from it:
+NOT RUN.
+
+Tests on the final code:
+
+| Suite | Result |
+|---|---|
+| unit and integration (`tests/unit`, `tests/integration`), 500 tests | 499 pass; 1 skipped, the opt-in call to a real language-model endpoint. In the complete run (13.9 min) 498 passed and the manifest test failed, as it should: the manifest had been written before the last change to the code. With the manifest written again, the ten deployment tests pass. |
+| browser (`tests/browser`: Chromium, phone-sized window, fake camera), 37 tests | 37 pass (7.9 min) |
+| Python 3.13.18 in a clean environment, 14 test files (gates, datums, edge fits, multi-view, geometry, units, library, planar solver, tags, local frame; datum, multi-view, deployment and library flows) | 249 pass |
+
+The code under test did not change between the start of these runs and the
+commit (checked by a hash of the difference to the last commit).

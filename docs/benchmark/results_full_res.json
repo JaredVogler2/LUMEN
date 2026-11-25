@@ -1,0 +1,499 @@
+{
+ "records": [
+  {
+   "case": "nominal-01",
+   "kind": "nominal",
+   "mode": "single_manual",
+   "expect": "accurate",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "prototype_guidance",
+   "error": null,
+   "note": "4 tags, 5 photos, k1 0.073, blur 0.76 px, plain",
+   "n_photos": 1,
+   "n_tags": 4,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "failed_gates": [],
+   "expanded_mm": 0.6845212160969586,
+   "budget_top": [
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.293
+    },
+    {
+     "name": "tag size: common caliper error",
+     "mm": 0.198
+    },
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.195
+    }
+   ],
+   "corner_error_mm": 0.011359771560391356,
+   "centre_error_mm": 0.008735423201817657,
+   "rotation_error_deg": 0.0019987578248477217,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 1.04,
+    "register": 0.03,
+    "datums": 3.11,
+    "overlay": 0.23
+   },
+   "outcome_ok": true
+  },
+  {
+   "case": "nominal-01",
+   "kind": "nominal",
+   "mode": "multi_auto",
+   "expect": "accurate",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "research_preview",
+   "error": null,
+   "note": "4 tags, 5 photos, k1 0.073, blur 0.76 px, plain",
+   "n_photos": 5,
+   "n_tags": 4,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "ambiguous": true,
+   "failed_gates": [
+    "datum_side_unambiguous"
+   ],
+   "expanded_mm": 0.6828963742657647,
+   "budget_top": [
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.291
+    },
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.199
+    },
+    {
+     "name": "tag size: common caliper error",
+     "mm": 0.198
+    }
+   ],
+   "corner_error_mm": 0.004585187572311196,
+   "centre_error_mm": 0.0035232436279182024,
+   "rotation_error_deg": 0.00020353680820624635,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 5.49,
+    "register": 0.79,
+    "datums": 101.86,
+    "overlay": 0.31
+   },
+   "outcome_ok": true
+  },
+  {
+   "case": "nominal-02",
+   "kind": "nominal",
+   "mode": "single_manual",
+   "expect": "accurate",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "prototype_guidance",
+   "error": null,
+   "note": "5 tags, 5 photos, k1 0.063, blur 0.83 px, sharpened 0.6",
+   "n_photos": 1,
+   "n_tags": 5,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "failed_gates": [],
+   "expanded_mm": 0.6269780945525947,
+   "budget_top": [
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.253
+    },
+    {
+     "name": "tag size: common caliper error",
+     "mm": 0.198
+    },
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.173
+    }
+   ],
+   "corner_error_mm": 0.041144063644977386,
+   "centre_error_mm": 0.03522985189628018,
+   "rotation_error_deg": 0.0037962893480841036,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 1.3,
+    "register": 0.05,
+    "datums": 1.78,
+    "overlay": 0.25
+   },
+   "outcome_ok": true
+  },
+  {
+   "case": "nominal-02",
+   "kind": "nominal",
+   "mode": "multi_auto",
+   "expect": "accurate",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "research_preview",
+   "error": null,
+   "note": "5 tags, 5 photos, k1 0.063, blur 0.83 px, sharpened 0.6",
+   "n_photos": 5,
+   "n_tags": 5,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "ambiguous": true,
+   "failed_gates": [
+    "datum_side_unambiguous"
+   ],
+   "expanded_mm": 0.6219490898386772,
+   "budget_top": [
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.254
+    },
+    {
+     "name": "tag size: common caliper error",
+     "mm": 0.198
+    },
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.174
+    }
+   ],
+   "corner_error_mm": 0.015640602986750733,
+   "centre_error_mm": 0.015034618916711682,
+   "rotation_error_deg": 0.00011373488961539293,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 6.98,
+    "register": 1.02,
+    "datums": 80.8,
+    "overlay": 0.48
+   },
+   "outcome_ok": true
+  },
+  {
+   "case": "nominal-03",
+   "kind": "nominal",
+   "mode": "single_manual",
+   "expect": "accurate",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "prototype_guidance",
+   "error": null,
+   "note": "5 tags, 7 photos, k1 0.016, blur 0.75 px, tone curve",
+   "n_photos": 1,
+   "n_tags": 5,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "failed_gates": [],
+   "expanded_mm": 0.7205691568634932,
+   "budget_top": [
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.286
+    },
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.22
+    },
+    {
+     "name": "tag size: common caliper error",
+     "mm": 0.198
+    }
+   ],
+   "corner_error_mm": 0.026453050730180595,
+   "centre_error_mm": 0.010701444769970994,
+   "rotation_error_deg": 0.005921790446413538,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 1.37,
+    "register": 0.05,
+    "datums": 1.18,
+    "overlay": 0.2
+   },
+   "outcome_ok": true
+  },
+  {
+   "case": "nominal-03",
+   "kind": "nominal",
+   "mode": "multi_auto",
+   "expect": "accurate",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "prototype_guidance",
+   "error": null,
+   "note": "5 tags, 7 photos, k1 0.016, blur 0.75 px, tone curve",
+   "n_photos": 7,
+   "n_tags": 5,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "ambiguous": false,
+   "failed_gates": [],
+   "expanded_mm": 0.670409293191879,
+   "budget_top": [
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.272
+    },
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.219
+    },
+    {
+     "name": "tag size: common caliper error",
+     "mm": 0.198
+    }
+   ],
+   "corner_error_mm": 0.030867346852778716,
+   "centre_error_mm": 0.027734819994330806,
+   "rotation_error_deg": 0.0008938672637213591,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 8.91,
+    "register": 3.57,
+    "datums": 102.62,
+    "overlay": 0.48
+   },
+   "outcome_ok": true
+  },
+  {
+   "case": "nominal-04",
+   "kind": "nominal",
+   "mode": "single_manual",
+   "expect": "accurate",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "prototype_guidance",
+   "error": null,
+   "note": "5 tags, 5 photos, k1 0.007, blur 0.89 px, sharpened 0.9 + contrast, JPEG 85",
+   "n_photos": 1,
+   "n_tags": 5,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "failed_gates": [],
+   "expanded_mm": 0.8978026847679342,
+   "budget_top": [
+    {
+     "name": "pixel noise (tag corners, datum edges)",
+     "mm": 0.352
+    },
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.215
+    },
+    {
+     "name": "tag size: common caliper error",
+     "mm": 0.198
+    }
+   ],
+   "corner_error_mm": 0.1366074135457384,
+   "centre_error_mm": 0.11469210163155776,
+   "rotation_error_deg": 0.0038035737590872854,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 1.39,
+    "register": 0.05,
+    "datums": 4.25,
+    "overlay": 0.24
+   },
+   "outcome_ok": true
+  },
+  {
+   "case": "nominal-04",
+   "kind": "nominal",
+   "mode": "multi_auto",
+   "expect": "accurate",
+   "must_fail": [],
+   "faulty_tags": [],
+   "status": "prototype_guidance",
+   "error": null,
+   "note": "5 tags, 5 photos, k1 0.007, blur 0.89 px, sharpened 0.9 + contrast, JPEG 85",
+   "n_photos": 5,
+   "n_tags": 5,
+   "excluded_tags": [],
+   "datums_found": [
+    "floor",
+    "side"
+   ],
+   "ambiguous": false,
+   "failed_gates": [],
+   "expanded_mm": 0.6333117985395471,
+   "budget_top": [
+    {
+     "name": "tag size: per-tag measurement",
+     "mm": 0.219
+    },
+    {
+     "name": "tag size: common caliper error",
+     "mm": 0.198
+    },
+    {
+     "name": "edge localisation bias (tone curve / sharpening)",
+     "mm": 0.18
+    }
+   ],
+   "corner_error_mm": 0.1162404888164043,
+   "centre_error_mm": 0.11114815563978575,
+   "rotation_error_deg": 0.00210753445418554,
+   "covered": true,
+   "false_acceptance": false,
+   "seconds": {
+    "detect": 7.31,
+    "register": 1.64,
+    "datums": 74.2,
+    "overlay": 0.4
+   },
+   "outcome_ok": true
+  }
+ ],
+ "summary": {
+  "multi_auto": {
+   "cases": 4,
+   "status": {
+    "prototype_guidance": 2,
+    "research_preview": 2
+   },
+   "corner_error_mm": {
+    "n": 4,
+    "median": 0.023253974919764726,
+    "p95": 0.10343451752186042,
+    "max": 0.1162404888164043
+   },
+   "centre_error_mm": {
+    "n": 4,
+    "median": 0.021384719455521242,
+    "p95": 0.09863615529296749,
+    "max": 0.11114815563978575
+   },
+   "rotation_error_deg": {
+    "n": 4,
+    "median": 0.0005487020359638028,
+    "p95": 0.0019254843756159126,
+    "max": 0.00210753445418554
+   },
+   "expanded_mm": {
+    "n": 4,
+    "median": 0.6518605458657131,
+    "p95": 0.6810233121046818,
+    "max": 0.6828963742657647
+   },
+   "coverage": {
+    "covered": 4,
+    "of": 4
+   },
+   "error_over_expanded": {
+    "n": 4,
+    "median": 0.03559513125788118,
+    "p95": 0.16291865764430347,
+    "max": 0.1835438548349509
+   },
+   "false_acceptance": 0,
+   "failures": 0,
+   "seconds": {
+    "detect": 7.145,
+    "register": 1.33,
+    "datums": 91.33,
+    "overlay": 0.44
+   }
+  },
+  "single_manual": {
+   "cases": 4,
+   "status": {
+    "prototype_guidance": 4
+   },
+   "corner_error_mm": {
+    "n": 4,
+    "median": 0.03379855718757899,
+    "p95": 0.12228791106062423,
+    "max": 0.1366074135457384
+   },
+   "centre_error_mm": {
+    "n": 4,
+    "median": 0.022965648333125588,
+    "p95": 0.10277276417126609,
+    "max": 0.11469210163155776
+   },
+   "rotation_error_deg": {
+    "n": 4,
+    "median": 0.0037999315535856945,
+    "p95": 0.005604057943314599,
+    "max": 0.005921790446413538
+   },
+   "expanded_mm": {
+    "n": 4,
+    "median": 0.7025451864802259,
+    "p95": 0.871217655582268,
+    "max": 0.8978026847679342
+   },
+   "coverage": {
+    "covered": 4,
+    "of": 4
+   },
+   "error_over_expanded": {
+    "n": 4,
+    "median": 0.05116706846514468,
+    "p95": 0.13917729778209237,
+    "max": 0.15215750171325113
+   },
+   "false_acceptance": 0,
+   "failures": 0,
+   "seconds": {
+    "detect": 1.335,
+    "register": 0.05,
+    "datums": 2.445,
+    "overlay": 0.235
+   }
+  },
+  "negative": {
+   "cases": 0,
+   "handled_correctly": 0,
+   "false_acceptance": 0,
+   "failures": 0
+  }
+ },
+ "coverage": [],
+ "n_nominal": 4,
+ "n_negative": 0,
+ "meta": {
+  "when": "2026-11-25 20:19 UTC",
+  "application": "0.1.0",
+  "algorithm": "lumen-algo-2026.11.2",
+  "seed": 9131,
+  "size": "4032x3024",
+  "note": "Four layouts of the first set (seed 9131) at 4032x3024, the size of a phone's full-resolution photo. Scenes, camera positions and in-camera processing are those of RESULTS.md; only the pixel count differs. The first run at this size had every result 1.0 mm off: the side seam, resolved into two edges, was measured at one of them. This is the run after that was corrected (docs/BUILD_LOG.md).",
+  "n_nominal": 4,
+  "n_negative": 0,
+  "machine": "x86_64, 4 logical CPUs, Python 3.12.3, OpenCV 4.14.0, load average 1.7 at start; run time 413 s"
+ }
+}

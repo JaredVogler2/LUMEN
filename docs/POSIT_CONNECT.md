@@ -75,16 +75,22 @@ later, according to the tool's help text).
 
 ### 3b. From a manifest (git-backed content)
 
+`manifest.json` is in the repository: content type `python-fastapi`, entry
+point `app:app`, Python 3.12.3, pip 24.0, `requirements.txt`, and the 102
+deployed files (`app.py`, `requirements.txt` and the `lumen` package) with
+their checksums. Tests, documents, scripts and prompts are not in it.
+Git-backed publishing deploys what this file lists, so it has to be written
+again after any change to a deployed file:
+
 ```bash
 scripts/write_manifest.sh /path/to/python3.12
 ```
 
-This writes `manifest.json` (content type `python-fastapi`, entry point
-`app:app`, the Python version of the interpreter given, every deployed file
-with a checksum). It was run on a copy of this repository and produced a valid
-manifest of 94 files with the test and documentation folders excluded. The
-manifest must be regenerated whenever a deployed file changes. Publishing from
-it: **NOT RUN**.
+Give it an interpreter that has pip and whose version matches a Python on the
+Connect server (a virtual environment made by `uv` has no pip, and the
+manifest would carry an empty pip version). `tests/integration/test_deployment.py`
+fails when the committed manifest no longer matches the files. Publishing
+from the manifest: **NOT RUN**.
 
 ## 4. Settings to make in Connect
 
