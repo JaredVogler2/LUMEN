@@ -141,3 +141,31 @@ def test_accessibility_basics(page):
             const st = getComputedStyle(document.body); const a = lum(st.color), b = lum(st.backgroundColor); return (Math.max(a,b)+0.05)/(Math.min(a,b)+0.05); }"""
     )
     assert ratio >= 7.0
+
+
+def test_ruler_measurement_on_the_rectified_screen_blocks_a_wrong_scale(page):
+    """Independent scale check from the interface: a contradicting ruler reading removes the target."""
+    load_demo_to_place(page)
+    page.click('[data-step="rectified"]')
+    page.wait_for_selector('[data-region="scale-check"] [data-action="ref-check"]', timeout=60_000)
+    page.click('[data-action="ref-show"]')
+    page.wait_for_function("() => window.__lumenViewer.overlay.primitives.filter((p) => p.kind === 'handle').length === 2", timeout=30_000)
+    shot(page, "rectified_scale_check")
+    sug = page.evaluate("async () => { const s = (await import('./static/js/store.js')).state.session; return (await (await fetch(`api/sessions/${s.id}/reference`)).json()).suggestion; }")
+    a, b = sug["points_plane"]
+    d = ((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2) ** 0.5
+    # a ruler reading 3 % shorter than what the tags imply
+    page.fill('input[aria-label="Measured distance in millimetres"]', f"{d * 0.97:.1f}")
+    page.click('[data-action="ref-check"]')
+    page.wait_for_selector('[data-region="scale-check"] .banner.danger', timeout=30_000)
+    assert "contradiction" in page.inner_text('[data-region="scale-check"]').lower()
+    page.wait_for_selector('.status-hero[data-status="blocked"]', timeout=30_000)
+    assert not page.evaluate("() => window.__lumenViewer.overlay.primitives.some((p) => p.kind.startsWith('target'))")
+    # removing the wrong reading and entering the right one restores guidance
+    page.click('[data-action="ref-remove"]')
+    page.wait_for_selector('[data-action="ref-check"]', timeout=30_000)
+    page.fill('input[aria-label="Measured distance in millimetres"]', f"{d + 0.3:.1f}")
+    page.click('[data-action="ref-check"]')
+    page.wait_for_selector('[data-region="scale-check"] .banner.ok', timeout=30_000)
+    page.wait_for_selector('.status-hero[data-status="prototype_guidance"]', timeout=30_000)
+    assert not page._lumen_errors

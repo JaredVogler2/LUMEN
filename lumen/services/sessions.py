@@ -145,6 +145,10 @@ class SessionService:
             # verification results were measured against the old registration
             s.verifications = []
             s.research.pop("verification_detail", None)
+            # ruler measurements are kept; they are compared again at the next registration
+            from .reference import reevaluate_all
+
+            reevaluate_all(s, None)
         if datums:
             s.datums = {}
             s.local_frame = None
@@ -171,6 +175,7 @@ class SessionService:
         return s
 
     def get(self, sid: str) -> Session:
+        self._housekeeping()  # expired sessions (and their photos) go even when nobody starts a new one
         return self._load(sid)
 
     def delete(self, sid: str) -> bool:
@@ -373,6 +378,24 @@ class SessionService:
         from .capture import capture_advice
 
         return capture_advice(self, self._load(sid))
+
+    # ------------------------------------------------- independent scale check
+    def reference_suggestion(self, sid: str) -> dict[str, Any] | None:
+        from .reference import suggest_pair
+
+        s = self._load(sid)
+        sol, _ = self._require_registration(s)
+        return suggest_pair(sol)
+
+    def add_reference_distance(self, sid: str, a: dict[str, Any], b: dict[str, Any], measured_mm: float, u_mm: float = 0.5, instrument: str = "") -> dict[str, Any]:
+        from .reference import add_reference
+
+        return add_reference(self, sid, a, b, measured_mm, u_mm, instrument)
+
+    def remove_reference_distance(self, sid: str, rid: str) -> Session:
+        from .reference import remove_reference
+
+        return remove_reference(self, sid, rid)
 
     # ----------------------------------------------------------- verification
     def verify(self, sid: str, frame_id: str, *, placard_id: str | None = None, manual_corners_px: list[list[float]] | None = None, snap: bool = True) -> dict[str, Any]:
@@ -584,8 +607,11 @@ class SessionService:
         summary["px_per_mm"] = px_per_mm
 
         def fn(s2: Session) -> None:
+            from .reference import reevaluate_all
+
             s2.registration = summary
             s2.surface = surface
+            reevaluate_all(s2, sol)  # the operator's ruler measurements are kept and checked against the new layout
             # datums measured in frames that are no longer registered are dropped
             for k in [k for k, d in s2.datums.items() if d.frame_id not in sol.views]:
                 del s2.datums[k]
@@ -1271,6 +1297,9 @@ class SessionService:
                 inp.frame_flags = vflags
                 inp.pose_ambiguous = "pose_ambiguous" in vflags
 
+        from .reference import summary as _ref_summary
+
+        inp.reference_consistent, inp.reference_message = _ref_summary(s) if sol is not None else (None, "")
         inp.datums_present = ("floor" in s.datums, "side" in s.datums)
         inp.datums_confirmed = (bool(s.datums.get("floor") and s.datums["floor"].confirmed), bool(s.datums.get("side") and s.datums["side"].confirmed))
         inp.datum_distinctness = (
@@ -1399,6 +1428,7 @@ class SessionService:
         rect_max_edge: int = 1600,
         with_uncertainty: bool = True,
         candidates: bool = False,
+        references: bool = False,
     ) -> dict[str, Any]:
         s = self._load(sid)
         sol, _ = self._require_registration(s)
@@ -1411,7 +1441,7 @@ class SessionService:
                 "report": self._gate_report(s, f.id, None, False).model_dump(mode="json"),
                 "error": exc.to_dict(), "notice": RESEARCH_NOTICE,
             }
-        return self._overlay_for(s, sol, f, H, view=view, placard_ids=placard_ids, rect_max_edge=rect_max_edge, with_uncertainty=with_uncertainty, candidates=candidates)
+        return self._overlay_for(s, sol, f, H, view=view, placard_ids=placard_ids, rect_max_edge=rect_max_edge, with_uncertainty=with_uncertainty, candidates=candidates, references=references)
 
     def _overlay_for(
         self,
@@ -1427,6 +1457,7 @@ class SessionService:
         ext: tuple[Frame, ViewLocalization, PlanarView] | None = None,
         candidates: bool = False,
         unc_override: Any | None = None,
+        references: bool = False,
     ) -> dict[str, Any]:
         cam = self._camera(s, f) if ext is None else ext[2].camera
         lf = self._local_frame(s)
@@ -1492,6 +1523,22 @@ class SessionService:
             mapper=mapper, view_w=vw, view_h=vh, px_per_mm=scale, visible_plane_pts=visible,
             frame=lf, floor=floor, side=side, targets=targets, tags=tags, labels=names,
         )
+        if references:
+            from .reference import suggest_pair
+
+            pairs = [(r["a"], r["b"], r.get("consistent"), f"{r['measured_mm']:.1f} mm measured") for r in s.reference_distances if r.get("evaluable")]
+            sug = suggest_pair(sol)
+            if sug and not pairs:
+                pairs = [(sug["a"], sug["b"], None, "measure between these two corners")]
+            for a, b, okk, label in pairs:
+                if a["tag_id"] in sol.layout.poses and b["tag_id"] in sol.layout.poses:
+                    P = np.array([sol.layout.corners(a["tag_id"])[a["corner"]], sol.layout.corners(b["tag_id"])[b["corner"]]])
+                    uv, good = mapper(P)
+                    if good.all():
+                        col = "#ffffff" if okk is None else ("#3ddc97" if okk else "#ff5d5d")
+                        ov["primitives"].append({"kind": "segment", "points": uv.tolist(), "color": col, "width": 2.5, "dash": [8, 6]})
+                        ov["primitives"].append({"kind": "handle", "points": [uv[0].tolist()], "color": col, "label": f"ID {a['tag_id']}"})
+                        ov["primitives"].append({"kind": "handle", "points": [uv[1].tolist()], "color": col, "label": f"ID {b['tag_id']} · {label}"})
         if s.verifications and ext is None:
             from .verification import verification_primitives
 

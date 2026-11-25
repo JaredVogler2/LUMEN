@@ -8,7 +8,8 @@ Single-origin design for Posit Connect (docs/POSIT_CONNECT.md):
 * when the external base URL is known (Connect's ``RStudio-Connect-App-Base-URL``
   header, ``X-Forwarded-Prefix``, ``LUMEN_BASE_PATH`` or the ASGI ``root_path``)
   it is written into ``<base href>``; otherwise a tiny nonce-protected inline
-  script repairs a missing trailing slash;
+  script repairs a missing trailing slash and only then adds the stylesheet
+  and the application script, so nothing is ever requested from a wrong path;
 * all assets are bundled in ``lumen/static`` — no CDN, no telemetry;
 * API responses are never cached; static assets carry a version query.
 """
@@ -135,12 +136,30 @@ def create_app(settings: Settings | None = None, service: SessionService | None 
     def render_index(request: Request) -> HTMLResponse:
         nonce = secrets.token_urlsafe(16)
         base = external_base(request, settings)
-        base_tag = f'<base href="{_attr(base)}">' if base else ""
-        fix = (
-            f'<script nonce="{nonce}">(function(){{var p=location.pathname;'
-            "if(!document.querySelector('base')&&!/\\/$/.test(p)&&!/\\.html?$/.test(p)){"
-            "var b=document.createElement('base');b.href=p+'/';document.head.appendChild(b);}})();</script>"
-        )
+        html = index_template
+        if base:
+            # the proxy told us where we live: plain tags, resolved against <base>
+            head = f'<base href="{_attr(base)}">'
+        else:
+            # Unknown base.  If the address lacks its trailing slash, relative
+            # links would resolve one level too high, and the browser fetches
+            # <link>/<script> tags before any script could correct that.  So the
+            # asset tags are left out of the markup and added by this script
+            # once the base is right.
+            a = html.find("<!--LUMEN_ASSETS-->")
+            b = html.find("<!--/LUMEN_ASSETS-->")
+            if a != -1 and b != -1:
+                html = html[:a] + html[b + len("<!--/LUMEN_ASSETS-->"):]
+            v = __version__
+            head = (
+                f'<script nonce="{nonce}">(function(){{var d=document,p=location.pathname;'
+                "if(!/\\/$/.test(p)&&!/\\.html?$/.test(p)){var b=d.createElement('base');b.href=p+'/';d.head.appendChild(b);}"
+                "function add(t,a){var e=d.createElement(t);for(var k in a)e.setAttribute(k,a[k]);d.head.appendChild(e);}"
+                "add('link',{rel:'icon',href:'static/img/icon.svg',type:'image/svg+xml'});"
+                f"add('link',{{rel:'stylesheet',href:'static/css/lumen.css?v={v}'}});"
+                f"add('script',{{type:'module',src:'static/js/main.js?v={v}'}});"
+                "})();</script>"
+            )
         boot = {
             "version": __version__,
             "algorithm": ALGORITHM_VERSION,
@@ -149,7 +168,9 @@ def create_app(settings: Settings | None = None, service: SessionService | None 
             "assistant": bool(settings.llm_enabled),
         }
         html = (
-            index_template.replace("<!--LUMEN_BASE-->", base_tag + fix)
+            html.replace("<!--LUMEN_BASE-->", head)
+            .replace("<!--LUMEN_ASSETS-->", "")
+            .replace("<!--/LUMEN_ASSETS-->", "")
             .replace("__LUMEN_NONCE__", nonce)
             .replace("__LUMEN_VERSION__", __version__)
             .replace("__LUMEN_BOOT__", _attr(json.dumps(boot)))

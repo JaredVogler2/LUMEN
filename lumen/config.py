@@ -96,8 +96,6 @@ class Settings:
     llm_timeout_seconds: float = 20.0
     #: Experimental research features; diagnostics only, never guidance.
     photometric_enabled: bool = True
-    #: Retain uploaded photos after the session ends (default: never).
-    retain_images: bool = False
     #: JSON file describing a physically validated measurement domain ("" = none).
     validated_domain_file: str = ""
     log_level: str = "INFO"
@@ -140,7 +138,6 @@ def load_settings() -> Settings:
         llm_api_key_env=_env("LUMEN_LLM_API_KEY_ENV", "LUMEN_LLM_API_KEY") or "LUMEN_LLM_API_KEY",
         llm_timeout_seconds=_env_float("LUMEN_LLM_TIMEOUT_SECONDS", 20.0),
         photometric_enabled=_env_bool("LUMEN_PHOTOMETRIC_ENABLED", True),
-        retain_images=_env_bool("LUMEN_RETAIN_IMAGES", False),
         validated_domain_file=_env("LUMEN_VALIDATED_DOMAIN_FILE", "") or "",
         log_level=(_env("LUMEN_LOG_LEVEL", "INFO") or "INFO").upper(),
     )

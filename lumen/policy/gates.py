@@ -98,6 +98,9 @@ class GateInputs:
     inconsistent_reasons: list[str] | None = None
     excluded_tags: dict[int, list[str]] | None = None
     independently_checked: bool = False
+    #: operator's ruler measurement between two tag corners: None = none made
+    reference_consistent: bool | None = None
+    reference_message: str = ""
     crossval_sigma_frac: float | None = None
     reduced_chi2: float | None = None
     rms_px: float | None = None
@@ -188,6 +191,9 @@ def evaluate_gates(inp: GateInputs, policy: GatePolicy | None = None, placard_id
              "This frame is registered to the session's tags." if inp.frame_localized and "high_residual" not in (inp.frame_flags or [])
              else ("A registered tag appears to have moved or is misread in this frame." if inp.frame_localized else "This frame shows no registered tag."),
              suggestion="Keep the tags fixed; bring at least one registered tag fully into view. If a tag was moved, restart the capture.")
+    if inp.registered and inp.reference_consistent is not None:
+        gate("independent_length_check", bool(inp.reference_consistent), B, inp.reference_message,
+             suggestion="Check the declared tag sizes (measure the black square, not the sticker) and the ruler reading; then enter the corrected values.")
     if inp.registered and inp.multiview:
         gate("plane_assumption", not inp.plane_violated, B,
              "The tags define one plane." if not inp.plane_violated

@@ -539,14 +539,48 @@ def clear_datum(request: Request, sid: str, kind: str) -> dict[str, Any]:
 
 
 @router.get("/sessions/{sid}/overlay")
-def overlay(request: Request, sid: str, frame: str, view: str = "image", placards: str | None = None, uncertainty: bool = True, rect_max: int = 1600, candidates: bool = False) -> dict[str, Any]:
+def overlay(request: Request, sid: str, frame: str, view: str = "image", placards: str | None = None, uncertainty: bool = True, rect_max: int = 1600, candidates: bool = False, references: bool = False) -> dict[str, Any]:
     _session(request, sid)
     if view not in ("image", "rect"):
         raise LumenValidationError("invalid_view", "view must be 'image' or 'rect'.")
     if not (128 <= rect_max <= 4096):
         raise LumenValidationError("invalid_size", "rect_max must be between 128 and 4096.")
     pids = [p for p in placards.split(",") if p] if placards else None
-    return _svc(request).overlay(sid, frame, view=view, placard_ids=pids, with_uncertainty=uncertainty, rect_max_edge=rect_max, candidates=candidates)
+    return _svc(request).overlay(sid, frame, view=view, placard_ids=pids, with_uncertainty=uncertainty, rect_max_edge=rect_max, candidates=candidates, references=references)
+
+
+class CornerRef(BaseModel):
+    tag_id: int = Field(ge=0, le=586)
+    corner: int = Field(ge=0, le=3)
+
+
+class ReferenceBody(BaseModel):
+    a: CornerRef
+    b: CornerRef
+    measured_mm: float
+    u_mm: float = 0.5
+    instrument: str = Field(default="", max_length=80)
+
+
+@router.get("/sessions/{sid}/reference")
+def reference_suggestion(request: Request, sid: str) -> dict[str, Any]:
+    """Which two tag corners to measure between for an independent scale check."""
+    s = _session(request, sid)
+    return {"suggestion": _svc(request).reference_suggestion(sid), "references": s.reference_distances}
+
+
+@router.post("/sessions/{sid}/reference")
+def add_reference(request: Request, sid: str, body: ReferenceBody) -> dict[str, Any]:
+    _session(request, sid)
+    svc = _svc(request)
+    rec = svc.add_reference_distance(sid, body.a.model_dump(), body.b.model_dump(), body.measured_mm, body.u_mm, body.instrument)
+    return {"reference": rec, "session": public_session(svc.get(sid))}
+
+
+@router.delete("/sessions/{sid}/reference/{rid}")
+def remove_reference(request: Request, sid: str, rid: str) -> dict[str, Any]:
+    _session(request, sid)
+    return public_session(_svc(request).remove_reference_distance(sid, rid))
 
 
 class VerifyBody(BaseModel):

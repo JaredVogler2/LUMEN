@@ -153,3 +153,41 @@ def write_video(path: str, frames: list[np.ndarray], fps: float = 12.0, fourcc: 
         vw.write(f)
     vw.release()
     return path
+
+
+class PrefixProxy:
+    """A path-stripping reverse proxy in front of the app, as Posit Connect is.
+
+    Requests must arrive under ``prefix``; the prefix is removed before the
+    app sees the path (the app never learns it from the URL).  With
+    ``announce`` the proxy adds Connect's ``RStudio-Connect-App-Base-URL``
+    header; without it the app has to cope on its own.
+    """
+
+    def __init__(self, app: Any, prefix: str = "/content/3f2a9c1e", announce: bool = True, user: str | None = None) -> None:
+        self.app, self.prefix, self.announce, self.user = app, prefix.rstrip("/"), announce, user
+        self.seen: list[str] = []
+
+    async def __call__(self, scope: dict, receive: Any, send: Any) -> None:
+        if scope["type"] not in ("http", "websocket"):
+            await self.app(scope, receive, send)
+            return
+        path = scope["path"]
+        if path != self.prefix and not path.startswith(self.prefix + "/"):
+            await send({"type": "http.response.start", "status": 404, "headers": [(b"content-type", b"text/plain")]})
+            await send({"type": "http.response.body", "body": b"not this content item"})
+            return
+        inner = path[len(self.prefix):] or "/"
+        self.seen.append(inner)
+        new = dict(scope)
+        new["path"] = inner
+        new["raw_path"] = inner.encode()
+        new["root_path"] = ""
+        headers = [(k, v) for k, v in scope["headers"] if k not in (b"rstudio-connect-app-base-url", b"rstudio-connect-credentials")]
+        if self.announce:
+            host = dict(scope["headers"]).get(b"host", b"connect.example.invalid").decode()
+            headers.append((b"rstudio-connect-app-base-url", f"http://{host}{self.prefix}/".encode()))
+        if self.user:
+            headers.append((b"rstudio-connect-credentials", json.dumps({"user": self.user, "groups": []}).encode()))
+        new["headers"] = headers
+        await self.app(new, receive, send)

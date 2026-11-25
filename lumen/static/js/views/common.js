@@ -65,9 +65,9 @@ export function provenanceChip(p) {
 // Load the picture and overlay of one frame into a viewer.
 //   view = 'image'  -> the photo, overlay in frame pixels
 //   view = 'rect'   -> the rectified plane view, overlay in rectified pixels
-export async function showFrame(viewer, frameId, view, { uncertainty = false, maxEdge = 2600, placards = null, candidates = false } = {}) {
+export async function showFrame(viewer, frameId, view, { uncertainty = false, maxEdge = 2600, placards = null, candidates = false, references = false } = {}) {
   const sid = state.session.id;
-  const q = `frame=${encodeURIComponent(frameId)}&view=${view}&uncertainty=${uncertainty ? 'true' : 'false'}${placards ? `&placards=${encodeURIComponent(placards.join(','))}` : ''}${candidates ? '&candidates=true' : ''}`;
+  const q = `frame=${encodeURIComponent(frameId)}&view=${view}&uncertainty=${uncertainty ? 'true' : 'false'}${placards ? `&placards=${encodeURIComponent(placards.join(','))}` : ''}${candidates ? '&candidates=true' : ''}${references ? '&references=true' : ''}`;
   if (view === 'rect') {
     // The picture and its overlay must come from the *same* rectification:
     // both requests name the same size and the returned specs are compared.

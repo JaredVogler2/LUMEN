@@ -8,7 +8,7 @@ import { api } from '../api.js';
 import { h, clear, icon, chip, banner, toast, showError, busy, fmt } from '../dom.js';
 import { state, setSession, activeFrameId, setState } from '../store.js';
 import { Viewer } from '../viewer.js';
-import { showFrame, viewerShell, zoomButtons, provenanceChip } from './common.js';
+import { showFrame, viewerShell, zoomButtons, maximizeButton, provenanceChip } from './common.js';
 
 const FRAME_REASON = {
   datums_nearly_parallel: 'the two datum lines are nearly parallel',
@@ -40,7 +40,8 @@ export function mount(root, ctx) {
   const s = () => state.session;
   const shell = viewerShell({ label: 'Datum review' });
   const panel = h('div', { class: 'panel' });
-  root.append(h('div', { class: 'split' }, shell.wrap, panel));
+  const split = h('div', { class: 'split' }, shell.wrap, panel);
+  root.append(split);
   const guide = h('div', { class: 'guide', hidden: true });
   shell.wrap.append(guide);
 
@@ -54,7 +55,7 @@ export function mount(root, ctx) {
 
   const viewer = new Viewer(shell.wrap, { label: 'Photo with tags and datum lines', onLine, onTap });
   window.__lumenViewer = viewer;   // hook for automated browser tests
-  shell.tools.append(...zoomButtons(viewer));
+  shell.tools.append(maximizeButton(viewer, split), ...zoomButtons(viewer));
 
   const seg = h('div', { class: 'seg', role: 'group', 'aria-label': 'View' },
     h('button', { type: 'button', 'aria-pressed': 'true', 'data-view': 'image', onclick: () => setView('image') }, 'Photo'),
