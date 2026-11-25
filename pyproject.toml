@@ -1,0 +1,35 @@
+[project]
+name = "lumen"
+version = "0.1.0"
+description = "Browser-based optical placard positioning research application (research prototype; not for product acceptance)."
+readme = "README.md"
+requires-python = ">=3.11,<3.14"
+# Runtime dependencies are pinned exactly in requirements.txt (the file Posit
+# Connect installs from).  This table mirrors it for tooling.
+dependencies = [
+  "fastapi==0.165.0",
+  "starlette==1.10.0",
+  "pydantic==2.14.4",
+  "uvicorn==0.54.0",
+  "numpy==2.5.5",
+  "scipy==1.18.1",
+  "opencv-python-headless==4.14.0.94",
+  "pillow==13.0.0",
+  "zxing-cpp==3.2.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q -ra --strict-markers"
+markers = [
+  "slow: long-running accuracy / coverage studies (deselect with -m 'not slow')",
+  "browser: needs a Chromium binary (Playwright); skipped when unavailable",
+  "llm_integration: calls a real OpenAI-compatible endpoint; opt-in via LUMEN_LLM_INTEGRATION=1",
+]
+filterwarnings = [
+  "ignore::DeprecationWarning:starlette.*",
+  "ignore:Using `httpx` with `starlette.testclient` is deprecated",
+]
+
+[tool.setuptools.packages.find]
+include = ["lumen*"]

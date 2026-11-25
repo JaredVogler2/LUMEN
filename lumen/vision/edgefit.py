@@ -170,7 +170,7 @@ def fit_edge(
             return EdgeFit(False, "too_few_pixels")
         rel = rel[m]
         I = lin[m].astype(np.float64)
-        sat = float(np.mean(codes[m] >= 250))
+        sat = float(np.mean(codes[m] >= 254))
         s0 = s_all[m]
         a = a_all[m] / max(half_len, 1e-9) * 0.5  # in [-0.5, 0.5]
 
@@ -378,7 +378,7 @@ def fit_bar(
     s0 = s0[m]
     I = lin[m].astype(np.float64)
     a = a_all[m] / max(half_len, 1e-9) * 0.5
-    sat = float(np.mean(codes[m] >= 250))
+    sat = float(np.mean(codes[m] >= 254))
     base = float(np.median(I[np.abs(s0) > 0.6 * half_width])) if np.any(np.abs(s0) > 0.6 * half_width) else float(np.median(I))
     # seed from the binned profile extremum
     nb = max(int(half_width * 2.0), 8)
@@ -520,13 +520,7 @@ def snap_line(
             scores_at_best_tilt = sc.copy()
     if best[0] < 0.004 or scores_at_best_tilt is None:
         return SnapResult(False, "no_feature_found")
-    # distinctness: best peak vs the strongest peak at least 4 px away
     sc = scores_at_best_tilt
-    k = int(np.argmax(sc))
-    far = np.abs(np.arange(nb) - k) >= 4
-    second = float(sc[far].max()) if np.any(far) else 0.0
-    distinct = best[0] / max(second, 1e-9)
-    n_cand = int(np.sum((sc[1:-1] > sc[:-2]) & (sc[1:-1] >= sc[2:]) & (sc[1:-1] > 0.5 * best[0])))
 
     cs, sn = np.cos(best[1]), np.sin(best[1])
     n = np.array([cs * n0[0] - sn * n0[1], sn * n0[0] + cs * n0[1]])
@@ -558,7 +552,18 @@ def snap_line(
     elif bar.ok:
         choice, kind = bar, "bar"
     if choice is None or choice.mid is None or choice.n is None:
-        return SnapResult(False, "fit_failed", distinctness=distinct, n_candidates=n_cand)
+        return SnapResult(False, "fit_failed")
     shift = float((choice.mid - c) @ n0)
+    # Distinctness: gradient strength of the chosen feature against the
+    # strongest transition elsewhere in the search band.  The chosen feature's
+    # own footprint is excluded — both flanks of a thin line belong to it.
+    excl = max(4.0, 3.0 * choice.sigma_blur + (3.0 if kind == "bar" else 2.0))
+    s_fit = float((choice.mid - c) @ n)
+    own = np.abs(centers - s_fit) <= excl
+    first = float(sc[own].max()) if np.any(own) else best[0]
+    second = float(sc[~own].max()) if np.any(~own) else 0.0
+    distinct = first / max(second, 1e-9)
+    rest = np.where(own, 0.0, sc)
+    n_cand = 1 + int(np.sum((rest[1:-1] > rest[:-2]) & (rest[1:-1] >= rest[2:]) & (rest[1:-1] > 0.5 * first)))
     tilt_deg = float(np.degrees(np.arcsin(np.clip(choice.t[0] * t0[1] - choice.t[1] * t0[0], -1, 1))))
     return SnapResult(True, "", kind, choice, shift, tilt_deg, float(distinct), n_cand)

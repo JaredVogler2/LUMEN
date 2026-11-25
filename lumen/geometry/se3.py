@@ -38,12 +38,15 @@ def log_so3(R: np.ndarray) -> np.ndarray:
     """Rotation matrix -> rotation vector (angle in [0, pi])."""
     R = np.asarray(R, dtype=float).reshape(3, 3)
     cos_theta = np.clip((np.trace(R) - 1.0) * 0.5, -1.0, 1.0)
-    theta = float(np.arccos(cos_theta))
+    # atan2 keeps full precision near 0 and near pi, where arccos does not
+    sin_theta = 0.5 * float(np.linalg.norm([R[2, 1] - R[1, 2], R[0, 2] - R[2, 0], R[1, 0] - R[0, 1]]))
+    theta = float(np.arctan2(sin_theta, cos_theta))
     if theta < 1e-8:
         return 0.5 * np.array([R[2, 1] - R[1, 2], R[0, 2] - R[2, 0], R[1, 0] - R[0, 1]])
     if np.pi - theta < 1e-5:
-        # Near pi the antisymmetric part vanishes; recover the axis from R + I.
-        A = (R + np.eye(3)) * 0.5
+        # Near pi the antisymmetric part vanishes; recover the axis from the
+        # symmetric part:  (R + R^T)/2 = cos(theta) I + (1 - cos(theta)) n n^T.
+        A = (0.5 * (R + R.T) - cos_theta * np.eye(3)) / (1.0 - cos_theta)
         axis = np.sqrt(np.clip(np.diag(A), 0.0, None))
         k = int(np.argmax(axis))
         # Fix signs relative to the largest component.
@@ -63,7 +66,9 @@ def log_so3(R: np.ndarray) -> np.ndarray:
 
 def rotation_angle(R: np.ndarray) -> float:
     """Geodesic angle of a rotation matrix, radians in [0, pi]."""
-    return float(np.arccos(np.clip((np.trace(np.asarray(R, dtype=float)) - 1.0) * 0.5, -1.0, 1.0)))
+    R = np.asarray(R, dtype=float)
+    s = 0.5 * float(np.linalg.norm([R[2, 1] - R[1, 2], R[0, 2] - R[2, 0], R[1, 0] - R[0, 1]]))
+    return float(np.arctan2(s, np.clip((np.trace(R) - 1.0) * 0.5, -1.0, 1.0)))
 
 
 def orthonormalize(R: np.ndarray) -> np.ndarray:

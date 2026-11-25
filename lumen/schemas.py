@@ -231,6 +231,14 @@ class DatumObservation(_Model):
     distinctness: float | None = None
     n_candidates: int | None = None
     notes: list[str] = Field(default_factory=list)
+    #: the fitted image line this datum was derived from (ideal pixels of
+    #: ``frame_id``): {"mid": [u, v], "n": [nx, ny], "var_d", "var_theta",
+    #: "cov_d_theta", "length"}.  Kept so uncertainty can be propagated with
+    #: the correct correlation to the frame's mapping.
+    image_fit: dict[str, Any] | None = None
+    #: the feature line before the configured offset was applied (plane frame)
+    feature_n: list[float] | None = None
+    feature_d: float | None = None
 
 
 class LocalFrameModel(_Model):
@@ -285,8 +293,12 @@ class PlacementSpec(_Model):
 class UncertaintyComponent(_Model):
     name: str
     kind: str  # "random" | "systematic"
-    #: standard uncertainty (random) or half-width bound (systematic), mm, at the worst target corner
+    #: "normal": value is a standard uncertainty; "rectangular": value is the half-width of a bound
+    distribution: str = "normal"
+    #: millimetres at the worst target corner
     value_mm: float
+    #: contribution to the combined variance (mm^2): value^2 or value^2 / 3
+    variance_mm2: float = 0.0
     note: str = ""
 
 

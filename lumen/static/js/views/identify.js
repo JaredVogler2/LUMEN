@@ -1,0 +1,192 @@
+// Step 1 — identify the operation and the placard.
+import { api } from '../api.js';
+import { h, clear, icon, chip, banner, toast, showError, busy } from '../dom.js';
+import { state, setState, setSession, ensureSession, endSession } from '../store.js';
+import { targetReadout } from './common.js';
+import { openScanner } from './scan.js';
+
+const ISSUE_TEXT = {
+  missing_position_tolerance: 'no position tolerance',
+  missing_rotation_tolerance: 'no rotation tolerance',
+  missing_x_offset: 'no x offset', missing_z_offset: 'no z offset', missing_size: 'no size',
+  missing_reference_point: 'no reference point', missing_rotation: 'no rotation', missing_x_semantics: 'offset semantics not stated',
+  side_datum_sign_missing: 'side datum sign not defined', floor_datum_sign_missing: 'floor datum sign not defined',
+  axis_policy_missing: 'axis policy not defined', max_axis_disagreement_missing: 'axis limit not defined',
+  missing_floor_datum: 'no floor datum', missing_side_datum: 'no side datum', no_placards: 'no placards',
+  curved_target_experimental: 'curved target (experimental)',
+};
+const issueText = (i) => ISSUE_TEXT[i] || i.replace(/_/g, ' ');
+
+export function mount(root, ctx) {
+  const s = state.session;
+  const sel = {
+    operationId: s && s.operation ? s.operation.operation.operation_id : null,
+    revision: s && s.operation ? s.operation.operation.revision : null,
+    placardId: s ? s.active_placard_id : null,
+    detail: null,
+    query: '',
+  };
+  const list = h('div', { class: 'stack', role: 'list' });
+  const detail = h('div', { class: 'stack' });
+  const search = h('input', {
+    class: 'input', type: 'search', placeholder: 'Operation, panel or placard ID', 'aria-label': 'Search operations',
+    autocomplete: 'off', autocapitalize: 'characters', spellcheck: 'false', enterkeyhint: 'search',
+    oninput: (ev) => { sel.query = ev.target.value.trim(); renderList(); },
+    onkeydown: (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); resolveCode(sel.query); } },
+  });
+
+  root.append(
+    h('h1', { class: 'view-title' }, 'Identify the operation'),
+    h('p', { class: 'view-lead' }, 'Pick the panel operation and the placard to position. LUMEN uses only what the record defines: datums, signs, offsets and tolerances are never guessed.'),
+    h('div', { class: 'row' },
+      h('div', { class: 'grow' }, search),
+      h('button', { class: 'btn', type: 'button', 'aria-label': 'Scan a barcode or QR code', 'data-action': 'scan', onclick: () => openScanner(resolveCode) }, icon('scan'), 'Scan')),
+    list, detail);
+
+  if (state.config && state.config.features.demo && !(s && s.frames.length)) {
+    root.append(h('div', { class: 'card' },
+      h('div', { class: 'eyebrow' }, 'No panel at hand?'),
+      h('h3', null, 'Open the simulated demo session'),
+      h('p', { class: 'hint' }, 'Loads computer-generated photos of an invented panel and runs the real measurement pipeline on them. Clearly marked as simulated throughout.'),
+      h('button', { class: 'btn', type: 'button', 'data-action': 'demo', onclick: loadDemo }, icon('play'), 'Load demo session')));
+  }
+
+  function renderList() {
+    clear(list);
+    const ops = (state.operations && state.operations.operations) || [];
+    const q = sel.query.toLowerCase();
+    const shown = ops.filter((o) => !q || [o.operation_id, o.title, o.panel_id, ...o.placard_ids].some((t) => String(t).toLowerCase().includes(q)));
+    if (!shown.length) {
+      list.append(banner('info', 'No operation matches.', 'Check the ID, or scan the code on the work order. LUMEN only selects exact matches.'));
+      return;
+    }
+    shown.forEach((o) => {
+      const card = h('button', {
+        class: `card selectable${sel.operationId === o.operation_id && sel.revision === o.revision ? ' selected' : ''}`,
+        type: 'button', role: 'listitem', 'data-operation': o.operation_id, 'aria-pressed': sel.operationId === o.operation_id ? 'true' : 'false',
+        onclick: () => choose(o.operation_id, o.revision),
+      },
+        h('div', { class: 'row wrap' },
+          h('span', { class: 'mono', style: { fontWeight: 800, fontSize: '16px' } }, o.operation_id),
+          chip(`rev ${o.revision}`, 'solid'),
+          chip(o.status, o.status === 'released' ? 'ok' : 'warn'),
+          o.synthetic ? chip('synthetic sample', 'info') : null,
+          o.complete ? null : chip('incomplete', 'danger')),
+        h('div', null, o.title),
+        h('div', { class: 'hint' }, `Panel ${o.panel_id} · ${o.n_placards} placard${o.n_placards === 1 ? '' : 's'}`));
+      list.append(card);
+    });
+  }
+
+  async function choose(operationId, revision, placardId = null) {
+    sel.operationId = operationId; sel.revision = revision;
+    renderList();
+    clear(detail).append(h('div', { class: 'card' }, h('div', { class: 'spinner', style: { alignSelf: 'center' } })));
+    try {
+      const d = await api('GET', `api/operations/${encodeURIComponent(operationId)}?revision=${encodeURIComponent(revision)}`);
+      sel.detail = d;
+      const ids = d.operation.placards.map((p) => p.placard_id);
+      sel.placardId = placardId && ids.includes(placardId) ? placardId : (ids.includes(sel.placardId) ? sel.placardId : ids[0] || null);
+      renderDetail();
+    } catch (err) { showError(err); clear(detail); }
+    updateActions();
+  }
+
+  function renderDetail() {
+    clear(detail);
+    const d = sel.detail;
+    if (!d) return;
+    const op = d.operation;
+    const issues = d.summary.issues || {};
+    const dat = op.datums || {};
+    const datumCard = (key, x) => {
+      if (!x) return h('div', { class: 'card tight' }, h('div', { class: 'eyebrow' }, `${key} datum`), banner('danger', 'Not defined in this record.'));
+      return h('div', { class: 'card tight' },
+        h('div', { class: 'row wrap' }, h('span', { class: 'eyebrow' }, `Datum ${x.id} · ${key}`), chip(x.feature ? x.feature.replace(/_/g, ' ') : 'feature not stated', x.feature ? 'solid' : 'danger')),
+        h('div', { style: { fontWeight: 700 } }, x.name),
+        h('div', { class: 'hint' },
+          x.positive ? `+${key === 'floor' ? 'z' : 'x'} runs ${x.positive.replace(/_/g, ' ')}` : 'Sign not defined',
+          x.on_target_plane === true ? ' · on the target plane' : x.on_target_plane === false ? ' · off the target plane' : ' · plane relation not stated',
+          x.side_of_panel ? ` · ${x.side_of_panel} side when facing the panel` : '',
+          x.radius ? ` · radius ${x.radius.value} ${x.radius.unit}` : ''));
+    };
+    detail.append(
+      h('h2', { class: 'view-title', style: { fontSize: '18px' } }, op.title || op.operation_id),
+      Object.keys(issues).length
+        ? banner('warn', 'This record is incomplete.', 'It can be inspected as a research preview but cannot reach guidance status.',
+          Object.entries(issues).map(([scope, lst]) => `${scope}: ${lst.map(issueText).join(', ')}`))
+        : null,
+      h('div', { class: 'stack' },
+        datumCard('floor', dat.floor), datumCard('side', dat.side),
+        h('div', { class: 'card tight' }, h('div', { class: 'eyebrow' }, 'Axes'),
+          h('div', { class: 'hint' }, `${dat.axis_policy ? dat.axis_policy.replace(/_/g, ' ') : 'policy not defined'}${dat.nominal_angle ? ` · nominal ${dat.nominal_angle.value}° between datums` : ''}${dat.max_axis_disagreement ? ` · limit ±${dat.max_axis_disagreement.value}°` : ''}`))),
+      h('div', { class: 'eyebrow' }, 'Placard'),
+      h('div', { class: 'stack', role: 'radiogroup', 'aria-label': 'Placard' }, d.placards_resolved.map((p) => {
+        const pi = issues[`placard:${p.placard_id}`] || [];
+        return h('button', {
+          class: `card selectable${sel.placardId === p.placard_id ? ' selected' : ''}`, type: 'button', role: 'radio',
+          'aria-checked': sel.placardId === p.placard_id ? 'true' : 'false', 'data-placard': p.placard_id,
+          onclick: () => { sel.placardId = p.placard_id; renderDetail(); updateActions(); },
+        },
+          h('div', { class: 'row wrap' }, h('span', { class: 'mono', style: { fontWeight: 800 } }, p.placard_id), pi.length ? chip(pi.map(issueText).join(', '), 'danger') : chip('complete', 'ok')),
+          h('div', null, p.title || ''),
+          sel.placardId === p.placard_id ? targetReadout(p) : null);
+      })),
+      h('p', { class: 'hint' }, `Source: ${op.provenance.source || 'not stated'}${op.provenance.notes ? ` — ${op.provenance.notes}` : ''}`));
+  }
+
+  async function resolveCode(code) {
+    if (!code) return;
+    try {
+      const r = await api('POST', 'api/operations/resolve', { code });
+      if (r.status === 'exact') {
+        const m = r.matches[0];
+        const pm = r.matches.find((x) => x.placard_id);
+        toast({ title: 'Exact match', detail: `${m.operation_id} rev ${m.revision}`, kind: 'ok', timeout: 3000 });
+        await choose(m.operation_id, m.revision, pm ? pm.placard_id : null);
+      } else if (r.status === 'ambiguous') {
+        const uniq = [...new Map(r.matches.map((m) => [`${m.operation_id}|${m.revision}`, m])).values()];
+        toast({ title: 'More than one record matches', detail: `Choose one: ${uniq.map((m) => `${m.operation_id} rev ${m.revision}`).join(', ')}`, kind: 'error', timeout: 9000 });
+        sel.query = code; search.value = code; renderList();
+      } else {
+        const near = r.near.slice(0, 3).map((m) => m.value).join(', ');
+        toast({ title: 'No exact match', detail: near ? `Similar, not selected automatically: ${near}` : 'Nothing in the library has this ID.', kind: 'error', timeout: 9000 });
+      }
+    } catch (err) { showError(err); }
+  }
+
+  async function confirm() {
+    const b = busy('Selecting operation…');
+    try {
+      const sess = await ensureSession('real');
+      const out = await api('PUT', `api/sessions/${sess.id}/operation`, { operation_id: sel.operationId, revision: sel.revision, placard_id: sel.placardId });
+      setSession(out);
+      ctx.go('markers');
+    } catch (err) { showError(err); } finally { b.done(); }
+  }
+
+  async function loadDemo() {
+    const b = busy('Generating the demo session…');
+    try {
+      if (state.session) await endSession();
+      const sess = await api('POST', 'api/sessions', { mode: 'demo' });
+      setSession(sess);
+      const out = await api('POST', `api/sessions/${sess.id}/demo/load`, { scenario: 'flat' }, { timeout: 180000 });
+      setSession(out);
+      toast({ title: 'Demo session loaded', detail: 'Simulated photos of an invented panel.', kind: 'ok' });
+      setState({});
+      ctx.go('capture');
+    } catch (err) { showError(err); } finally { b.done(); }
+  }
+
+  function updateActions() {
+    ctx.setActions([
+      { id: 'continue', label: 'Use this operation', kind: 'primary lg', icon: 'arrow', disabled: !(sel.operationId && sel.placardId), onClick: confirm },
+    ]);
+  }
+
+  renderList();
+  updateActions();
+  if (sel.operationId) choose(sel.operationId, sel.revision, sel.placardId);
+  return {};
+}

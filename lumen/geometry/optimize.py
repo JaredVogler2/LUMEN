@@ -48,6 +48,12 @@ def huber_weights(r: np.ndarray, k: float) -> np.ndarray:
     return np.where(a <= k, 1.0, k / np.maximum(a, 1e-300))
 
 
+def tukey_weights(r: np.ndarray, c: float) -> np.ndarray:
+    """Tukey biweight: redescending, zero beyond ``c``."""
+    u = np.clip(np.abs(r) / max(c, 1e-300), 0.0, 1.0)
+    return (1.0 - u * u) ** 2
+
+
 def mad_sigma(r: np.ndarray) -> float:
     """Robust scale: 1.4826 * median absolute deviation about the median."""
     r = np.asarray(r, dtype=float)
@@ -67,12 +73,15 @@ def lm_solve(
     lam0: float = 1e-3,
     robust_k: float | None = None,
     robust_rounds: int = 2,
+    loss: str = "huber",
 ) -> LMResult:
     """Minimise ``sum w_i r_i(x)^2``.
 
-    ``fn(x)`` returns ``(residuals, jacobian)``.  With ``robust_k`` set, Huber
-    weights with threshold ``robust_k * MAD-sigma`` are recomputed for
-    ``robust_rounds`` outer rounds (IRLS).
+    ``fn(x)`` returns ``(residuals, jacobian)``.  With ``robust_k`` set, the
+    weights are recomputed for ``robust_rounds`` outer rounds (IRLS) from the
+    MAD scale of the residuals: ``loss="huber"`` bounds the influence of
+    outliers (threshold ``robust_k * sigma``); ``loss="tukey"`` removes it
+    entirely beyond ``1.9 * robust_k * sigma`` after one Huber round.
     """
     x = np.asarray(x0, dtype=float).copy()
     r, J = fn(x)
@@ -85,7 +94,10 @@ def lm_solve(
             s = mad_sigma(r)
             if s <= 0:
                 break
-            w = huber_weights(r, robust_k * s)  # type: ignore[operator]
+            if loss == "tukey" and rnd > 1:
+                w = tukey_weights(r, 1.9 * robust_k * s)  # type: ignore[operator]
+            else:
+                w = huber_weights(r, robust_k * s)  # type: ignore[operator]
         cost = float(np.sum(w * r * r))
         lam = lam0
         converged = False

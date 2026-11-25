@@ -193,6 +193,20 @@ class ViewSolution:
     norm_img: np.ndarray | None = None
     norm_plane: np.ndarray | None = None
     flags: list[str] = field(default_factory=list)
+    #: this view's parameter values at the solution, and (pose mode) what is
+    #: needed to turn perturbed parameters back into a homography
+    params: np.ndarray | None = None
+    K: np.ndarray | None = None
+    pose_ref: Pose | None = None
+
+    def H_from_params(self, p: np.ndarray) -> np.ndarray:
+        """Homography for (perturbed) view parameters ``p``."""
+        if self.mode == "homography":
+            assert self.norm_img is not None and self.norm_plane is not None
+            Hn = np.append(np.asarray(p, dtype=float), 1.0).reshape(3, 3)
+            return np.linalg.inv(self.norm_img) @ Hn @ self.norm_plane
+        assert self.K is not None and self.pose_ref is not None
+        return homography_from_pose(self.K, self.pose_ref.retract(np.asarray(p, dtype=float)))
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -430,6 +444,31 @@ class _Problem:
     def layout(self, x: np.ndarray) -> TagLayout:
         return TagLayout(self.gauge, {i: self.tag_pose(x, i) for i in self.layout0.poses}, dict(self.sizes))
 
+    def layout_jacobian(self, x: np.ndarray, vi: int, tag_ids: list[int]) -> np.ndarray:
+        """Whitened Jacobian of view ``vi``'s residuals with respect to the
+        in-plane poses ``(cx, cy, theta)`` of ``tag_ids`` — available also
+        when the layout is held fixed (sensitivity of a localisation to the
+        layout it relies on)."""
+        v = self.views[vi]
+        H = self.view_H(x, vi)
+        J = np.zeros((8 * len(v.tags), 3 * len(tag_ids)))
+        col = {t: 3 * k for k, t in enumerate(tag_ids)}
+        for ti, t in enumerate(v.tags):
+            if t.tag_id not in col:
+                continue
+            cx, cy, th = self.tag_pose(x, t.tag_id)
+            c, s = np.cos(th), np.sin(th)
+            loc = _tag_local(t.size_mm)
+            q = loc @ np.array([[c, s], [-s, c]]) + np.array([cx, cy])
+            Jq = h_local_jacobian(H, q)
+            dq_dth = loc @ np.array([[-s, c], [-c, -s]])
+            Jt = np.zeros((8, 3))
+            for kk in range(4):
+                Jt[2 * kk : 2 * kk + 2, 0:2] = Jq[kk]
+                Jt[2 * kk : 2 * kk + 2, 2] = Jq[kk] @ dq_dth[kk]
+            J[8 * ti : 8 * ti + 8, col[t.tag_id] : col[t.tag_id] + 3] = self.W[vi][ti] @ Jt
+        return J
+
     # -- residuals -------------------------------------------------------
     def _view_res(self, x: np.ndarray, vi: int, H: np.ndarray | None = None) -> np.ndarray:
         H = self.view_H(x, vi) if H is None else H
@@ -656,6 +695,9 @@ def _package(
             slice=prob.view_slices[vi],
             norm_img=prob.Ti[vi],
             norm_plane=prob.Tp[vi],
+            params=x[prob.view_slices[vi][0] : prob.view_slices[vi][1]].copy(),
+            K=(v.camera.without_distortion().K if (prob.modes[vi] == "pose" and v.camera is not None) else None),
+            pose_ref=prob.pose_ref[vi],
         )
         if amb[vi] is not None and np.isfinite(amb[vi]) and amb[vi] < cfg.ambiguity_min_delta_chi2:  # type: ignore[operator]
             vs.flags.append("pose_ambiguous")
@@ -874,13 +916,17 @@ class ViewLocalization:
     norm_plane: np.ndarray
     params: np.ndarray
     tag_rms_px: dict[int, float] = field(default_factory=dict)
+    K: np.ndarray | None = None
+    pose_ref: Pose | None = None
+    #: ``d params / d (cx, cy, theta)`` of each non-gauge layout tag used here
+    layout_sens: dict[int, np.ndarray] = field(default_factory=dict)
 
-    def H_from_params(self, p: np.ndarray, camera: CameraModel | None = None, pose_ref: Pose | None = None) -> np.ndarray:
+    def H_from_params(self, p: np.ndarray) -> np.ndarray:
         if self.mode == "homography":
-            Hn = np.append(p, 1.0).reshape(3, 3)
+            Hn = np.append(np.asarray(p, dtype=float), 1.0).reshape(3, 3)
             return np.linalg.inv(self.norm_img) @ Hn @ self.norm_plane
-        assert camera is not None and pose_ref is not None
-        return homography_from_pose(camera.without_distortion().K, pose_ref.retract(p))
+        assert self.K is not None and self.pose_ref is not None
+        return homography_from_pose(self.K, self.pose_ref.retract(np.asarray(p, dtype=float)))
 
 
 def localize_view(
@@ -917,6 +963,20 @@ def localize_view(
     if any(r > cfg.max_tag_rms_px for r in tag_rms.values()):
         flags.append("high_residual")
     params = s.x[a:b].copy()
+    # sensitivity of this localisation to the layout it was given:
+    # d p / d layout = -(Jv^T Jv)^-1 Jv^T Jl
+    sens: dict[int, np.ndarray] = {}
+    free_ids = [t.tag_id for t in tags if t.tag_id != layout.gauge_id]
+    if free_ids:
+        _, Jfull = prob(s.x)
+        Jv = Jfull[:, a:b]
+        Jl = prob.layout_jacobian(s.x, 0, free_ids)
+        try:
+            G = -np.linalg.solve(Jv.T @ Jv, Jv.T @ Jl)
+        except np.linalg.LinAlgError:
+            G = -np.linalg.pinv(Jv.T @ Jv) @ (Jv.T @ Jl)
+        for k, tid in enumerate(free_ids):
+            sens[tid] = G[:, 3 * k : 3 * k + 3]
     loc = ViewLocalization(
         frame_id=v.frame_id,
         mode=vs.mode,
@@ -932,6 +992,8 @@ def localize_view(
         norm_plane=prob.Tp[0],
         params=params,
         tag_rms_px=tag_rms,
+        K=(v.camera.without_distortion().K if (vs.mode == "pose" and v.camera is not None) else None),
+        pose_ref=prob.pose_ref[0],
+        layout_sens=sens,
     )
-    loc._pose_ref = prob.pose_ref[0]  # type: ignore[attr-defined]
     return loc

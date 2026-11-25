@@ -181,16 +181,28 @@ def build_overlay(
             xs = np.arange(np.ceil(lo[0] / step), np.floor(hi[0] / step) + 1) * step
             zs = np.arange(np.ceil(lo[1] / step), np.floor(hi[1] / step) + 1) * step
             n = 48
+
+            def tick(axis: str, value: float, at: np.ndarray, away: np.ndarray) -> None:
+                """Tick label on a datum axis; ``away`` is a nearby local point on
+                the side where the label should sit (outside the panel)."""
+                uv, ok = mapper(frame.to_plane(np.stack([at, away])))
+                if ok[0] and ok[1] and -0.5 <= uv[0, 0] <= view_w - 0.5 and -0.5 <= uv[0, 1] <= view_h - 0.5:
+                    prims.append({"kind": "tick", "points": uv.round(2).tolist(), "closed": False, "axis": axis, "value": float(value), "label": _fmt(value)})
+
             for x in xs:
                 seg = np.stack([np.full(n, x), np.linspace(lo[1], hi[1], n)], axis=1)
                 k = int(round(x / step))
                 kind = "grid_axis" if k == 0 else ("grid_major" if k % 5 == 0 else "grid_minor")
-                add_lines(kind, frame.to_plane(seg), axis="x", value=float(x), label=_fmt(x) if k % 5 == 0 else None)
+                add_lines(kind, frame.to_plane(seg), axis="x", value=float(x))
+                if k % 5 == 0 and k != 0:
+                    tick("x", x, np.array([x, 0.0]), np.array([x, -step]))
             for z in zs:
                 seg = np.stack([np.linspace(lo[0], hi[0], n), np.full(n, z)], axis=1)
                 k = int(round(z / step))
                 kind = "grid_axis" if k == 0 else ("grid_major" if k % 5 == 0 else "grid_minor")
-                add_lines(kind, frame.to_plane(seg), axis="z", value=float(z), label=_fmt(z) if k % 5 == 0 else None)
+                add_lines(kind, frame.to_plane(seg), axis="z", value=float(z))
+                if k % 5 == 0 and k != 0:
+                    tick("z", z, np.array([0.0, z]), np.array([-step, z]))
 
         # axes arrows from the origin
         L = max(60.0, 2.0 * (step or 50.0))

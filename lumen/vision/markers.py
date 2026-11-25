@@ -77,7 +77,8 @@ class MarkerConfig:
     max_bit_errors: int = 2
     #: Edge must be this straight (sagitta, px) or the tag is treated as bent.
     max_sagitta_px: float = 0.6
-    #: Fraction of saturated pixels on an edge band that marks glare.
+    #: Fraction of clipped (code >= 254) pixels on an edge band that marks
+    #: over-exposure of the white margin.
     max_edge_saturation: float = 0.15
     #: Minimum fraction of pixels consistent with the edge model.
     min_edge_inliers: float = 0.6
@@ -670,8 +671,14 @@ def detect_tags(
                     det.accepted = False
                     det.reject_reasons.append("bent_or_distorted")
                 if det.saturation > cfg.max_edge_saturation:
-                    det.accepted = False
-                    det.reject_reasons.append("glare")
+                    # Clipped highlights move every edge toward its dark side.
+                    # That is exactly the shift the interior-boundary estimate
+                    # measures and removes; without that estimate the tag cannot
+                    # be trusted for scale.
+                    det.flags.append("highlights_clipped")
+                    if not det.bias_applied:
+                        det.accepted = False
+                        det.reject_reasons.append("glare")
                 if min(f.inlier_frac for f in fits) < cfg.min_edge_inliers:
                     det.accepted = False
                     det.reject_reasons.append("edge_disturbed")
