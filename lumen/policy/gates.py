@@ -123,6 +123,14 @@ class GateInputs:
     axis_disagreement_deg: float | None = None
     axis_limit_deg: float | None = None
 
+    multiview: bool = False
+    multiview_flags: list[str] | None = None
+    coplanarity_verdict: str | None = None
+    coplanarity_power_mm: float | None = None
+    calibration_consistent: bool | None = None
+    held_out_consistent: bool | None = None
+    plane_violated: bool = False
+
     target_in_view: bool = False
     extrapolation_ratio: float | None = None
     uncertainty: Uncertainty | None = None
@@ -180,6 +188,11 @@ def evaluate_gates(inp: GateInputs, policy: GatePolicy | None = None, placard_id
              "This frame is registered to the session's tags." if inp.frame_localized and "high_residual" not in (inp.frame_flags or [])
              else ("A registered tag appears to have moved or is misread in this frame." if inp.frame_localized else "This frame shows no registered tag."),
              suggestion="Keep the tags fixed; bring at least one registered tag fully into view. If a tag was moved, restart the capture.")
+    if inp.registered and inp.multiview:
+        gate("plane_assumption", not inp.plane_violated, B,
+             "The tags define one plane." if not inp.plane_violated
+             else "The tags are not on one plane and no consistent majority could be identified.",
+             suggestion="Put every tag flat on the same panel face (not on trim, floor or the curved edge) and capture again.")
     gate("datums_defined", all(inp.datums_present), B,
          "Floor and side datum lines are defined." if all(inp.datums_present)
          else "Missing datum: " + ", ".join(n for n, p in zip(("floor", "side"), inp.datums_present) if not p) + ".",
@@ -227,6 +240,22 @@ def evaluate_gates(inp: GateInputs, policy: GatePolicy | None = None, placard_id
                  "A measured lens calibration is applied." if inp.all_frames_calibrated and inp.frame_calibrated
                  else "No matching lens calibration is applied; distortion is only bounded by assumption.",
                  suggestion=_SUGGEST["calibrate"])
+        if inp.multiview:
+            if inp.coplanarity_verdict == "coplanar":
+                gate("plane_verified_3d", True, INFO,
+                     f"Coplanarity of the tags was verified in 3-D (could have seen {inp.coplanarity_power_mm:.1f} mm)." if inp.coplanarity_power_mm is not None else "Coplanarity of the tags was verified in 3-D.")
+            elif inp.coplanarity_verdict == "not_established":
+                gate("plane_verified_3d", True, INFO, "The views are too similar to verify coplanarity in 3-D; the single-view cross-check applies.")
+            if inp.calibration_consistent is not None:
+                gate("calibration_consistent", inp.calibration_consistent, W,
+                     "The lens profile agrees with a focal length re-estimated from the tags." if inp.calibration_consistent
+                     else "The lens profile disagrees with the focal length the tags imply: wrong profile, different zoom or capture mode?",
+                     suggestion="Recalibrate at this zoom, resolution and orientation, or detach the profile.")
+            if inp.held_out_consistent is not None:
+                gate("held_out_views", inp.held_out_consistent, W,
+                     "Each photo is predicted by the others (held-out check)." if inp.held_out_consistent
+                     else "A photo is not predicted by the others: something changed between photos.",
+                     suggestion="Remove the odd photo or recapture without touching the tags.")
         if inp.frame_min_tag_edge_px is not None:
             ok = inp.frame_min_tag_edge_px >= policy.min_tag_edge_px
             gate("tag_resolution", ok, W,

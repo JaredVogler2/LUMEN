@@ -1,4 +1,9 @@
-// Step 4 — review the registration and define the two datum lines.
+// Step 4 — review the registration and the two datum lines.
+//
+// Datums are proposed automatically (straight features found in the photos,
+// re-found in every other photo and classified in 3-D).  The operator reviews
+// the evidence, can pick another detected feature by tapping it, or draw a
+// line by hand, and finally confirms.  Nothing is confirmed automatically.
 import { api } from '../api.js';
 import { h, clear, icon, chip, banner, toast, showError, busy, fmt } from '../dom.js';
 import { state, setSession, activeFrameId, setState } from '../store.js';
@@ -19,6 +24,16 @@ const CHECK_REASON = {
   not_square_in_plane: 'it is not square when mapped onto the plane (tilted, bent or on another surface)',
   high_residual: 'its corners do not fit the common plane',
   not_connected_to_gauge: 'it never appears together with the other tags',
+  moved_or_misread: 'it moved between photos (or was misread in one)',
+  declared_size_inconsistent: 'its entered size contradicts the other tags',
+  off_the_common_plane: 'it is not on the same plane as the other tags',
+};
+const EVIDENCE = {
+  verified_multiview: ['verified on the face in 3-D', 'ok'],
+  cylinder_model: ['from the 3-D edge model', 'ok'],
+  configured: ['declared on the face (not verified)', 'info'],
+  off_plane: ['NOT on the face', 'danger'],
+  unverified: ['not verified', 'warn'],
 };
 
 export function mount(root, ctx) {
@@ -30,13 +45,14 @@ export function mount(root, ctx) {
   shell.wrap.append(guide);
 
   let view = 'image';
-  let tool = null;          // null | 'floor' | 'side'
+  let tool = null;          // null | 'floor' | 'side'      (drawing a line)
+  let picking = null;       // null | 'floor' | 'side'      (tapping a detected feature)
   let snap = true;
   let rect = null;
   let destroyed = false;
   let loading = 0;
 
-  const viewer = new Viewer(shell.wrap, { label: 'Photo with tags and datum lines', onLine: onLine });
+  const viewer = new Viewer(shell.wrap, { label: 'Photo with tags and datum lines', onLine, onTap });
   window.__lumenViewer = viewer;   // hook for automated browser tests
   shell.tools.append(...zoomButtons(viewer));
 
@@ -44,8 +60,7 @@ export function mount(root, ctx) {
     h('button', { type: 'button', 'aria-pressed': 'true', 'data-view': 'image', onclick: () => setView('image') }, 'Photo'),
     h('button', { type: 'button', 'aria-pressed': 'false', 'data-view': 'rect', onclick: () => setView('rect') }, 'Rectified'));
   const frameSel = h('div', { class: 'row' });
-  const frozen = h('span', { class: 'pill frozen' }, 'Still photo');
-  shell.hud.append(seg, frameSel, frozen);
+  shell.hud.append(seg, frameSel, h('span', { class: 'pill frozen' }, 'Still photo'));
 
   function setView(v) {
     view = v;
@@ -59,26 +74,29 @@ export function mount(root, ctx) {
     if (!fid) return;
     const my = ++loading;
     try {
-      const out = await showFrame(viewer, fid, view, { uncertainty: false });
+      const out = await showFrame(viewer, fid, view, { uncertainty: false, candidates: true });
       if (destroyed || my !== loading) return;
       rect = out.rect;
     } catch (err) { showError(err, 'Could not load the view'); }
   }
 
-  function setTool(kind) {
-    tool = tool === kind ? null : kind;
-    viewer.setTool(tool ? 'line' : 'pan');
-    guide.hidden = !tool;
-    if (tool) {
-      const d = datumDef(tool);
-      clear(guide).append(icon('line'), h('span', null, `Drag along ${d ? d.name.toLowerCase() : `the ${tool} datum`}. Pinch to zoom first for precision.`));
-    }
-    renderPanel();
-  }
-
   function datumDef(kind) {
     const op = s().operation;
     return op ? op.operation.datums[kind] : null;
+  }
+
+  function setMode(nextTool, nextPick) {
+    tool = nextTool; picking = nextPick;
+    viewer.setTool(tool ? 'line' : 'pan');
+    viewer.setLayer('candidates', !!picking);
+    guide.hidden = !(tool || picking);
+    if (tool) {
+      const d = datumDef(tool);
+      clear(guide).append(icon('line'), h('span', null, `Drag along ${d ? d.name.toLowerCase() : `the ${tool} datum`}. Pinch to zoom first for precision.`));
+    } else if (picking) {
+      clear(guide).append(icon('target'), h('span', null, `Tap the dashed line that is the ${picking} datum. Green lines are verified on the panel face.`));
+    }
+    renderPanel();
   }
 
   async function onLine(p0, p1) {
@@ -91,11 +109,43 @@ export function mount(root, ctx) {
       setSession(out.session);
       const d = out.datum;
       if (d.provenance === 'manual' && snap) toast({ title: 'No clear edge found there', detail: 'The line was kept as drawn (manual). Zoom in and draw closer to the edge to measure it.', kind: 'error', timeout: 8000 });
+      else if (d.on_plane_evidence === 'off_plane') toast({ title: 'That feature is not on the panel face', detail: 'It moves against the tags between photos. It cannot serve as a datum on the face.', kind: 'error', timeout: 9000 });
       else if (d.distinctness !== null && d.distinctness < 1.5) toast({ title: 'Two similar edges are close together', detail: 'Check that the line sits on the intended one.', kind: 'error', timeout: 8000 });
       tool = null; viewer.setTool('pan'); guide.hidden = true;
       await load();
       renderPanel();
     } catch (err) { showError(err, 'Could not set the datum'); } finally { b.done(); }
+  }
+
+  async function onTap(pt) {
+    if (!picking) return;
+    const hit = viewer.nearest('candidate', pt[0], pt[1], 30);
+    if (!hit) { toast({ title: 'No detected line there', detail: 'Tap directly on a dashed line, or draw the line by hand.', kind: 'info', timeout: 3500 }); return; }
+    const kind = picking;
+    const b = busy('Using the selected feature…');
+    try {
+      const out = await api('POST', `api/sessions/${s().id}/datums/select`, { kind, candidate_id: hit.id });
+      setSession(out.session);
+      picking = null; viewer.setLayer('candidates', false); guide.hidden = true;
+      await load();
+      renderPanel();
+    } catch (err) { showError(err, 'Could not use that feature'); } finally { b.done(); }
+  }
+
+  async function findAutomatically(quiet = false) {
+    const b = busy('Looking for the floor seam and the side edge…');
+    try {
+      const out = await api('POST', `api/sessions/${s().id}/datums/propose`, undefined, { timeout: 180000 });
+      setSession(out.session);
+      const p = out.proposals;
+      const found = Object.keys(p.applied);
+      if (!quiet || found.length < 2) {
+        if (found.length === 2) toast({ title: 'Both datums found', detail: 'Review them on the picture and confirm.', kind: 'ok', timeout: 4000 });
+        else toast({ title: found.length ? `Only the ${found[0]} datum was found` : 'No datum was found', detail: (p.hints || []).join(' '), kind: 'error', timeout: 10000 });
+      }
+      await load();
+      renderPanel();
+    } catch (err) { showError(err, 'Automatic search failed'); } finally { b.done(); }
   }
 
   async function clearDatum(kind) {
@@ -113,25 +163,33 @@ export function mount(root, ctx) {
   function datumCard(kind) {
     const def = datumDef(kind);
     const d = s().datums[kind];
+    const props = (s().research || {}).datum_proposals || null;
+    const nAlt = props ? (props[kind] || []).length : 0;
+    const ambiguous = props ? props[`ambiguous_${kind}`] : false;
     const color = kind === 'floor' ? 'var(--ov-floor)' : 'var(--ov-side)';
+    const ev = d ? EVIDENCE[d.on_plane_evidence] || EVIDENCE.unverified : null;
     const head = h('div', { class: 'row wrap' },
       h('span', { style: { width: '14px', height: '14px', borderRadius: '4px', background: color, flex: 'none' } }),
       h('span', { style: { fontWeight: 750 } }, def ? `${def.id} · ${def.name}` : `${kind} datum`),
       d ? provenanceChip(d.provenance) : chip('not set', 'warn'),
+      d ? chip(ev[0], ev[1]) : null,
       d && d.confirmed ? chip('confirmed', 'ok') : null);
+    const what = d ? (d.feature_kind === 'step' ? 'Fitted to an edge' : d.feature_kind === 'bar' ? 'Fitted to a thin line' : d.feature_kind === 'cylinder_model' ? 'Tangent line of the fitted rounded edge' : 'Hand-drawn, not fitted') : '';
     const facts = d ? h('div', { class: 'hint' },
-      d.feature_kind === 'step' ? 'Fitted to an edge' : d.feature_kind === 'bar' ? 'Fitted to a thin line' : 'Hand-drawn, not fitted',
-      d.sigma_perp_mm !== null && d.provenance === 'measured' ? ` · ±${fmt(d.sigma_perp_mm, 3)} mm (1σ)` : '',
-      d.distinctness !== null && d.distinctness !== undefined ? ` · ${d.distinctness >= 10 ? 'clearly' : `×${fmt(d.distinctness, 1)}`} stronger than the next edge` : '',
-      d.offset_applied_mm ? ` · configured offset ${d.offset_applied_mm} mm applied` : '',
-      d.on_plane_evidence === 'configured' ? ' · declared on the target plane (not verified by a second view)' : '') : null;
+      what,
+      d.sigma_perp_mm !== null && d.provenance !== 'manual' ? ` · ±${fmt(d.sigma_perp_mm, 3)} mm (1σ)` : '',
+      d.image_fit && d.image_fit.n_views > 1 ? ` · seen in ${d.image_fit.n_views} photos` : '',
+      d.offset_applied_mm ? ` · configured offset ${d.offset_applied_mm} mm applied` : '') : null;
     const needs3d = def && (def.feature === 'curve_tangent' || def.feature === 'curve_outer_extreme');
     return h('div', { class: 'card tight', 'data-datum': kind },
       head, facts,
-      def && def.notes ? h('div', { class: 'hint' }, def.notes) : null,
-      needs3d ? banner('warn', 'Rounded-edge datum', 'A single flat view cannot locate this line. A line drawn here is only a preview; capture a sweep so the edge can be modelled in 3-D.') : null,
-      h('div', { class: 'row' },
-        h('button', { class: 'btn sm toggle grow', type: 'button', 'aria-pressed': tool === kind ? 'true' : 'false', 'data-action': `draw-${kind}`, onclick: () => setTool(kind) }, icon('line'), tool === kind ? 'Drawing… tap to cancel' : (d ? 'Redraw' : 'Draw line')),
+      d && d.notes && d.notes.length ? h('div', { class: 'hint' }, d.notes.join(' · ')) : null,
+      !d && def && def.notes ? h('div', { class: 'hint' }, def.notes) : null,
+      d && ambiguous ? banner('warn', 'More than one similar feature was found.', 'Tap “Choose detected line” and select the intended one.') : null,
+      needs3d && d && d.feature_kind !== 'cylinder_model' ? banner('warn', 'Rounded-edge datum', 'A line on one flat view cannot locate this edge. Capture 5–9 photos while moving sideways around it, then search again.') : null,
+      h('div', { class: 'row wrap' },
+        nAlt > 0 && !needs3d ? h('button', { class: 'btn sm toggle grow', type: 'button', 'aria-pressed': picking === kind ? 'true' : 'false', 'data-action': `pick-${kind}`, onclick: () => setMode(null, picking === kind ? null : kind) }, icon('target'), picking === kind ? 'Tap a line… (cancel)' : `Choose detected line (${nAlt})`) : null,
+        h('button', { class: 'btn sm toggle grow', type: 'button', 'aria-pressed': tool === kind ? 'true' : 'false', 'data-action': `draw-${kind}`, onclick: () => setMode(tool === kind ? null : kind, null) }, icon('line'), tool === kind ? 'Drawing… (cancel)' : 'Draw by hand'),
         d ? h('button', { class: 'btn sm ghost', type: 'button', 'aria-label': `Clear ${kind} datum`, onclick: () => clearDatum(kind) }, icon('trash')) : null));
   }
 
@@ -155,21 +213,38 @@ export function mount(root, ctx) {
     const checks = Object.values(reg.checks);
     const bad = checks.filter((c) => !c.consistent);
     const excluded = Object.entries(reg.excluded_tags || {});
+    const mv = reg.multiview && !reg.multiview.skipped ? reg.multiview : null;
+    const cop = mv ? (mv.checks.coplanarity || {}) : {};
     panel.append(h('div', { class: 'card tight' },
       h('div', { class: 'row wrap' }, h('span', { class: 'eyebrow' }, 'Registration'),
         chip(`${reg.n_tags} tag${reg.n_tags === 1 ? '' : 's'}`, reg.n_tags >= 2 ? 'ok' : 'warn'),
         chip(`${reg.frames_used.length} photo${reg.frames_used.length === 1 ? '' : 's'}`, 'solid'),
         chip(`fit ${fmt(reg.rms_px, 2)} px`, 'solid'),
-        reg.independently_checked ? chip('cross-checked', 'ok') : chip('no independent check', 'warn')),
-      checks.filter((c) => c.checked).length ? h('div', { class: 'hint' }, checks.filter((c) => c.checked).map((c) => `ID ${c.tag_id}: size ${fmt((c.size_ratio - 1) * 100, 2)} % ± ${fmt(c.size_ratio_sigma * 100, 2)} %`).join(' · ')) : null));
+        reg.independently_checked ? chip('cross-checked', 'ok') : chip('no independent check', 'warn'),
+        cop.verdict === 'coplanar' ? chip('flat in 3-D', 'ok') : cop.verdict === 'not_established' ? chip('3-D check inconclusive', 'warn') : null,
+        mv && mv.calibration_check ? chip(mv.calibration_check.consistent ? 'lens profile confirmed' : 'lens profile disagrees', mv.calibration_check.consistent ? 'ok' : 'danger') : null),
+      mv && cop.verdict === 'coplanar' ? h('div', { class: 'hint' }, `Tags lie on one plane within ${fmt(cop.worst_center_offset_mm, 2)} mm; a ${fmt(cop.resolving_power_mm, 1)} mm step would have been noticed. Views span ${fmt(mv.checks.diversity.max_view_angle_deg, 0)}°.`) : null,
+      mv && cop.verdict === 'not_established' ? h('div', { class: 'hint' }, 'The photos were taken from nearly the same place, so flatness cannot be checked in 3-D. Move further sideways between photos.') : null));
     if (bad.length) panel.append(banner('danger', 'Tags contradict each other.', 'No guidance until this is resolved.', bad.map((c) => `ID ${c.tag_id}: ${c.reasons.map((r) => CHECK_REASON[r] || r).join('; ')}`)));
-    if (excluded.length) panel.append(banner('warn', 'A tag was excluded.', null, excluded.map(([id, rs]) => `ID ${id}: ${rs.map((r) => CHECK_REASON[r] || r).join('; ')}`)));
+    if (excluded.length) panel.append(banner('warn', excluded.length === 1 ? 'A tag was excluded.' : 'Tags were excluded.', null, excluded.map(([id, rs]) => `ID ${id}: ${rs.map((r) => CHECK_REASON[r] || r).join('; ')}`)));
     if (reg.n_tags < 2) panel.append(banner('warn', 'Only one tag.', 'Nothing checks its size or that the panel is flat here. Add a second measured tag for guidance status.'));
     if ((reg.flags || []).includes('high_chi2')) panel.append(banner('warn', 'The tags do not fit one plane as well as their sharpness suggests.', 'Typical causes: lens distortion without a calibration, a bent tag, a panel that is not flat.'));
 
     // --- datums
-    panel.append(h('div', { class: 'eyebrow' }, 'Datums'), datumCard('floor'), datumCard('side'),
-      h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: snap ? true : null, onchange: (ev) => { snap = ev.target.checked; } }), h('span', null, 'Snap the line to the nearest edge and measure it')));
+    const props = (sess.research || {}).datum_proposals || null;
+    panel.append(
+      h('div', { class: 'row' }, h('span', { class: 'eyebrow grow' }, 'Datums'),
+        h('button', { class: 'btn sm', type: 'button', 'data-action': 'auto-datums', onclick: () => findAutomatically(false) }, icon('refresh'), props ? 'Search again' : 'Find automatically')),
+      props && props.hints && props.hints.length ? banner('warn', 'Not everything was found.', null, props.hints) : null,
+      datumCard('floor'), datumCard('side'),
+      h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: snap ? true : null, onchange: (ev) => { snap = ev.target.checked; } }), h('span', null, 'When drawing by hand, snap to the nearest edge and measure it')));
+
+    const cyl = sess.surface && sess.surface.cylinder;
+    if (cyl && cyl.ok) {
+      panel.append(h('div', { class: 'card tight' },
+        h('div', { class: 'row wrap' }, h('span', { class: 'eyebrow' }, 'Rounded edge'), chip(`radius ${fmt(cyl.radius_mm, 1)} mm${cyl.radius_fixed ? ' (configured)' : ` ± ${fmt(cyl.sigma_radius_mm, 1)}`}`, 'solid'), chip(`${cyl.n_views} silhouettes`, 'solid')),
+        h('div', { class: 'hint' }, `Tangent line located to ±${fmt(cyl.sigma_tangent_mm, 2)} mm; silhouettes agree with a cylinder within ${fmt(cyl.rms_mm, 2)} mm. A uniform rounded edge fixes the direction and the sideways position only — the floor datum fixes the height.`)));
+    }
 
     // --- local frame
     const lf = sess.local_frame;
@@ -187,7 +262,7 @@ export function mount(root, ctx) {
       h('span', null, h('i', { style: { background: 'var(--ov-floor)' } }), 'floor datum'),
       h('span', null, h('i', { style: { background: 'var(--ov-side)' } }), 'side datum'),
       h('span', null, h('i', { style: { background: 'var(--ov-grid)' } }), 'metric grid')),
-      h('p', { class: 'hint' }, view === 'rect' ? 'Rectified view: only things on the panel face are in their true position. The floor, a curved edge or a raised trim appear displaced.' : 'Draw each line along the feature the record names. You can switch to the rectified view at any time.'));
+      h('p', { class: 'hint' }, view === 'rect' ? 'Rectified view: only things on the panel face are in their true position. The floor, a curved edge or a raised trim appear displaced.' : 'Check that each coloured line lies on the feature the record names. Switch to the rectified view for a square-on look.'));
 
     const ok = !!(lf && lf.valid && hasBoth);
     const done = ok && sess.datums.floor.confirmed && sess.datums.side.confirmed;
@@ -200,7 +275,10 @@ export function mount(root, ctx) {
   }
 
   renderPanel();
-  load();
+  // First visit with nothing set: search automatically so the operator starts from a proposal.
+  const sess0 = s();
+  const fresh = sess0.registration && !sess0.datums.floor && !sess0.datums.side && !((sess0.research || {}).datum_proposals);
+  if (fresh) findAutomatically(true); else load();
   return {
     flush: true,
     redraw: () => viewer.draw(),

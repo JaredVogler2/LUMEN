@@ -65,9 +65,9 @@ export function provenanceChip(p) {
 // Load the picture and overlay of one frame into a viewer.
 //   view = 'image'  -> the photo, overlay in frame pixels
 //   view = 'rect'   -> the rectified plane view, overlay in rectified pixels
-export async function showFrame(viewer, frameId, view, { uncertainty = false, maxEdge = 2600, placards = null } = {}) {
+export async function showFrame(viewer, frameId, view, { uncertainty = false, maxEdge = 2600, placards = null, candidates = false } = {}) {
   const sid = state.session.id;
-  const q = `frame=${encodeURIComponent(frameId)}&view=${view}&uncertainty=${uncertainty ? 'true' : 'false'}${placards ? `&placards=${encodeURIComponent(placards.join(','))}` : ''}`;
+  const q = `frame=${encodeURIComponent(frameId)}&view=${view}&uncertainty=${uncertainty ? 'true' : 'false'}${placards ? `&placards=${encodeURIComponent(placards.join(','))}` : ''}${candidates ? '&candidates=true' : ''}`;
   if (view === 'rect') {
     // The picture and its overlay must come from the *same* rectification:
     // both requests name the same size and the returned specs are compared.
@@ -117,8 +117,8 @@ export function viewerShell({ label }) {
 
 export function zoomButtons(viewer) {
   return [
-    h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Zoom in', onclick: () => { const r = viewer.host.getBoundingClientRect(); viewer.zoomAt(r.width / 2, r.height / 2, 1.6); } }, icon('plus')),
-    h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Zoom out', onclick: () => { const r = viewer.host.getBoundingClientRect(); viewer.zoomAt(r.width / 2, r.height / 2, 1 / 1.6); } }, icon('minus')),
+    h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Zoom in', onclick: () => { const r = viewer._box(); viewer.zoomAt(r.width / 2, r.height / 2, 1.6); } }, icon('plus')),
+    h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Zoom out', onclick: () => { const r = viewer._box(); viewer.zoomAt(r.width / 2, r.height / 2, 1 / 1.6); } }, icon('minus')),
     h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Fit to screen', onclick: () => viewer.fit() }, icon('zoomfit')),
   ];
 }

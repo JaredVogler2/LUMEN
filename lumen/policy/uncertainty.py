@@ -64,9 +64,13 @@ class DatumEvidence:
     offset_mm: float = 0.0
     positive: str = "toward_panel"
     manual: bool = False
+    #: True when ``mid``/``n``/``length``/``cov`` are already in plane
+    #: millimetres (a datum derived from a 3-D model, e.g. the tangent line of
+    #: a fitted rounded edge) instead of pixels of ``frame_id``.
+    in_plane: bool = False
 
     def points(self, dd: float = 0.0, dth: float = 0.0) -> np.ndarray:
-        """Two points of the (perturbed) image line."""
+        """Two points of the (perturbed) line (pixels, or plane mm if ``in_plane``)."""
         c, s = np.cos(dth), np.sin(dth)
         n = np.array([c * self.n[0] - s * self.n[1], s * self.n[0] + c * self.n[1]])
         t = np.array([n[1], -n[0]])
@@ -76,7 +80,8 @@ class DatumEvidence:
 
     def plane_line(self, Hinv: np.ndarray, interior: np.ndarray, pts: np.ndarray | None = None) -> Line2D:
         """Datum line in the plane (configured offset applied)."""
-        q = apply_h(Hinv, self.points() if pts is None else pts)
+        p = self.points() if pts is None else pts
+        q = p if self.in_plane else apply_h(Hinv, p)
         line = Line2D.from_points(q[0], q[1]).oriented_towards(interior)
         if self.offset_mm:
             sign = 1.0 if self.positive == "toward_panel" else -1.0
@@ -376,19 +381,26 @@ def evaluate_uncertainty(ctx: EvalContext, cfg: UncertaintyConfig | None = None)
     if n_meas:
         add("tag size: per-tag measurement", np.sqrt(indep), "normal", "independent caliper repeatability of each measured tag")
 
-    # (3) residual edge bias common to all tags of a capture
-    b = cfg.edge_bias_bound_px if ctx.all_bias_corrected else cfg.edge_bias_bound_uncorrected_px
+    # (3) residual edge bias, common in sign to all tags of a capture.  Each
+    # observation gets the bound that matches how it was measured: small when
+    # its bias was estimated from the tag interior, large when the tag was too
+    # small in the image for that.
+    def bound(t: TagObs) -> float:
+        return cfg.edge_bias_bound_px if t.bias_corrected else cfg.edge_bias_bound_uncorrected_px
 
     def shift(v: PlanarView) -> PlanarView:
-        return PlanarView(v.frame_id, [replace(t, corners=_scale_quad(t.corners, b)) for t in v.tags], v.camera, v.mode)
+        return PlanarView(v.frame_id, [replace(t, corners=_scale_quad(t.corners, bound(t))) for t in v.tags], v.camera, v.mode)
 
+    all_obs = [t for v in ctx.views for t in v.tags] + ([t for t in ext_view.tags] if ext_view is not None else [])
+    n_unc = sum(1 for t in all_obs if not t.bias_corrected)
     r = scenario([shift(v) for v in ctx.views], shift(ext_view) if ext_view is not None else None, ctx.floor, ctx.side)
     if r is not None:
         add(
             "edge localisation bias (tone curve / sharpening)",
             to_local_err(r[0]),
             "rectangular",
-            f"all tag borders shifted by {b} px" + ("" if ctx.all_bias_corrected else " (bias not estimable for at least one tag)"),
+            f"tag borders shifted by {cfg.edge_bias_bound_px} px"
+            + (f"; {n_unc} of {len(all_obs)} tag observations too small for the interior correction: {cfg.edge_bias_bound_uncorrected_px} px" if n_unc else ""),
         )
     else:
         notes.append("edge-bias scenario could not be evaluated")
@@ -407,6 +419,8 @@ def evaluate_uncertainty(ctx: EvalContext, cfg: UncertaintyConfig | None = None)
             return PlanarView(v.frame_id, [replace(t, corners=reproject(t.corners, v.frame_id)) for t in v.tags], v.camera, v.mode)
 
         def modd(d: DatumEvidence) -> DatumEvidence:
+            if d.in_plane:
+                return d
             p = reproject(d.points(), d.frame_id)
             t = p[1] - p[0]
             L = float(np.linalg.norm(t))

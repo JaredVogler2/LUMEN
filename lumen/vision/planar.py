@@ -70,10 +70,13 @@ class TagObs:
     corners: np.ndarray  # (4, 2)
     cov: np.ndarray  # (8, 8)
     size_mm: float
+    #: True when the dark-side edge shift of this observation was estimated
+    #: from the tag interior and removed (see lumen.vision.markers)
+    bias_corrected: bool = True
 
     @staticmethod
     def from_detection(d: TagDetection) -> "TagObs":
-        return TagObs(d.tag_id, np.asarray(d.corners_ideal, dtype=float), np.asarray(d.cov, dtype=float), float(d.size_mm))
+        return TagObs(d.tag_id, np.asarray(d.corners_ideal, dtype=float), np.asarray(d.cov, dtype=float), float(d.size_mm), bool(d.bias_applied))
 
 
 @dataclass
