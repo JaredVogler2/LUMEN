@@ -97,6 +97,27 @@ def test_raised_tag_is_excluded_as_off_plane(client):
     assert out["session"]["surface"]["planarity"] == "verified_multiview_after_exclusion"
     rep = client.get(f"/api/sessions/{sid}/report").json()
     assert next(g for g in rep["gates"] if g["code"] == "plane_assumption")["passed"]
+    # What is used further on describes the three tags that carry the result, not the four that were seen:
+    # the raised tag is out of the 3-D solution, and the plane and its flatness figures are those of the rest.
+    mv = reg["multiview"]
+    cop = mv["checks"]["coplanarity"]
+    assert "off_plane_tags_excluded" in mv["flags"] and "tags_not_coplanar" not in mv["flags"]
+    assert sorted(mv["tags"]) == ["20", "3", "7"] and cop["set_aside_before_this_solution"] == [11]
+    assert cop["verdict"] == "coplanar" and cop["rms_mm"] < 0.15 and abs(cop["d"]) < 0.3 and abs(cop["normal"][2]) > 0.9999
+    assert out["session"]["surface"]["out_of_plane_rms_mm"] < 0.15
+    left_out = next(g for g in rep["gates"] if g["code"] == "tags_left_out")
+    assert left_out["passed"] and left_out["caveat"] and "ID 11 (it is not on the plane of the other tags)" in left_out["message"]
+    # ... so the datum lines are measured from the panel face and not from a plane tilted by the shim
+    p = client.post(f"/api/sessions/{sid}/datums/propose").json()["proposals"]
+    assert set(p["applied"]) == {"floor", "side"}
+    by_id = {c["id"]: c for c in p["candidates"]}
+    for kind in ("floor", "side"):
+        c = by_id[p["applied"][kind]]
+        assert c["classification"] in ("on_plane", "unverified") and abs(c["height_mm"]) <= max(c["height_margin_mm"], 0.5), (kind, c["height_mm"], c["height_margin_mm"])
+    assert by_id[p["applied"]["side"]]["classification"] == "on_plane"
+    client.post(f"/api/sessions/{sid}/datums/confirm")
+    rep = client.get(f"/api/sessions/{sid}/report").json()
+    assert rep["status"] != "blocked" and not [g["code"] for g in rep["gates"] if not g["passed"] and g["code"].endswith("_on_plane")]
 
 
 def test_wrong_lens_profile_is_detected_from_the_tags(client):

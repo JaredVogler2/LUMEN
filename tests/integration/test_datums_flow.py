@@ -96,7 +96,8 @@ def test_floor_trim_offers_on_plane_junction_and_flags_the_proud_edge(client):
     scene = replace(flat_panel_scene(), trim=TrimSpec(height=60.0, thickness=8.0))
     cams = sweep()
     sid, reg = session(client, scene, cams)
-    p = propose(client, sid)["proposals"]
+    out = propose(client, sid)
+    p = out["proposals"]
     gxz, grot = gauge_of(reg, scene)
     cls = {}
     for c in p["candidates"]:
@@ -114,6 +115,23 @@ def test_floor_trim_offers_on_plane_junction_and_flags_the_proud_edge(client):
     best_floor = next(c for c in p["candidates"] if c["id"] == p["applied"]["floor"])
     e = scene_line_of(best_floor, reg, scene, gxz, grot)
     assert e[:, 1].mean() == pytest.approx(60.0, abs=0.3)
+    # ... but a line on the face with a raised edge running along it may be the edge of a trim.  The system
+    # cannot know which feature the record means, so it says what it sees and gives no guidance on its own word:
+    nb = out["session"]["datums"]["floor"]["depth_neighbour"]
+    assert nb["id"] == proud["id"] and nb["relation"] == "beyond"
+    assert nb["height_mm"] == pytest.approx(8.0, abs=0.6) and nb["gap_mm"] == pytest.approx(-60.0, abs=1.0)
+    assert out["session"]["datums"]["side"]["depth_neighbour"] is None
+    client.post(f"/api/sessions/{sid}/datums/confirm")
+    rep = client.get(f"/api/sessions/{sid}/report").json()
+    g = next(g for g in rep["gates"] if g["code"] == "datum_floor_no_step_beside")
+    assert rep["status"] == "research_preview" and not g["passed"] and "60 mm beyond the floor datum" in g["message"]
+    # the operator looks, and chooses that line as the feature the record means: the doubt is theirs to settle
+    r = client.post(f"/api/sessions/{sid}/datums/select", json={"kind": "floor", "candidate_id": best_floor["id"]})
+    assert r.status_code == 200 and r.json()["datum"]["depth_neighbour"] is None
+    client.post(f"/api/sessions/{sid}/datums/confirm")
+    rep = client.get(f"/api/sessions/{sid}/report").json()
+    assert not any(g["code"] == "datum_floor_no_step_beside" for g in rep["gates"])
+    assert not [g["code"] for g in rep["gates"] if not g["passed"] and g["code"].startswith("datum_")]
     # choosing the proud edge instead is possible but blocks guidance
     r = client.post(f"/api/sessions/{sid}/datums/select", json={"kind": "floor", "candidate_id": proud["id"]})
     assert r.status_code == 200 and r.json()["datum"]["on_plane_evidence"] == "off_plane"
@@ -152,6 +170,10 @@ def test_missing_floor_is_reported_with_a_capture_hint(client):
     out = propose(client, sid)
     p = out["proposals"]
     assert "floor" not in p["applied"] and any("floor" in h.lower() for h in p["hints"])
+    # the side seam is in the photos and is found; one line alone does not say which datum it is, and the hint
+    # does not pretend to know which one is missing
+    assert [c["classification"] for c in p["candidates"] if c["classification"] != "view_dependent"], "the seam is a candidate"
+    assert len(p["hints"]) == 1 and "straight line" in p["hints"][0] and "are both needed" in p["hints"][0] and "No floor line was found" not in p["hints"][0]
     assert out["session"]["local_frame"] is None
     rep = client.get(f"/api/sessions/{sid}/report").json()
     assert rep["status"] == "blocked" and not next(g for g in rep["gates"] if g["code"] == "datums_defined")["passed"]

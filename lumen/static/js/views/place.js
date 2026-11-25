@@ -6,6 +6,13 @@ import { Viewer } from '../viewer.js';
 import { showFrame, viewerShell, zoomButtons, maximizeButton, statusHero, gateList, budgetTable, targetReadout } from './common.js';
 import { startLive } from './live.js';
 
+// "Checks (1 open, 2 notes)": open = not met; notes = met, but saying what was not checked
+function checksTitle(rep) {
+  const open = rep.gates.filter((g) => !g.passed).length;
+  const notes = rep.gates.filter((g) => g.passed && g.caveat).length;
+  return `Checks (${open} open${notes ? `, ${notes} note${notes === 1 ? '' : 's'}` : ''})`;
+}
+
 export function mount(root, ctx) {
   const s = () => state.session;
   const shell = viewerShell({ label: 'Placement' });
@@ -119,7 +126,7 @@ export function mount(root, ctx) {
       h('div', { class: 'eyebrow' }, 'Target'), targetReadout(p));
     if (rep) {
       panel.append(
-        h('details', { class: 'fold', open: rep.status !== 'prototype_guidance' ? true : null }, h('summary', null, `Checks (${rep.gates.filter((g) => !g.passed).length} open)`), h('div', { class: 'body' }, gateList(rep))),
+        h('details', { class: 'fold', open: rep.status !== 'prototype_guidance' ? true : null }, h('summary', null, checksTitle(rep)), h('div', { class: 'body' }, gateList(rep))),
         h('details', { class: 'fold' }, h('summary', null, 'Uncertainty budget'), h('div', { class: 'body' }, budgetTable(rep.uncertainty))));
     }
     panel.append(

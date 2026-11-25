@@ -77,6 +77,12 @@ class Case:
     #: what a correct system does: "accurate" (an outline within its stated uncertainty, as guidance or as a
     #: preview with a reason), "not_guidance" (blocked or preview), "accurate_or_refused", ...
     expect: str = "accurate"
+    #: checks that have to be among the failed ones: the fault must be caught for its own reason, not because
+    #: some unrelated check (say, the uncertainty at this photo size) happens to withhold guidance as well
+    must_fail: tuple[str, ...] = ()
+    #: IDs of the stickers the fault is about (the one that was moved, raised or mis-sized).  A result may only
+    #: be drawn when these were set aside; the report also shows whether a sound tag was thrown out with them.
+    faulty_tags: tuple[int, ...] = ()
     note: str = ""
     seed: int = 0
 
@@ -224,20 +230,20 @@ def negative_cases(seed: int = HELD_OUT_SEED + 1, size: tuple[int, int] = (1600,
     tags, cams = base()
     sc = flat_panel_scene(tags=tags)
     moved = flat_panel_scene(tags=tuple(replace(t, center=(t.center[0] + 8.0, t.center[1] - 3.0)) if k == 1 else t for k, t in enumerate(tags)))
-    out.append(Case("moved-tag", "moved_tag", sc, cams, declared={t.tag_id: 50.0 for t in tags}, scene_at={3: moved, 4: moved}, expect="accurate_or_refused", seed=2002, note="one tag re-stuck 8.5 mm away before the last two photos"))
+    out.append(Case("moved-tag", "moved_tag", sc, cams, declared={t.tag_id: 50.0 for t in tags}, scene_at={3: moved, 4: moved}, expect="accurate_or_refused", faulty_tags=(tags[1].tag_id,), seed=2002, note="one tag re-stuck 8.5 mm away before the last two photos"))
 
     tags, cams = base()
-    out.append(Case("one-size-wrong", "wrong_size_one", flat_panel_scene(tags=tags), cams, declared={t.tag_id: (52.0 if k == 0 else 50.0) for k, t in enumerate(tags)}, expect="accurate_or_refused", seed=2003, note="one tag declared 52 mm (true 50)"))
+    out.append(Case("one-size-wrong", "wrong_size_one", flat_panel_scene(tags=tags), cams, declared={t.tag_id: (52.0 if k == 0 else 50.0) for k, t in enumerate(tags)}, expect="accurate_or_refused", faulty_tags=(tags[0].tag_id,), seed=2003, note="one tag declared 52 mm (true 50)"))
 
     tags, cams = base()
     out.append(Case("all-sizes-wrong", "wrong_size_all", flat_panel_scene(tags=tags), cams, declared={t.tag_id: 52.0 for t in tags}, expect="undetectable_without_reference", seed=2004, note="every tag declared 52 mm (true 50): a common scale error that no tag-to-tag check can see"))
 
     tags, cams = base()
-    out.append(Case("undeclared-tags", "nominal_sizes", flat_panel_scene(tags=tags), cams, declared={}, expect="not_guidance", seed=2005, note="no measured sizes entered: nominal 50 mm only"))
+    out.append(Case("undeclared-tags", "nominal_sizes", flat_panel_scene(tags=tags), cams, declared={}, expect="not_guidance", must_fail=("tag_sizes_measured",), seed=2005, note="no measured sizes entered: nominal 50 mm only"))
 
     tags, cams = base()
     sym = flat_panel_scene(tags=tags, extra_seams=(Seam((-48.0, 0.0), (-48.0, 1100.0), width=2.0, darkness=0.7),))
-    out.append(Case("twin-seams", "ambiguous_side", sym, cams, declared={t.tag_id: 50.0 for t in tags}, expect="not_guidance", seed=2006, note="a second identical seam 48 mm beside the datum seam"))
+    out.append(Case("twin-seams", "ambiguous_side", sym, cams, declared={t.tag_id: 50.0 for t in tags}, expect="not_guidance", must_fail=("datum_side_unambiguous",), seed=2006, note="a second identical seam 48 mm beside the datum seam"))
 
     tags = _layout(rng, 4, TARGET_101, z_range=(330.0, 700.0))
     cams_hi = _stations(rng, 5, (265.0, 0.0, 560.0), size, (0.05, -0.08, 0.0, 0.0, 0.0), 0.9, (0.0006, 0.004), 0.1)
@@ -247,11 +253,11 @@ def negative_cases(seed: int = HELD_OUT_SEED + 1, size: tuple[int, int] = (1600,
     tags_c = _layout(rng, 4, TARGET_201, x_range=(60.0, 520.0))
     cams_c = _stations(rng, 7, (230.0, 0.0, 300.0), size, (0.0, 0.0, 0.0, 0.0, 0.0), 0.9, (0.0006, 0.004), 0.05)
     out.append(Case("leaning-edge", "nonorthogonal_axes", curved_panel_scene(taper_deg=5.0, tags=tags_c), cams_c, operation="DEMO-CURVE-01", placard="PLC-DEMO-201", target=TARGET_201,
-                    declared={t.tag_id: 50.0 for t in tags_c}, expect="not_guidance", seed=2008, note="side edge leans 5 degrees: axes are not perpendicular"))
+                    declared={t.tag_id: 50.0 for t in tags_c}, expect="not_guidance", must_fail=("local_frame_valid",), seed=2008, note="side edge leans 5 degrees: axes are not perpendicular"))
 
     tags, cams = base()
     lifted = flat_panel_scene(tags=tuple(replace(t, lift=8.0) if k == 2 else t for k, t in enumerate(tags)))
-    out.append(Case("raised-tag", "off_plane_tag", lifted, cams, declared={t.tag_id: 50.0 for t in tags}, expect="accurate_or_refused", seed=2009, note="one tag sits on an 8 mm shim"))
+    out.append(Case("raised-tag", "off_plane_tag", lifted, cams, declared={t.tag_id: 50.0 for t in tags}, expect="accurate_or_refused", faulty_tags=(tags[2].tag_id,), seed=2009, note="one tag sits on an 8 mm shim"))
 
     tags, cams = base()
     faint = flat_panel_scene(tags=tags)
@@ -260,7 +266,8 @@ def negative_cases(seed: int = HELD_OUT_SEED + 1, size: tuple[int, int] = (1600,
 
     tags, cams = base()
     trim = replace(flat_panel_scene(tags=tags), trim=TrimSpec(height=60.0, thickness=8.0))
-    out.append(Case("proud-trim", "off_plane_floor_edge", trim, cams, declared={t.tag_id: 50.0 for t in tags}, expect="not_at_true_floor", seed=2011, note="an 8 mm proud trim hides the floor line; its lower edge is not on the panel face"))
+    out.append(Case("proud-trim", "off_plane_floor_edge", trim, cams, declared={t.tag_id: 50.0 for t in tags}, expect="not_guidance", must_fail=("datum_floor_no_step_beside",), seed=2011,
+                    note="an 8 mm proud trim hides the floor line; the trim's upper edge lies on the panel face and looks like a floor line"))
 
     tags, cams = base()
     dup = flat_panel_scene(tags=tuple(tags) + (TagSticker(tags[0].tag_id, (610.0, 620.0), 30.0),))
@@ -271,7 +278,7 @@ def negative_cases(seed: int = HELD_OUT_SEED + 1, size: tuple[int, int] = (1600,
     out.append(Case("flash-glare", "glare", glare, cams, declared={t.tag_id: 50.0 for t in tags}, expect="accurate_or_refused", seed=2013, note="glossy tags lit by a strong flash"))
 
     tags, cams = base()
-    out.append(Case("all-sizes-wrong-ruler", "wrong_size_all_with_reference", flat_panel_scene(tags=tags), cams, declared={t.tag_id: 52.0 for t in tags}, reference=True, expect="not_guidance", seed=2014,
+    out.append(Case("all-sizes-wrong-ruler", "wrong_size_all_with_reference", flat_panel_scene(tags=tags), cams, declared={t.tag_id: 52.0 for t in tags}, reference=True, expect="not_guidance", must_fail=("independent_length_check",), seed=2014,
                     note="every tag declared 52 mm (true 50), and the operator measures one distance between two tags with a rule"))
 
     tags, cams = base()
@@ -279,11 +286,11 @@ def negative_cases(seed: int = HELD_OUT_SEED + 1, size: tuple[int, int] = (1600,
                     note="correct sizes and a rule measurement that agrees (control for the case above)"))
 
     tags, cams = base()
-    out.append(Case("curved-target", "off_plane_target", flat_panel_scene(tags=tags), cams, operation=CURVED_TARGET_ID, revision="A", declared={t.tag_id: 50.0 for t in tags}, expect="not_guidance", seed=2016,
+    out.append(Case("curved-target", "off_plane_target", flat_panel_scene(tags=tags), cams, operation=CURVED_TARGET_ID, revision="A", declared={t.tag_id: 50.0 for t in tags}, expect="not_guidance", must_fail=("surface_supported",), seed=2016,
                     note="the record says the placard sits on a curved surface: outside the planar method"))
 
     tags, cams = base()
-    out.append(Case("draft-record", "unreleased_record", flat_panel_scene(tags=tags), cams, operation=DRAFT_ID, revision="A", declared={t.tag_id: 50.0 for t in tags}, expect="not_guidance", seed=2017,
+    out.append(Case("draft-record", "unreleased_record", flat_panel_scene(tags=tags), cams, operation=DRAFT_ID, revision="A", declared={t.tag_id: 50.0 for t in tags}, expect="not_guidance", must_fail=("operation_record_released",), seed=2017,
                     note="complete record that was never released"))
     return out
 
@@ -323,7 +330,7 @@ def run_case(case: Case, mode: str, library: OperationLibrary, shoot: Callable[[
     ``profile_error`` (fx, fy, cx, cy, k1, k2) is added to the attached lens
     profile, so that the profile differs from the camera that took the photos.
     """
-    rec: dict[str, Any] = {"case": case.name, "kind": case.kind, "mode": mode, "expect": case.expect, "status": None, "error": None, "note": case.note}
+    rec: dict[str, Any] = {"case": case.name, "kind": case.kind, "mode": mode, "expect": case.expect, "must_fail": list(case.must_fail), "faulty_tags": list(case.faulty_tags), "status": None, "error": None, "note": case.note}
     svc = _service(library)
     t = {"detect": 0.0, "register": 0.0, "datums": 0.0, "overlay": 0.0}
     try:
@@ -447,14 +454,17 @@ def judge(rec: dict[str, Any]) -> bool:
         # preview depends on the uncertainty against the tolerance and is reported separately.
         return st in ("prototype_guidance", "validated", "research_preview") and drawn_ok
     if exp == "not_guidance":
-        return st in ("blocked", "research_preview", "refused")
+        # a refusal has no list of checks; otherwise the check that belongs to this fault has to be among the failed ones
+        named = st == "refused" or set(rec.get("must_fail") or ()) <= set(rec.get("failed_gates") or ())
+        return st in ("blocked", "research_preview", "refused") and named
     if exp == "accurate_or_refused":
-        return st in ("blocked", "refused") or (err is not None and drawn_ok) or (st == "research_preview" and err is None)
+        if st in ("blocked", "refused"):
+            return True  # refusing is always safe; whether the right tag was identified is shown beside it
+        # a result that is drawn must not rest on the tag the fault is about
+        aside = set(rec.get("faulty_tags") or ()) <= set(rec.get("excluded_tags") or ())
+        return aside and ((err is not None and drawn_ok) or (st == "research_preview" and err is None))
     if exp == "undetectable_without_reference":
         return True  # recorded, not judged: see the report's note
-    if exp == "not_at_true_floor":
-        # the hidden floor line must not be invented; any drawn target is relative to another datum and is not judged against z = 0
-        return st != "failure"
     return False
 
 
@@ -564,12 +574,23 @@ def to_markdown(records: list[dict[str, Any]], summary: dict[str, Any], coverage
     faults = [r for r in records if r["kind"] != "nominal"]
     if faults:
         L += ["", "## Fault cases", "", "A fault case is handled correctly when the system refuses or withholds guidance, or — where the fault can be",
-              "isolated (a moved, raised or mis-sized single tag) — excludes it and still gives an accurate result.", "",
-              "| case | fault | mode | status | failed checks | corner error mm | expanded mm | handled |", "|---|---|---|---|---|---|---|---|"]
+              "isolated (a moved, raised or mis-sized single tag) — excludes it and still gives an accurate result. Where a",
+              "check is printed in bold, the case only counts as handled if that check is the one that fails: at this photo",
+              "size the uncertainty alone often withholds guidance, and that would say nothing about the fault. Errors are",
+              "measured against the target as the scene's true floor and side lines define it.", "",
+              "\"Set aside\" lists the tags the solver left out; where the fault is about one tag, it is marked ✓ when exactly",
+              "that tag was left out and ✗ when the faulty tag was kept or a sound one was thrown out with it.", "",
+              "| case | fault | mode | status | set aside | failed checks | corner error mm | expanded mm | handled |", "|---|---|---|---|---|---|---|---|---|"]
         for r in faults:
-            gates = ", ".join((r.get("failed_gates") or [])[:4]) or (r.get("error") or "")
+            aside = ", ".join(str(t) for t in (r.get("excluded_tags") or []))
+            if r.get("faulty_tags"):
+                aside = (aside or "none") + (" ✓" if sorted(r.get("excluded_tags") or []) == sorted(r["faulty_tags"]) else " ✗")
+            need = list(r.get("must_fail") or [])
+            got = r.get("failed_gates") or []
+            shown = [f"**{g}**" for g in need if g in got] + [g for g in got if g not in need][: max(0, 4 - len(need))]
+            gates = ", ".join(shown) or (r.get("error") or "")
             handled = "recorded only" if r["expect"] in ("undetectable_without_reference",) else ("yes" if r["outcome_ok"] else "**NO**")
-            L.append(f"| {r['case']} | {r['note']} | {r['mode']} | {r['status']} | {gates} | {f2(r.get('corner_error_mm'))} | {f2(r.get('expanded_mm'))} | {handled} |")
+            L.append(f"| {r['case']} | {r['note']} | {r['mode']} | {r['status']} | {aside} | {gates} | {f2(r.get('corner_error_mm'))} | {f2(r.get('expanded_mm'))} | {handled} |")
         n = summary["negative"]
         known = [r["case"] for r in faults if r.get("false_acceptance") and r["expect"] == "undetectable_without_reference"]
         unexpected = n["false_acceptance"] - len(known)

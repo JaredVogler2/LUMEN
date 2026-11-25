@@ -34,6 +34,7 @@ from ..geometry.optimize import lm_solve
 from .imaging import SRGB_TO_LINEAR_LUT
 
 _SQRT_2PI = float(np.sqrt(2.0 * np.pi))
+_LOGSIG_MIN, _LOGSIG_MAX = float(np.log(0.15)), float(np.log(8.0))
 
 
 @dataclass
@@ -56,6 +57,9 @@ class EdgeFit:
     var_theta: float = 0.0
     cov_d_theta: float = 0.0
     saturated_frac: float = 0.0
+    #: half the width of a line that the photo resolves into its two edges (px); 0 for an edge and for a line
+    #: thinner than that.  ``mid`` is then on the centre line between the two edges.
+    bar_half_px: float = 0.0
 
     @property
     def contrast(self) -> float:
@@ -229,8 +233,9 @@ def fit_edge(
         def fn(x: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
             d = x[ix["d"]]
             th = x[ix["theta"]] if free_theta else 0.0
-            sig = float(np.exp(x[ix["logsig"]])) if free_sigma else float(sigma0)
-            sig = min(max(sig, 0.15), 8.0)
+            # the blur stays within 0.15 .. 8 px; limiting the logarithm (not the result) keeps a wild trial step
+            # of the solver from overflowing the exponential
+            sig = float(np.exp(min(max(x[ix["logsig"]], _LOGSIG_MIN), _LOGSIG_MAX))) if free_sigma else min(max(float(sigma0), 0.15), 8.0)
             B = x[ix["b0"]] + (x[ix["b1"]] * a if level_slopes else 0.0)
             Wt = x[ix["w0"]] + (x[ix["w1"]] * a if level_slopes else 0.0)
             # small-angle rotation of the normal about c_cur
@@ -256,8 +261,7 @@ def fit_edge(
         sol = lm_solve(fn, x0, max_iter=25, robust_k=2.5, robust_rounds=2)
         d_fit = float(sol.x[ix["d"]])
         th_fit = float(sol.x[ix["theta"]]) if free_theta else 0.0
-        sig_fit = float(np.exp(sol.x[ix["logsig"]])) if free_sigma else float(sigma0)
-        sig_fit = min(max(sig_fit, 0.15), 8.0)
+        sig_fit = float(np.exp(min(max(sol.x[ix["logsig"]], _LOGSIG_MIN), _LOGSIG_MAX))) if free_sigma else min(max(float(sigma0), 0.15), 8.0)
         if not np.isfinite(d_fit) or abs(d_fit) > half_width or abs(th_fit) > 0.35:
             return EdgeFit(False, "fit_diverged", saturated_frac=sat)
         black = float(sol.x[ix["b0"]])
@@ -436,6 +440,192 @@ def fit_bar(
     )
 
 
+def fit_trench(
+    gray: np.ndarray,
+    p0: np.ndarray,
+    p1: np.ndarray,
+    *,
+    half_width: float,
+    h0: float,
+    trim: float = 0.0,
+    camera: CameraModel | None = None,
+    min_contrast: float = 0.02,
+) -> EdgeFit:
+    """Fit a line that the photo resolves: two opposite edges a few pixels apart, the same level outside both.
+
+    A seam 2 mm wide is a thin line in a small photo and a trench seven pixels wide in a full-resolution one.
+    Model: ``I = B(a) + A * [Phi((s + h) / sigma) - Phi((s - h) / sigma)]``, a box of half-width ``h`` blurred
+    by ``sigma``, on a base level that is linear along the line.  ``p0 -> p1`` is the seed of the centre line
+    and ``h0`` the seed of the half-width.  The fit is accepted only when the two edges are resolved
+    (``h >= 1.2 sigma``; a thinner line is the business of :func:`fit_bar`) and both lie inside the band.
+
+    In the returned :class:`EdgeFit`, ``mid`` is on the centre line, ``bar_half_px`` is ``h`` and ``sigma_blur``
+    the width of the Gaussian with the same second moment, ``sqrt(sigma^2 + h^2 / 3)``.
+    """
+    p0 = np.asarray(p0, dtype=float)
+    p1 = np.asarray(p1, dtype=float)
+    seg = p1 - p0
+    L_full = float(np.linalg.norm(seg))
+    if L_full < 6.0:
+        return EdgeFit(False, "segment_too_short")
+    t0 = seg / L_full
+    n0 = np.array([-t0[1], t0[0]])
+    c = 0.5 * (p0 + p1)
+    half_len = 0.5 * L_full - trim
+    band = _band_pixels(gray, camera, c, t0, n0, half_len, half_width)
+    if band is None:
+        return EdgeFit(False, "outside_image")
+    xy, lin, codes = band
+    rel = xy - c
+    s0 = rel @ n0
+    a_all = rel @ t0
+    m = (np.abs(s0) <= half_width) & (np.abs(a_all) <= half_len)
+    if int(m.sum()) < 40:
+        return EdgeFit(False, "too_few_pixels")
+    rel = rel[m]
+    s0 = s0[m]
+    I = lin[m].astype(np.float64)
+    a = a_all[m] / max(half_len, 1e-9) * 0.5
+    sat = float(np.mean(codes[m] >= 254))
+    outer = np.abs(s0) > h0 + 2.0
+    inner = np.abs(s0) < max(h0 - 1.5, 0.6)
+    if int(outer.sum()) < 10 or int(inner.sum()) < 5:
+        return EdgeFit(False, "too_few_pixels", saturated_frac=sat)
+    base = float(np.median(I[outer]))
+    amp0 = float(np.median(I[inner])) - base
+    if abs(amp0) < min_contrast:
+        return EdgeFit(False, "low_contrast", saturated_frac=sat)
+    s_theta = -n0[1] * rel[:, 0] + n0[0] * rel[:, 1]
+    h_max = max(half_width - 1.0, 1.0)
+
+    def fn(x: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        d, th, lh, ls, b0, b1, amp = x
+        h = float(np.clip(np.exp(min(lh, 5.0)), 0.5, h_max))
+        sg = float(np.clip(np.exp(min(max(ls, -3.0), 3.0)), 0.3, 4.0))
+        s = s0 + th * s_theta - d
+        u1 = (s + h) / sg
+        u2 = (s - h) / sg
+        f1 = np.exp(-0.5 * u1 * u1) / _SQRT_2PI
+        f2 = np.exp(-0.5 * u2 * u2) / _SQRT_2PI
+        P = ndtr(u1) - ndtr(u2)
+        dP_ds = (f1 - f2) / sg
+        model = b0 + b1 * a + amp * P
+        J = np.empty((I.size, 7))
+        J[:, 0] = -amp * dP_ds
+        J[:, 1] = amp * dP_ds * s_theta
+        J[:, 2] = amp * (f1 + f2) / sg * h
+        J[:, 3] = -amp * (u1 * f1 - u2 * f2)
+        J[:, 4] = 1.0
+        J[:, 5] = a
+        J[:, 6] = P
+        return model - I, J
+
+    x0 = np.array([0.0, 0.0, np.log(max(h0, 0.6)), 0.0, base, 0.0, amp0])
+    sol = lm_solve(fn, x0, max_iter=40, robust_k=2.5, robust_rounds=2)
+    d, th, lh, ls, b0, _b1, amp = sol.x
+    h = float(np.clip(np.exp(min(lh, 5.0)), 0.5, h_max))
+    sg = float(np.clip(np.exp(min(max(ls, -3.0), 3.0)), 0.3, 4.0))
+    if not np.isfinite(d) or abs(d) > half_width or abs(th) > 0.35 or abs(amp) < min_contrast:
+        return EdgeFit(False, "fit_diverged", saturated_frac=sat)
+    if h < 1.2 * sg:
+        return EdgeFit(False, "not_resolved", saturated_frac=sat)
+    if abs(d) + h + 2.0 * sg > half_width:
+        return EdgeFit(False, "edges_outside_band", saturated_frac=sat)
+    cov = sol.covariance()
+    cs, sn = np.cos(th), np.sin(th)
+    n_new = np.array([cs * n0[0] - sn * n0[1], sn * n0[0] + cs * n0[1]])
+    return EdgeFit(
+        ok=True,
+        n=n_new,
+        mid=c + d * n_new,
+        length=2.0 * half_len,
+        sigma_blur=float(np.sqrt(sg * sg + h * h / 3.0)),
+        black=float(min(b0, b0 + amp)),
+        white=float(max(b0, b0 + amp)),
+        rms=float(np.sqrt(np.mean(sol.residuals**2))),
+        n_pix=int(I.size),
+        inlier_frac=float(np.mean(sol.weights > 0.999)),
+        var_d=float(cov[0, 0]),
+        var_theta=float(cov[1, 1]),
+        cov_d_theta=float(cov[0, 1]),
+        saturated_frac=sat,
+        bar_half_px=h,
+    )
+
+
+def _wide_line(gray: np.ndarray, camera: CameraModel | None, step: EdgeFit, max_bar_px: float, trim: float) -> EdgeFit | None:
+    """The resolved line of which the fitted edge ``step`` is one flank, if it is one.
+
+    Looked for across the edge, up to ``max_bar_px`` away on either side: a second edge of the opposite
+    direction and of comparable strength, with the same level outside both.  Nothing of the kind: ``None``
+    (an edge between two different surfaces has different levels on its two sides and stays an edge).
+    """
+    assert step.mid is not None and step.n is not None
+    n, t = step.n, step.t  # n points from the dark side of the edge to its bright side
+    half_len = 0.5 * step.length
+    hw = max_bar_px + 6.0
+    band = _band_pixels(gray, camera, step.mid, t, n, half_len, hw)
+    if band is None:
+        return None
+    xy, lin, _codes = band
+    rel = xy - step.mid
+    keep = np.abs(rel @ t) <= half_len
+    sdist = (rel @ n)[keep]
+    I = lin[keep].astype(np.float64)
+    nb = int(2 * hw) + 1
+    edges = np.linspace(-hw, hw, nb + 1)
+    centers = 0.5 * (edges[:-1] + edges[1:])
+    idx = np.digitize(sdist, edges) - 1
+    ok = (idx >= 0) & (idx < nb)
+    cnt = np.bincount(idx[ok], minlength=nb)
+    if not np.any(cnt > 0):
+        return None
+    prof = np.bincount(idx[ok], weights=I[ok], minlength=nb) / np.maximum(cnt, 1)
+    valid = cnt > 0.25 * np.median(cnt[cnt > 0])
+    g = np.zeros(nb)
+    g[1:-1] = (prof[2:] - prof[:-2]) * 0.5
+    g[~valid] = 0.0
+    k0 = int(np.argmin(np.abs(centers)))
+    g0 = float(np.max(np.abs(g[max(k0 - 1, 0) : k0 + 2])))
+    if g0 <= 0.0:
+        return None
+
+    def level(lo: float, hi: float) -> float | None:
+        sel = valid & (centers >= lo) & (centers <= hi)
+        return float(np.median(prof[sel])) if int(sel.sum()) >= 2 else None
+
+    best: tuple[float, float] | None = None  # (signed distance of the second edge, its strength)
+    for k in range(2, nb - 2):
+        sep = float(centers[k])
+        if not (4.0 <= abs(sep) <= max_bar_px) or not valid[k]:
+            continue
+        # the first edge rises along n; the second one must fall, be a local extremum and be of comparable strength
+        if g[k] >= 0.0 or -g[k] < 0.5 * g0 or -g[k] < -g[k - 1] or -g[k] < -g[k + 1]:
+            continue
+        side = 1.0 if sep > 0 else -1.0
+        a_in, b_in = sorted((side * 1.5, sep - side * 1.5))
+        inner = level(a_in, b_in) if b_in - a_in >= 1.0 else level(min(0.0, sep), max(0.0, sep))
+        out_near = level(*sorted((-side * 1.5, -side * 5.0)))
+        out_far = level(*sorted((sep + side * 1.5, sep + side * 5.0)))
+        if inner is None or out_near is None or out_far is None:
+            continue
+        depth = 0.5 * (out_near + out_far) - inner
+        if abs(depth) < 0.02 or abs(out_near - out_far) > 0.35 * abs(depth):
+            continue
+        if best is None or abs(sep) < abs(best[0]):
+            best = (sep, float(-g[k]))
+    if best is None:
+        return None
+    sep = best[0]
+    h0 = 0.5 * abs(sep)
+    c = step.mid + 0.5 * sep * n
+    q0, q1 = c - 0.5 * step.length * t, c + 0.5 * step.length * t
+    fit = fit_trench(gray, q0, q1, half_width=min(h0 + 5.0, hw), h0=h0, trim=trim, camera=camera, min_contrast=0.015)
+    if not fit.ok or fit.inlier_frac < 0.6 or fit.rms > max(1.6 * step.rms, 0.004):
+        return None
+    return fit
+
+
 @dataclass
 class SnapResult:
     ok: bool
@@ -448,6 +638,19 @@ class SnapResult:
     #: strength of the best feature relative to the second best in the search band
     distinctness: float = 0.0
     n_candidates: int = 0
+    #: the model that was not chosen, when both fitted ("step" for a chosen "bar" and the reverse).  Which of
+    #: the two wins can differ between photos of the same feature, and a model that wins over the whole length
+    #: need not hold piece by piece: callers that compare or re-check a feature can ask for the other one.
+    other_kind: str = ""
+    other: EdgeFit | None = None
+
+    def as_kind(self, kind: str) -> "SnapResult | None":
+        """This result described by the model ``kind``; ``None`` when that model did not fit."""
+        if self.kind == kind:
+            return self
+        if self.other is not None and self.other_kind == kind:
+            return SnapResult(self.ok, self.reason, kind, self.other, self.shift_px, self.tilt_deg, self.distinctness, self.n_candidates, self.kind, self.fit)
+        return None
 
 
 def snap_line(
@@ -460,6 +663,7 @@ def snap_line(
     max_tilt_deg: float = 4.0,
     fit_half_width: float = 5.0,
     trim: float = 2.0,
+    max_bar_px: float = 0.0,
 ) -> SnapResult:
     """Refine an operator-drawn line onto the nearest straight image feature.
 
@@ -469,6 +673,11 @@ def snap_line(
     is returned.  ``distinctness`` below ~1.5 means a second feature of
     similar strength lies inside the search band — the caller must then treat
     the snap as ambiguous and ask the operator.
+
+    ``max_bar_px`` (0 = off): a seam that the photo resolves is two edges, and the search above lands on one of
+    them.  When the edge has a partner within this many pixels (opposite direction, same level outside), the two
+    are fitted together as one line and its centre is returned as a ``"bar"`` with ``fit.bar_half_px`` set; the
+    single edge stays available as ``other``.
     """
     p0 = np.asarray(p0, dtype=float)
     p1 = np.asarray(p1, dtype=float)
@@ -540,19 +749,25 @@ def snap_line(
     bar = fit_bar(gray, q0, q1, half_width=fit_half_width, trim=trim, camera=camera, min_contrast=0.015)
     choice: EdgeFit | None = None
     kind = ""
+    other: EdgeFit | None = None
+    other_kind = ""
     if step.ok and bar.ok:
         # a bar explains a thin line with both flanks at the same level; prefer
         # it only when it fits clearly better than a step
         if bar.rms < 0.8 * step.rms:
-            choice, kind = bar, "bar"
+            choice, kind, other, other_kind = bar, "bar", step, "step"
         else:
-            choice, kind = step, "step"
+            choice, kind, other, other_kind = step, "step", bar, "bar"
     elif step.ok:
         choice, kind = step, "step"
     elif bar.ok:
         choice, kind = bar, "bar"
     if choice is None or choice.mid is None or choice.n is None:
         return SnapResult(False, "fit_failed")
+    if kind == "step" and max_bar_px >= 4.0:
+        wide = _wide_line(gray, camera, choice, max_bar_px, trim)
+        if wide is not None:
+            choice, kind, other, other_kind = wide, "bar", choice, "step"
     shift = float((choice.mid - c) @ n0)
     # Distinctness: gradient strength of the chosen feature against the
     # strongest transition elsewhere in the search band.  The chosen feature's
@@ -566,4 +781,6 @@ def snap_line(
     rest = np.where(own, 0.0, sc)
     n_cand = 1 + int(np.sum((rest[1:-1] > rest[:-2]) & (rest[1:-1] >= rest[2:]) & (rest[1:-1] > 0.5 * first)))
     tilt_deg = float(np.degrees(np.arcsin(np.clip(choice.t[0] * t0[1] - choice.t[1] * t0[0], -1, 1))))
-    return SnapResult(True, "", kind, choice, shift, tilt_deg, float(distinct), n_cand)
+    if other is not None and (other.mid is None or other.n is None):
+        other, other_kind = None, ""
+    return SnapResult(True, "", kind, choice, shift, tilt_deg, float(distinct), n_cand, other_kind, other)

@@ -25,7 +25,9 @@ invented panel and runs the real measurement on them. Every screen says
 ## The seven steps
 
 The row of numbered steps at the top shows where you are. A step opens when
-the ones before it have what it needs.
+the ones before it have what it needs. The pictures below are screenshots of
+the automated browser tests on a phone-sized window; everything in them is
+computer-generated.
 
 ### 1. Identify
 
@@ -35,6 +37,8 @@ record only when the code matches exactly one. Read the datum descriptions on
 this screen: they tell you which line is the floor datum and which is the side
 datum. If the record is marked *incomplete* or *draft* you can look at a
 preview but not get guidance.
+
+<img src="screenshots/identify.png" width="250" alt="Identify step: operation list and scan button">
 
 ### 2. Markers
 
@@ -48,6 +52,8 @@ Measure the **black square** of each tag with the caliper (the picture on the
 screen shows which edge) and enter the value next to its ID. Do not enter the
 size of the sticker or the number on the packaging. Tags without a measured
 size keep the result at "research preview".
+
+<img src="screenshots/markers.png" width="250" alt="Markers step: measured edge of each tag">
 
 ### 3. Capture
 
@@ -65,6 +71,8 @@ Press **Open camera**. Hold the phone 50 to 90 cm from the panel.
 Then press **Analyse**. Do not touch the tags between photos. If a tag was
 moved, start the capture again.
 
+<img src="screenshots/camera_live.png" width="250" alt="Camera with the coach line">
+
 ### 4. Datums
 
 LUMEN proposes the floor line and the side line and shows how sure it is.
@@ -72,7 +80,18 @@ Zoom in and check that each line lies on the feature the record names. If a
 line is wrong, choose its drawing tool and drag along the correct edge; with
 "snap" on, the line is fitted to the edge under it. Press **Confirm datums**.
 
-If two similar edges are close together LUMEN asks instead of choosing.
+If two similar edges are close together LUMEN asks instead of choosing. It
+also asks ("Is this the right line?") when a raised or recessed edge runs
+along the line it found, as at the top of a kick strip: the line may then be
+the edge of that part and not the feature the record means. Tap **Choose
+detected line** and select the right one yourself; until then the result
+stays a preview.
+
+<img src="screenshots/datums_trim_photo.png" width="250" alt="Datums step: the two lines on the photo"> <img src="screenshots/datums_trim_question.png" width="250" alt="Datums step: the question about a raised edge beside the floor line">
+
+A seam or joint is measured at its centre line, in small photos and in
+full-resolution ones where both of its edges can be seen; the datum card then
+says how wide the seam is.
 
 Each datum shows what is known about it lying on the panel face:
 "verified on the face in 3-D" (the photos show it), "declared on the face
@@ -96,6 +115,8 @@ photo can show it. Press *Show the two corners*, measure that distance on the
 panel with a steel rule, type it in and press **Check**. If it contradicts the
 tags, no target is drawn until the sizes are corrected.
 
+<img src="screenshots/rectified_scale_check.png" width="250" alt="Rectified view with the independent scale check">
+
 ### 6. Place
 
 The outline of the placard on the photo, with its distances from the datums.
@@ -110,6 +131,13 @@ The coloured banner says what you are looking at:
 The stated uncertainty (± mm) is a property of this capture. It is compared
 with the tolerance in the record; LUMEN never supplies a tolerance of its own.
 
+The list of checks shows what stands behind the banner. A tick passed, a
+warning or stop sign did not, and an "i" passed but tells you what was not
+checked (for instance: no rule measurement was made, so the scale rests on
+the tag sizes you entered).
+
+<img src="screenshots/place_trim_checks.png" width="250" alt="List of checks with one open check and one note">
+
 **Live guidance** shows the outline on the moving camera picture. The outline
 is drawn only for a frame that was just measured; when tracking is lost it
 disappears and the screen says why. A still photo is always labelled
@@ -117,6 +145,8 @@ disappears and the screen says why. A still photo is always labelled
 
 Several placards on the same panel: choose the next one with the placard
 buttons in this step. The photos and datums stay valid.
+
+<img src="screenshots/place_portrait.png" width="250" alt="Place step: target outline with distances and status"> <img src="screenshots/live_tracking.png" width="250" alt="Live guidance on the camera picture">
 
 ### 7. Verify
 
@@ -133,6 +163,8 @@ Check the drawn outline against the picture, then press **Confirm measured
 outline** and **Export summary**. The summary is a JSON file with the
 measurements, the checks and the software version. Photos are not in it.
 
+<img src="screenshots/verify_result.png" width="250" alt="Verify step: measured deviations">
+
 ## Lens profile (once per phone)
 
 Menu → **Settings & camera calibration**. Download the board, print it,
@@ -140,6 +172,8 @@ mount it flat, measure its squares, and take 10 to 15 photos of it as the
 screen describes. Save the profile; it stays on this phone. Attach it to a
 session from the same screen. Without a profile results stay at "research
 preview".
+
+<img src="screenshots/settings_calibration_result.png" width="250" alt="Lens profile result">
 
 Use the same camera (lens), zoom and orientation for the board photos and for
 the panel photos. A profile is not applied to photos that report another

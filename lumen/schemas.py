@@ -232,6 +232,11 @@ class DatumObservation(_Model):
     on_plane_evidence: str = "unverified"  # verified_multiview | unverified | off_plane | configured
     distinctness: float | None = None
     n_candidates: int | None = None
+    #: a fixed edge at another depth that runs alongside this line (``height_mm`` from the panel face, positive
+    #: toward the camera; ``gap_mm`` in the plane, negative beyond the line as seen from the tags).  Set only
+    #: when the line was applied automatically: such a line may be the edge of a trim or moulding and not the
+    #: feature the record means.  The operator's own choice of the line clears it.
+    depth_neighbour: dict[str, Any] | None = None
     notes: list[str] = Field(default_factory=list)
     #: the fitted image line this datum was derived from (ideal pixels of
     #: ``frame_id``): {"mid": [u, v], "n": [nx, ny], "var_d", "var_theta",
@@ -339,6 +344,8 @@ class GateResult(_Model):
     value: float | None = None
     limit: float | None = None
     suggestion: str | None = None
+    #: passed, but the message states something that was NOT checked (shown as a note, not as a tick)
+    caveat: bool = False
 
 
 class GateReport(_Model):

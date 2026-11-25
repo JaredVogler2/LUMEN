@@ -119,6 +119,8 @@ class GateInputs:
     datums_present: tuple[bool, bool] = (False, False)  # (floor, side)
     datums_confirmed: tuple[bool, bool] = (False, False)
     datum_distinctness: tuple[float | None, float | None] = (None, None)
+    #: per datum: a fixed edge at another depth beside an automatically applied line (see DatumObservation)
+    datum_depth_neighbour: tuple[dict | None, dict | None] = (None, None)
     datum_manual: tuple[bool, bool] = (False, False)
     datum_plane_evidence: tuple[str, str] = ("unverified", "unverified")
     datum_feature: tuple[str | None, str | None] = (None, None)
@@ -147,6 +149,17 @@ class GateInputs:
     demo: bool = False
 
 
+#: why a tag was set aside, in the operator's words (the interface has the same list)
+_EXCLUDED_REASON = {
+    "size_mismatch": "its size does not match the other tags",
+    "not_square_in_plane": "it is not square when mapped onto the plane",
+    "high_residual": "its corners do not fit the common plane",
+    "not_connected_to_gauge": "it never appears together with the other tags",
+    "moved_or_misread": "it moved between photos or was misread in one",
+    "declared_size_inconsistent": "its entered size contradicts the other tags",
+    "off_the_common_plane": "it is not on the plane of the other tags",
+}
+
 _SUGGEST = {
     "more_tags": "Add a second measured AprilTag on the flat panel, on the far side of the target from the first, and retake the photo.",
     "measure_tags": "Measure the black-square edge of each tag with a caliper and enter it (Markers step).",
@@ -162,8 +175,11 @@ def evaluate_gates(inp: GateInputs, policy: GatePolicy | None = None, placard_id
     policy = policy or GatePolicy()
     gates: list[GateResult] = []
 
-    def gate(code: str, passed: bool, severity: Severity, message: str, *, value: float | None = None, limit: float | None = None, suggestion: str | None = None) -> None:
-        gates.append(GateResult(code=code, passed=bool(passed), severity=severity, message=message, value=value, limit=limit, suggestion=None if passed else suggestion))
+    def gate(code: str, passed: bool, severity: Severity, message: str, *, value: float | None = None, limit: float | None = None, suggestion: str | None = None,
+             caveat: bool = False) -> None:
+        # a caveat passes but says what was NOT checked; it keeps its suggestion (how to close the gap)
+        gates.append(GateResult(code=code, passed=bool(passed), severity=severity, message=message, value=value, limit=limit,
+                                suggestion=suggestion if (caveat or not passed) else None, caveat=bool(caveat and passed)))
 
     B, W, INFO = Severity.BLOCKING, Severity.WARNING, Severity.INFO
 
@@ -187,6 +203,13 @@ def evaluate_gates(inp: GateInputs, policy: GatePolicy | None = None, placard_id
              "Tags agree with each other (size and coplanarity)." if inp.tags_consistent
              else "Tags contradict each other (" + ", ".join(inp.inconsistent_reasons or ["inconsistent"]) + "); with two tags it cannot be told which one is wrong.",
              suggestion="Check that every tag lies flat on the same plane and that its measured size is entered for the right ID; then retake.")
+        if inp.excluded_tags:
+            # tags the solver set aside: the result stands without them, and the report says so
+            parts = [f"ID {k} ({'; '.join(_EXCLUDED_REASON.get(r, r) for r in rs)})" for k, rs in sorted(inp.excluded_tags.items())]
+            gate("tags_left_out", True, INFO,
+                 ("A tag was left out of the measurement: " if len(parts) == 1 else "Tags were left out of the measurement: ") + ", ".join(parts)
+                 + f". The result rests on the remaining {inp.n_tags}.",
+                 suggestion="If a tag was moved, or its size was entered for the wrong ID, correct that and capture again.", caveat=True)
         gate("pose_unambiguous", not inp.pose_ambiguous, B,
              "The camera pose has a single consistent solution." if not inp.pose_ambiguous
              else "Two different camera poses explain the tags almost equally well.",
@@ -198,6 +221,12 @@ def evaluate_gates(inp: GateInputs, policy: GatePolicy | None = None, placard_id
     if inp.registered and inp.reference_consistent is not None:
         gate("independent_length_check", bool(inp.reference_consistent), B, inp.reference_message,
              suggestion="Check the declared tag sizes (measure the black square, not the sticker) and the ruler reading; then enter the corrected values.")
+    elif inp.registered:
+        # the one fault no check on the photos can see: every size wrong in the same way.  Said, not hidden.
+        gate("scale_source", True, INFO,
+             "Scale rests on the declared tag sizes alone: no independent length was measured. An error common to all sizes "
+             "(the packaging size typed for every tag, a caliper read in the wrong unit) would not be noticed.",
+             suggestion="Measure one distance between two tags with a rule and enter it on the Rectified step.", caveat=True)
     if inp.registered and inp.multiview:
         gate("plane_assumption", not inp.plane_violated, B,
              "The tags define one plane." if not inp.plane_violated
@@ -261,10 +290,16 @@ def evaluate_gates(inp: GateInputs, policy: GatePolicy | None = None, placard_id
                 gate("plane_verified_3d", True, INFO,
                      f"Coplanarity of the tags was verified in 3-D (could have seen {inp.coplanarity_power_mm:.1f} mm)." if inp.coplanarity_power_mm is not None else "Coplanarity of the tags was verified in 3-D.")
             elif inp.coplanarity_verdict == "not_established":
-                gate("plane_verified_3d", True, INFO, "The views are too similar to verify coplanarity in 3-D; the single-view cross-check applies.")
+                gate("plane_verified_3d", True, INFO, "The views are too similar to verify coplanarity in 3-D; the single-view cross-check applies.", caveat=True)
+            if "inconsistent_observations" in (inp.multiview_flags or []):
+                # the solver set aside what it could and observations still contradict each other
+                gate("photos_agree", False, W,
+                     "Some tag observations still contradict the other photos, and setting tags aside did not resolve it "
+                     "(glare on a tag, more than one tag that moved, or too few tags left to tell which one is wrong).",
+                     suggestion="Retake the photos without glare on the tags and without touching them. With a third or fourth tag on the panel a faulty one can be identified.")
             if inp.excluded_observations:
                 gate("observations_left_out", True, INFO,
-                     "Left out because it did not fit the other photos of the same tag: " + "; ".join(inp.excluded_observations) + ". The tag itself is kept.")
+                     "Left out because it did not fit the other photos of the same tag: " + "; ".join(inp.excluded_observations) + ". The tag itself is kept.", caveat=True)
             if inp.calibration_consistent is not None:
                 gate("calibration_consistent", inp.calibration_consistent, W,
                      "The lens profile agrees with a focal length re-estimated from the tags." if inp.calibration_consistent
@@ -297,6 +332,15 @@ def evaluate_gates(inp: GateInputs, policy: GatePolicy | None = None, placard_id
                      else f"The {name} datum has a competing edge of similar strength nearby (×{dist:.1f}).",
                      value=dist, limit=policy.min_datum_distinctness,
                      suggestion="Zoom in and place the line on the intended edge; check the alternatives shown.")
+            nb = inp.datum_depth_neighbour[i]
+            if nb:
+                hh, gap = float(nb.get("height_mm", 0.0)), float(nb.get("gap_mm", 0.0))
+                where = "right beside" if nb.get("relation") != "beyond" else f"{abs(gap):.0f} mm beyond"
+                gate(f"datum_{name}_no_step_beside", False, W,
+                     f"A fixed edge about {abs(hh):.0f} mm {'in front of' if hh > 0 else 'behind'} the panel face runs {where} the {name} datum. "
+                     "The line that was found may be the edge of a trim, a moulding or a recess and not the feature the record means.",
+                     value=abs(hh),
+                     suggestion="Look at the line on the photo. If it is the feature the record means, select it yourself with 'Choose detected line'; if not, draw the datum on the right feature.")
             ev = inp.datum_plane_evidence[i]
             feat = inp.datum_feature[i]
             declared = inp.datum_declared_on_plane[i]
@@ -311,7 +355,7 @@ def evaluate_gates(inp: GateInputs, policy: GatePolicy | None = None, placard_id
             elif ev == "verified_multiview":
                 gate(f"datum_{name}_on_plane", True, INFO, f"The {name} datum stays fixed on the plane across views.")
             elif declared is True:
-                gate(f"datum_{name}_on_plane", True, INFO, f"The {name} datum is declared on the target plane by the operation record (not verified by a second view).")
+                gate(f"datum_{name}_on_plane", True, INFO, f"The {name} datum is declared on the target plane by the operation record (not verified by a second view).", caveat=True)
             else:
                 gate(f"datum_{name}_on_plane", False, W,
                      f"Nothing establishes that the {name} datum feature lies on the target plane.",

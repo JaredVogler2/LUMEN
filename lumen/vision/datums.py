@@ -38,7 +38,7 @@ matched to the operation's configured nominal angle and handedness.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 import cv2
@@ -49,7 +49,7 @@ from ..geometry.homography import apply_h, local_scale_px_per_mm
 from ..geometry.lines import Line2D
 from ..geometry.optimize import lm_solve
 from ..geometry.se3 import Pose
-from .edgefit import EdgeFit, fit_bar, fit_edge, snap_line
+from .edgefit import EdgeFit, SnapResult, fit_bar, fit_edge, fit_trench, snap_line
 from .imaging import linear_luminance, to_gray
 from .multiview import triangulate_line, view_plane_of_image_line
 from .rectify import RectSpec
@@ -84,6 +84,19 @@ class DatumConfig:
     #: competing candidate threshold (fraction of the best score)
     ambiguity_fraction: float = 0.6
     tag_margin_mm: float = 12.0
+    #: A seam or scribed line up to this wide is one feature, and the datum is its centre line, whether a photo
+    #: shows it as a thin line or resolves it into two edges.  Wider than this, its two edges are two features.
+    max_line_width_mm: float = 6.0
+    #: an edge at another depth counts as running alongside a datum line when the two are this parallel
+    neighbour_angle_deg: float = 3.0
+    #: ... and it makes the line doubtful when it is this close in space (a step right at the line),
+    neighbour_near_mm: float = 30.0
+    #: or when it lies beyond the line (away from the tags) by at least ``neighbour_beyond_min_mm`` while its
+    #: depth is small against that distance: a face next to the panel face goes on past the line, as the front
+    #: of a trim does.  (Features of a floor that meets the panel AT the line have the opposite proportion.)
+    neighbour_beyond_min_mm: float = 5.0
+    neighbour_beyond_max_mm: float = 250.0
+    neighbour_beyond_slope: float = 0.5
 
 
 @dataclass
@@ -107,6 +120,10 @@ class LineCandidate:
     height_margin_mm: float | None = None
     stationarity_rms_mm: float | None = None
     spread_mm: float | None = None  # spread of the plane-projected position across views
+    #: where the 3-D line stands on the plane: offset along ``line.n`` from each end of ``endpoints`` to the point
+    #: directly below (or above) it.  Zero for a line on the plane; for a raised edge the home photo shows it
+    #: displaced, and this takes the displacement out.
+    foot_offsets_mm: tuple[float, float] | None = None
     soft: bool = False
     notes: list[str] = field(default_factory=list)
 
@@ -127,6 +144,7 @@ class LineCandidate:
             "classification": self.classification,
             "height_mm": None if self.height_mm is None else round(self.height_mm, 3),
             "height_margin_mm": None if self.height_margin_mm is None else round(self.height_margin_mm, 3),
+            "foot_offsets_mm": None if self.foot_offsets_mm is None else [round(float(v), 3) for v in self.foot_offsets_mm],
             "stationarity_rms_mm": None if self.stationarity_rms_mm is None else round(self.stationarity_rms_mm, 3),
             "spread_mm": None if self.spread_mm is None else round(self.spread_mm, 3),
             "soft": self.soft,
@@ -146,6 +164,7 @@ def fit_to_dict(e: EdgeFit, inflation: float = 1.6) -> dict[str, Any]:
         "cov_d_theta": e.cov_d_theta * inflation,
         "sigma_blur_px": e.sigma_blur,
         "contrast": e.contrast,
+        "line_half_width_px": e.bar_half_px,
     }
 
 
@@ -181,7 +200,9 @@ def straight_support(gray: np.ndarray, camera: CameraModel | None, fit: EdgeFit,
     for k in range(m):
         a = fit.mid + edges[k] * t
         b = fit.mid + edges[k + 1] * t
-        if kind == "bar":
+        if kind == "bar" and fit.bar_half_px > 0.0:
+            f = fit_trench(gray, a, b, half_width=fit.bar_half_px + 5.0, h0=fit.bar_half_px, trim=1.0, camera=camera, min_contrast=0.015)
+        elif kind == "bar":
             f = fit_bar(gray, a, b, half_width=5.0, trim=1.0, camera=camera, min_contrast=0.015)
         else:
             f = fit_edge(gray, a, b, fit.n, half_width=5.0, trim=1.0, camera=camera, fix_theta=True, fix_sigma=max(fit.sigma_blur, 0.4), level_slopes=False, passes=1, min_contrast=0.015)
@@ -267,6 +288,43 @@ def _merge_segments(segs: np.ndarray, cfg: DatumConfig) -> list[tuple[np.ndarray
     return out
 
 
+def line_width_limit_px(cfg: DatumConfig, px_per_mm: float) -> float:
+    """``max_line_width_mm`` in pixels of a photo (bounded: the search across an edge is not free)."""
+    return float(np.clip(cfg.max_line_width_mm * px_per_mm, 0.0, 28.0))
+
+
+def _same_model(r: SnapResult, kind: str) -> SnapResult | None:
+    """``r`` described by the model ``kind``, when that model describes the feature about as well as the best one.
+
+    Which model wins a close contest can differ between photos or stretches of the same feature, so the one that
+    lost is accepted when its residual is comparable.  A model that fits several times worse (a thin-line fit laid
+    over one edge of a wide seam) is not the feature: ``None``.
+    """
+    same = r.as_kind(kind) if r.ok else None
+    if same is None or same is r:
+        return same
+    if same.fit is None or r.fit is None or same.fit.rms > 1.5 * max(r.fit.rms, 1e-4):
+        return None
+    return same
+
+
+def _supported(gray: np.ndarray, camera: CameraModel | None, r: SnapResult) -> tuple[tuple[np.ndarray, np.ndarray] | None, SnapResult]:
+    """The straight stretch of a snapped feature, described by whichever of the two models holds along it."""
+    if not r.ok or r.fit is None:
+        return None, r
+    sup = straight_support(gray, camera, r.fit, r.kind)
+    if sup is None and r.other is not None and r.fit.bar_half_px == 0.0:
+        # the model that fitted the whole length best does not hold piece by piece: ask the other one.  (Not for
+        # a seam that was resolved into its two edges: the other model there is one of those edges, and falling
+        # back on it would put the datum half the seam's width away.)
+        alt = r.as_kind(r.other_kind)
+        if alt is not None and alt.fit is not None:
+            sup = straight_support(gray, camera, alt.fit, alt.kind)
+            if sup is not None:
+                return sup, alt
+    return sup, r
+
+
 def propose_in_frame(
     frame_id: str,
     bgr: np.ndarray,
@@ -312,23 +370,52 @@ def propose_in_frame(
     Hinv = np.linalg.inv(H)
     out: list[LineCandidate] = []
     px_per_mm = float(np.median(local_scale_px_per_mm(H, np.concatenate(tag_corners_plane)))) if tag_corners_plane else 1.0
+    max_bar = line_width_limit_px(cfg, px_per_mm)
     for k, (p0, p1, _cov) in enumerate(keep):
         q = spec.rect_to_plane(np.stack([p0, p1]))
         uv = apply_h(H, q)
         if float(np.linalg.norm(uv[1] - uv[0])) < 40.0:
             continue
-        r = snap_line(gray, uv[0], uv[1], camera=camera, search_px=6.0, max_tilt_deg=2.0)
-        if not r.ok or r.fit is None:
-            continue
-        sup = straight_support(gray, camera, r.fit, r.kind)
+        r = snap_line(gray, uv[0], uv[1], camera=camera, search_px=6.0, max_tilt_deg=2.0, max_bar_px=max_bar)
+        sup, r = _supported(gray, camera, r)
+        from_part = False
         if sup is None:
+            # A merged segment can run over two features that happen to line up: the foot of the panel and,
+            # past the panel's corner, the edge of the floor against whatever is behind.  (Seen in a benchmark
+            # layout: a segment of 1490 px of which about a quarter lay beyond the corner.  The edge fit over
+            # the whole diverged, the thin-line fit did not hold piece by piece, and a floor line 900 mm long
+            # was not offered at all.)  Measure a part, lay its line over the whole segment and keep the
+            # stretch that follows it.
+            seg_uv = uv[1] - uv[0]
+            L_uv = float(np.linalg.norm(seg_uv))
+            for a, b in ((0.25, 0.75), (0.0, 0.5), (0.5, 1.0)):
+                if (b - a) * L_uv < 120.0:
+                    break
+                part = snap_line(gray, uv[0] + a * seg_uv, uv[0] + b * seg_uv, camera=camera, search_px=6.0, max_tilt_deg=2.0, max_bar_px=max_bar)
+                if not part.ok or part.fit is None or part.fit.mid is None:
+                    continue
+                t_p = part.fit.t
+                mid_full = part.fit.mid + float((0.5 * (uv[0] + uv[1]) - part.fit.mid) @ t_p) * t_p
+                whole = replace(part.fit, mid=mid_full, length=L_uv)
+                sup = straight_support(gray, camera, whole, part.kind)
+                if sup is not None and float(np.linalg.norm(sup[1] - sup[0])) >= 0.3 * L_uv:
+                    r = SnapResult(True, "", part.kind, whole, part.shift_px, part.tilt_deg, part.distinctness, part.n_candidates)
+                    from_part = True  # its numbers are those of the part: the stretch is always measured again
+                    break
+                sup = None
+        if sup is None or not r.ok or r.fit is None:
             continue
-        if float(np.linalg.norm(sup[1] - sup[0])) < 0.97 * r.fit.length:
+        if from_part or float(np.linalg.norm(sup[1] - sup[0])) < 0.97 * r.fit.length:
             # only part of the merged segment is one straight feature: measure that part
-            r2 = snap_line(gray, sup[0], sup[1], camera=camera, search_px=4.0, max_tilt_deg=1.5)
+            r2 = snap_line(gray, sup[0], sup[1], camera=camera, search_px=4.0, max_tilt_deg=1.5, max_bar_px=max_bar)
             if not r2.ok or r2.fit is None:
                 continue
-            r = r2
+            same = _same_model(r2, r.kind)
+            if same is None and r.fit.bar_half_px > 0.0:
+                continue  # first seen as a seam with two edges; a second look that finds only one of them is not it
+            r = same if same is not None else r2
+            if r.fit is None:
+                continue
         line, ends = fit_plane_line(r.fit, Hinv)
         if float(np.linalg.norm(ends[1] - ends[0])) < cfg.min_length_mm:
             continue
@@ -391,8 +478,11 @@ def match_and_classify(cand: LineCandidate, frames: dict[str, FrameContext], cfg
         seg = _clip_to_image(uv[0], uv[1], Wimg, Himg)
         if seg is None or float(np.linalg.norm(seg[1] - seg[0])) < 60.0:
             continue
-        r = snap_line(fc.gray, seg[0], seg[1], camera=fc.camera, search_px=cfg.match_search_px, max_tilt_deg=3.0)
-        if not r.ok or r.fit is None or r.kind != cand.kind:
+        scale = float(local_scale_px_per_mm(fc.H, cand.endpoints.mean(axis=0)[None])[0])
+        r = snap_line(fc.gray, seg[0], seg[1], camera=fc.camera, search_px=cfg.match_search_px, max_tilt_deg=3.0, max_bar_px=line_width_limit_px(cfg, scale))
+        # the same feature has to be described by the same model as at home; otherwise the photo is left out
+        r = _same_model(r, cand.kind)
+        if r is None or r.fit is None:
             continue
         line, ends = fit_plane_line(r.fit, np.linalg.inv(fc.H))
         if line.angle_to(cand.line) > np.deg2rad(4.0):
@@ -424,7 +514,7 @@ def match_and_classify(cand: LineCandidate, frames: dict[str, FrameContext], cfg
     if tri["baseline_quality"] < 0.02:
         cand.notes.append("the photos look along this feature from almost the same side: height above the plane is not observable")
         return
-    heights, shift_part, sigma_line, noise_mm = _line_heights(cand, planes, shifted, fits, cfg)
+    heights, shift_part, sigma_line, noise_mm, offsets = _line_heights(cand, planes, shifted, fits, cfg)
     if heights is None:
         cand.notes.append("the photos look along this feature from almost the same side: height above the plane is not observable")
         return
@@ -437,6 +527,7 @@ def match_and_classify(cand: LineCandidate, frames: dict[str, FrameContext], cfg
         margins.append(b + cfg.height_k * float(np.hypot(sl, sp)))
     cand.height_mm = float(np.mean(heights))
     cand.height_margin_mm = float(np.max(margins))
+    cand.foot_offsets_mm = (float(offsets[0]), float(offsets[1]))
     # a fixed line leaves residuals of the size of the fit noise; anything clearly larger moves with the viewpoint
     stationary = tri["rms_offset_mm"] <= max(cfg.stationary_rms_mm, 3.0 * noise_mm) and tri["max_angle_deg"] <= 1.0
     lo = [abs(h) - m for h, m in zip(heights, margins)]  # smallest height the photos allow
@@ -463,7 +554,7 @@ def match_and_classify(cand: LineCandidate, frames: dict[str, FrameContext], cfg
 
 def _line_heights(
     cand: LineCandidate, planes: list[np.ndarray], shifted: list[np.ndarray], fits: list[tuple[FrameContext, EdgeFit]], cfg: DatumConfig
-) -> tuple[list[float] | None, list[float], list[float], float]:
+) -> tuple[list[float] | None, list[float], list[float], float, list[float]]:
     """Height of the feature above the plane at its two ends, and how well the photos resolve it.
 
     At a plane point ``Q`` of the feature the 3-D line is ``Q + e m + h z`` (``m`` the in-plane normal of the
@@ -474,12 +565,13 @@ def _line_heights(
     gives the part of ``h`` that such a common shift could fake.
 
     Returns ``(heights, part a common edge shift could fake, standard deviation from the line fits, typical
-    view noise)``, all in millimetres, the first three per end; ``heights`` is ``None`` when the views cannot
-    separate ``h`` from ``e`` at all.
+    view noise, in-plane offsets e)``, all in millimetres, per end except the noise; ``heights`` is ``None``
+    when the views cannot separate ``h`` from ``e`` at all.
     """
     m3 = np.array([cand.line.n[0], cand.line.n[1], 0.0])
     z3 = np.array([0.0, 0.0, 1.0])
     heights: list[float] = []
+    offsets: list[float] = []
     shift_part: list[float] = []
     sigma_line: list[float] = []
     noise: list[float] = []
@@ -508,19 +600,69 @@ def _line_heights(
             g.append(per_px)
             sig.append(abs(per_px) * float(np.sqrt(var_px)))
         if len(A) < 2:
-            return None, [], [], 0.0
+            return None, [], [], 0.0, []
         A_, r_, g_, w = np.asarray(A), np.asarray(r), np.asarray(g), 1.0 / np.maximum(np.asarray(sig), 1e-6) ** 2
         Nmat = A_.T @ (A_ * w[:, None])
         if np.linalg.cond(Nmat) > 1e8:
-            return None, [], [], 0.0
+            return None, [], [], 0.0, []
         cov = np.linalg.inv(Nmat)
         x = cov @ (A_.T @ (w * r_))
         x_shift = cov @ (A_.T @ (w * g_ * cfg.edge_shift_bound_px))
         heights.append(float(x[1]))
+        offsets.append(float(x[0]))
         shift_part.append(float(abs(x_shift[1])))
         sigma_line.append(float(np.sqrt(max(cov[1, 1], 0.0))))
         noise.append(float(np.median(sig)))
-    return heights, shift_part, sigma_line, float(np.median(noise))
+    return heights, shift_part, sigma_line, float(np.median(noise)), offsets
+
+
+def depth_neighbours(chosen: LineCandidate, cands: list[LineCandidate], interior: np.ndarray, cfg: DatumConfig | None = None) -> list[dict[str, Any]]:
+    """Fixed edges at another depth that run alongside ``chosen``.
+
+    For every candidate that is parallel to ``chosen``, clearly off the plane and beside the same stretch:
+    its height (mm, positive toward the camera side), ``gap_mm`` — how far the point of the plane directly
+    under it lies from ``chosen``, positive on the side of the tags (``interior``), negative beyond the line —
+    and the 3-D distance between the two lines.
+    """
+    cfg = cfg or DatumConfig()
+    line = chosen.line.oriented_towards(interior)
+    t = np.array([-line.n[1], line.n[0]])
+    s0, s1 = sorted(float(t @ p) for p in chosen.endpoints)
+    out: list[dict[str, Any]] = []
+    for o in cands:
+        if o is chosen or o.classification != "off_plane" or o.height_mm is None or o.foot_offsets_mm is None:
+            continue
+        if o.line.angle_to(chosen.line) > np.deg2rad(cfg.neighbour_angle_deg):
+            continue
+        feet = o.endpoints + np.outer(np.asarray(o.foot_offsets_mm), o.line.n)
+        a0, a1 = sorted(float(t @ p) for p in feet)
+        if min(s1, a1) - max(s0, a0) < 0.25 * min(s1 - s0, a1 - a0):
+            continue
+        gap = float(np.mean(line.signed_distance(feet)))
+        h = float(o.height_mm)
+        out.append({"id": o.id, "height_mm": h, "gap_mm": gap, "distance_mm": float(np.hypot(gap, h)), "length_mm": float(o.length_mm)})
+    out.sort(key=lambda r: r["distance_mm"])
+    return out
+
+
+def step_beside(chosen: LineCandidate, cands: list[LineCandidate], interior: np.ndarray, cfg: DatumConfig | None = None) -> dict[str, Any] | None:
+    """The edge at another depth, if any, that makes it doubtful what ``chosen`` is.
+
+    A line that the photos place on the panel face can still be the wrong feature: the upper edge of a trim
+    fixed to the panel is on the face, while the floor line a record means is hidden behind the trim.  What
+    gives such a line away is a second fixed edge beside it at another depth — right at the line (the trim's
+    front corner), or further out with little depth against its distance (the trim's front face ending at the
+    floor).  Nothing here says which feature is meant; the caller withholds guidance until the operator has
+    chosen.
+    """
+    cfg = cfg or DatumConfig()
+    for r in depth_neighbours(chosen, cands, interior, cfg):
+        h, gap = abs(r["height_mm"]), r["gap_mm"]
+        near = r["distance_mm"] <= cfg.neighbour_near_mm
+        beyond = -cfg.neighbour_beyond_max_mm <= gap <= -cfg.neighbour_beyond_min_mm and h <= cfg.neighbour_beyond_slope * abs(gap)
+        if near or beyond:
+            return {**{k: (round(v, 2) if isinstance(v, float) else v) for k, v in r.items()}, "relation": "beside" if near else "beyond"}
+    return None
 
 
 def _clip_to_image(p0: np.ndarray, p1: np.ndarray, w: int, h: int, margin: float = 6.0) -> np.ndarray | None:

@@ -48,7 +48,10 @@ from ..schemas import (
     SessionMode,
 )
 from ..storage.base import SessionStore, new_session_id
-from ..vision.datums import DatumConfig, FrameContext, LineCandidate, choose_pairs, fit_cylinder_from_silhouettes, fit_plane_line, fit_to_dict, match_and_classify, propose_in_frame
+from ..vision.datums import (
+    DatumConfig, FrameContext, LineCandidate, choose_pairs, fit_cylinder_from_silhouettes, fit_plane_line, fit_to_dict, line_width_limit_px,
+    match_and_classify, propose_in_frame, step_beside,
+)
 from ..vision.edgefit import snap_line
 from ..vision.imaging import DecodedImage, encode_jpeg, to_gray
 from ..vision.markers import MarkerConfig, TagSizeTable
@@ -523,23 +526,49 @@ class SessionService:
             # 3-D bundle adjustment first: it is the only thing that can see a
             # tag that moved between photos or sits off the common plane.
             mv = self._multiview(s, frames, views)
-            drop = set()
-            if mv is not None:
-                drop |= {int(k) for k in mv["excluded_tags"]}
-                drop |= set(mv["checks"].get("coplanarity", {}).get("off_plane_tags", []))
+            excluded: dict[int, list[str]] = {}
+            excluded_obs: dict[str, set[int]] = {}
+            off_all: set[int] = set()
+            for attempt in range(3):
+                if mv is None or "skipped" in mv:
+                    break
+                drop = {int(k) for k in mv["excluded_tags"]}
+                off = {int(k) for k in mv["checks"].get("coplanarity", {}).get("off_plane_tags", [])}
                 # single observations that fit no other photo of the same tag (the tag itself is kept)
                 drop_obs = {(fid, int(t)) for fid, ts in (mv.get("excluded_observations") or {}).items() for t in ts}
-                if drop or drop_obs:
-                    views = [PlanarView(v.frame_id, [t for t in v.tags if t.tag_id not in drop and (v.frame_id, t.tag_id) not in drop_obs], v.camera, v.mode) for v in views]
+                for k, reasons in mv["excluded_tags"].items():
+                    excluded.setdefault(int(k), list(reasons))
+                for k in off:
+                    excluded.setdefault(k, ["off_the_common_plane"])
+                for fid, t in drop_obs:
+                    excluded_obs.setdefault(fid, set()).add(t)
+                if drop or off or drop_obs:
+                    views = [PlanarView(v.frame_id, [t for t in v.tags if t.tag_id not in (drop | off) and (v.frame_id, t.tag_id) not in drop_obs], v.camera, v.mode) for v in views]
                     views = [v for v in views if v.tags]
                     if not views:
                         raise GeometryError("no_consistent_tags", "After removing inconsistent tags none is left to establish scale.")
+                if not off or attempt == 2:
+                    break
+                # The bundle adjustment sets aside a tag that moved and solves again by itself.  A tag off the
+                # common plane it only reports: its solution still contains that tag, and so do the plane fitted
+                # through "all" tags, the flatness figures and the heights of the datum lines measured from that
+                # plane.  What is used further on has to describe the tags that carry the result: solve again
+                # without it.
+                off_all |= off
+                mv = self._multiview(s, frames, views)
+                if mv is None:
+                    mv = {"skipped": "after setting aside the tags off the common plane, fewer than two photos show the remaining tags", "excluded_tags": {}, "checks": {}, "flags": []}
+            if mv is not None and off_all:
+                mv["excluded_tags"] = {str(k): v for k, v in sorted(excluded.items())}
+                mv["excluded_observations"] = {fid: sorted(ts) for fid, ts in sorted(excluded_obs.items())}
+                mv["flags"] = [*mv.get("flags", []), "off_plane_tags_excluded"]
+                cop = mv["checks"].setdefault("coplanarity", {})
+                # tags found off the common plane in an earlier pass (set aside), in front of any the last pass still names
+                cop["off_plane_tags"] = sorted(off_all | {int(k) for k in cop.get("off_plane_tags", [])})
+                cop["set_aside_before_this_solution"] = sorted(off_all)
             sol = solve_planar(views, size_u_mm=size_u)
-            if mv is not None:
-                for k, reasons in mv["excluded_tags"].items():
-                    sol.excluded_tags.setdefault(int(k), list(reasons))
-                for k in mv["checks"].get("coplanarity", {}).get("off_plane_tags", []):
-                    sol.excluded_tags.setdefault(int(k), ["off_the_common_plane"])
+            for k, reasons in excluded.items():
+                sol.excluded_tags.setdefault(int(k), list(reasons))
         used = [v for v in views if v.frame_id in sol.views]
         # keep only tags that survived the consistency checks
         used = [PlanarView(v.frame_id, [t for t in v.tags if t.tag_id in sol.layout.poses], v.camera, v.mode) for v in used]
@@ -655,13 +684,18 @@ class SessionService:
         verdict = cop.get("verdict")
         keep = [str(i) for i in sol.layout.poses]
         offs = [abs(cop["tags"][k]["offset_mm"]) + 2.0 * cop["tags"][k]["offset_sigma_mm"] for k in keep if k in cop.get("tags", {})]
-        if verdict == "coplanar":
-            how = "verified_multiview"
-        elif verdict == "not_coplanar" and cop.get("off_plane_tags"):
+        set_aside = cop.get("set_aside_before_this_solution") or []
+        if verdict == "coplanar" and set_aside:
+            # the remaining tags were solved again without the ones off the plane, and agree on one plane
             how = "verified_multiview_after_exclusion"
-            notes.append("tags off the common plane were excluded: " + ", ".join(f"ID {i}" for i in cop["off_plane_tags"]))
+            notes.append("tags off the common plane were excluded: " + ", ".join(f"ID {i}" for i in set_aside))
+        elif verdict == "coplanar":
+            how = "verified_multiview"
         elif verdict == "not_coplanar":
+            # also after setting tags aside the rest does not lie on one plane, or no majority could be identified
             how = "violated"
+            if set_aside:
+                notes.append("tags off the common plane were excluded (" + ", ".join(f"ID {i}" for i in set_aside) + "), and the remaining tags still do not lie on one plane")
         else:
             how = "crossvalidated_single_view" if sol.independently_checked else "assumed"
             notes.append("views are too similar to establish coplanarity in 3-D")
@@ -774,7 +808,9 @@ class SessionService:
         if snap:
             gray = to_gray(self._image(sid, f).bgr)
             with self.cpu.slot(self.settings.limits.request_timeout_seconds):
-                r = snap_line(gray, seg[0], seg[1], camera=cam, search_px=search_px)
+                seg_plane = apply_h(np.linalg.inv(H), seg)
+                scale = float(local_scale_px_per_mm(H, seg_plane.mean(axis=0)[None])[0])
+                r = snap_line(gray, seg[0], seg[1], camera=cam, search_px=search_px, max_bar_px=line_width_limit_px(self._datum_cfg, scale))
                 if r.ok and r.fit is not None:
                     line, ends = fit_plane_line(r.fit, np.linalg.inv(H))
                     cand = LineCandidate(
@@ -938,6 +974,9 @@ class SessionService:
         else:
             mm_per_px = 1.0 / max(float(local_scale_px_per_mm(H, ends.mean(axis=0)[None])[0]), 1e-9)
             sigma_perp = float(np.sqrt(max(fit_d.get("var_d", 0.0), 0.0)) * mm_per_px)
+            half_px = float(fit_d.get("line_half_width_px") or 0.0)
+            if half_px > 0.0:
+                notes = [*notes, f"a line about {2.0 * half_px * mm_per_px:.1f} mm wide, resolved into its two edges: the datum is its centre line"]
         return DatumObservation(
             kind=kind,
             n=line.n.tolist(),
@@ -1031,6 +1070,7 @@ class SessionService:
                 if prop.ambiguous_floor:
                     o.notes.append("another candidate of similar strength exists: choose the intended feature")
                     o.distinctness = min(o.distinctness or 1.0, 1.0)
+                self._flag_step_beside(o, c, cands, centers)
                 new_obs["floor"] = o
                 applied["floor"] = c.id
             if curve_side:
@@ -1043,18 +1083,29 @@ class SessionService:
                 if prop.ambiguous_side:
                     o.notes.append("another candidate of similar strength exists: choose the intended feature")
                     o.distinctness = min(o.distinctness or 1.0, 1.0)
+                self._flag_step_beside(o, c, cands, centers)
                 new_obs["side"] = o
                 applied["side"] = c.id
         out["applied"] = applied
         missing = [k for k in ("floor", "side") if k not in applied]
         hints = []
-        if "floor" in missing:
-            hints.append("No floor line was found: include the floor seam in at least one photo (tilt the phone down).")
-        if "side" in missing:
+        fixed = [c for c in cands if c.classification != "view_dependent"]
+        if not curve_side and len(missing) == 2 and fixed:
+            # Lines were found, but not two that belong together.  Which of the two datums is the missing one
+            # cannot be told from a single line, so the hint must not claim that it is the floor (or the side).
+            found = "Only one straight line was found in the photos" if len(fixed) == 1 else f"{len(fixed)} straight lines were found in the photos, but no two of them fit together"
             hints.append(
-                "The rounded edge could not be modelled: capture 5–9 photos while moving sideways around the edge." if curve_side
-                else "No side line was found: include the side seam/edge in at least one photo."
+                f"{found}. A floor line and a side line that meet at the angle the record gives, with the tags between them, are both needed: "
+                "one of them is too faint, hidden or outside the photos. Retake with both clearly in view, or draw the lines by hand (with snap on they are fitted to the edge)."
             )
+        else:
+            if "floor" in missing:
+                hints.append("No floor line was found: include the floor seam in at least one photo (tilt the phone down).")
+            if "side" in missing:
+                hints.append(
+                    "The rounded edge could not be modelled: capture 5–9 photos while moving sideways around the edge." if curve_side
+                    else "No side line was found: include the side seam/edge in at least one photo."
+                )
         out["hints"] = hints
 
         def fn(s2: Session) -> None:
@@ -1085,6 +1136,19 @@ class SessionService:
                 if dist > 80.0:
                     out.append(fid)
         return out
+
+    def _flag_step_beside(self, o: DatumObservation, c: LineCandidate, cands: list[LineCandidate], centers: np.ndarray) -> None:
+        """Mark an automatically applied datum that has a fixed edge at another depth beside it."""
+        nb = step_beside(c, cands, centers.mean(axis=0), self._datum_cfg)
+        if nb is None:
+            return
+        o.depth_neighbour = nb
+        hh = float(nb["height_mm"])
+        where = "right beside it" if nb["relation"] == "beside" else f"{abs(float(nb['gap_mm'])):.0f} mm beyond it"
+        o.notes.append(
+            f"a fixed edge about {abs(hh):.0f} mm {'in front of' if hh > 0 else 'behind'} the panel face runs {where}: "
+            "this line may be the edge of a trim, a moulding or a recess — choose the intended feature yourself"
+        )
 
     def select_datum_candidate(self, sid: str, kind: str, candidate_id: str) -> DatumObservation:
         """Operator picks one of the automatically found alternatives."""
@@ -1394,6 +1458,10 @@ class SessionService:
         inp.datum_distinctness = (
             s.datums["floor"].distinctness if "floor" in s.datums else None,
             s.datums["side"].distinctness if "side" in s.datums else None,
+        )
+        inp.datum_depth_neighbour = (
+            s.datums["floor"].depth_neighbour if "floor" in s.datums else None,
+            s.datums["side"].depth_neighbour if "side" in s.datums else None,
         )
         inp.datum_manual = (
             bool("floor" in s.datums and s.datums["floor"].provenance == Provenance.MANUAL.value),

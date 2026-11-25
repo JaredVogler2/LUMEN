@@ -35,9 +35,75 @@ How it stays honest:
   next step, never a guess; no datum, offset or tolerance is invented;
 * every result carries an uncertainty budget and the list of checks behind its
   status; simulated data is labelled on every screen;
+* what was not checked is said as well: a check that passes on someone's word
+  (scale from the entered tag sizes only, a datum on the face by the record's
+  statement, a tag that was set aside) is shown as a note, not as a tick;
+* where the photos cannot decide, the operator is asked: two similar seams,
+  or a raised edge running along the line that was found (the top of a kick
+  strip looks like a floor line);
 * a flashlight (photometric) analysis of rounded edges and an optional
   language-model assistant exist as clearly separated experiments that never
   feed the guidance.
+
+## Screens
+
+<img src="docs/screenshots/camera_live.png" width="190" alt="Camera with the coach line"> <img src="docs/screenshots/datums_trim_photo.png" width="190" alt="Datum lines found on the photo"> <img src="docs/screenshots/place_portrait.png" width="190" alt="Target outline with distances and status"> <img src="docs/screenshots/verify_result.png" width="190" alt="Measured deviation of an installed placard">
+
+Screenshots from the automated browser tests (phone-sized window,
+computer-generated photos). More in `docs/OPERATOR_QUICKSTART.md`.
+
+## Results so far (computer-generated photos only)
+
+`scripts/run_benchmark.py` on layouts the tests never use: two sets of twelve,
+three to five tags, three to seven photos of 1600x1200, four kinds of
+in-camera processing. Reports: `docs/benchmark/`.
+
+| 24 layouts | one photo, datums drawn by hand | all photos, datums found automatically |
+|---|---|---|
+| error of the target corners, median / 95th / largest | 0.17 / 0.51 / 0.89 mm | 0.12 / 0.46 / 0.61 mm |
+| stated expanded uncertainty, median / largest | 1.24 / 3.06 mm | 1.07 / 2.07 mm |
+| error within the stated uncertainty | 24 of 24 | 24 of 24 |
+| shown as guidance / as preview | 6 / 18 | 8 / 16 |
+| wrong result shown as guidance | 0 | 0 |
+| analysis time, median (four shared cores) | 1.2 s | 16 s |
+
+Most results are previews at this photo size because the stated uncertainty
+exceeds half of the sample record's ±2 mm tolerance. In 40 of the 48 results
+its largest term stands for something these photos do not contain (a bound
+on residual edge shift or on panel flatness, or the caliper uncertainty of
+the tag sizes), which is why the errors are several times smaller than the
+stated values. That margin says nothing about a real phone.
+
+At a phone's full photo resolution (4032x3024, four of the layouts) the
+errors are 0.03 mm (median) and 0.14 mm (largest) from one photo and 0.02 and
+0.12 mm from all photos. The stated uncertainty is about 0.7 mm, all eight
+results are within it, and six are shown as guidance. One photo with datums
+drawn by hand takes about 4 s; finding the datums automatically in five to
+seven such photos takes about a minute and a half.
+
+Seventeen fault cases (no tag; a moved, a raised and a mis-sized tag; no
+measured sizes; twin seams; a kick strip that hides the floor line; a leaning
+edge; a faint seam; glare; a duplicate ID; a curved target; a draft record
+…) end in a refusal, in a preview that names the reason, or in a correct
+result without the faulty tag. One fault cannot be seen in photos at all:
+every tag size wrong in the same way gives 17.9 mm of error with a clean
+report. The optional rule measurement catches it, and every result without
+one says that its scale rests on the entered sizes alone.
+
+Two findings on the way to these numbers (`docs/BUILD_LOG.md`):
+
+* The first full run counted all fault cases as handled. Four of them ended
+  safely and were not right inside; they were fixed after reading the reasons
+  instead of the verdicts.
+* The first run at full resolution had every target 1.0 mm off and outside
+  its stated uncertainty. The 2 mm side seam is resolved into its two edges
+  at that size, and one of them had been taken for the datum. A seam is now
+  measured at its centre at any photo size.
+
+Tests on this code: 499 unit and integration tests and 37 browser tests pass;
+one test that calls a real language-model endpoint is opt-in and skipped.
+
+None of this is physical accuracy: no phone, print or panel was involved.
 
 ## Run it
 
@@ -88,7 +154,7 @@ Tests, benchmark and smoke test:
 | `docs/DEVELOPER_HANDOFF.md` | architecture diagram, module map, rules, what is not done |
 | `docs/CONVENTIONS.md` | units, pixels, frames, labels, status words |
 | `docs/VALIDATION.md` | what was tested, how, and what the results do and do not show |
-| `docs/benchmark/RESULTS.md` | synthetic benchmark results (generated) |
+| `docs/benchmark/` | synthetic benchmark reports (generated): first set with fault cases, second set, full resolution |
 | `docs/PHOTOMETRIC_ABLATION.md` | flashlight experiment against the edge-only method |
 | `docs/PHYSICAL_TEST_PROTOCOL.md` | the physical study that still has to be run |
 | `docs/ASSISTANT.md` | the optional assistant: what is sent, how replies are checked |

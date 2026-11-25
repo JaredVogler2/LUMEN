@@ -1,0 +1,329 @@
+{
+  "version": 1,
+  "locale": "C.UTF-8",
+  "metadata": {
+    "appmode": "python-fastapi",
+    "entrypoint": "app:app"
+  },
+  "python": {
+    "version": "3.12.3",
+    "package_manager": {
+      "name": "pip",
+      "version": "24.0",
+      "package_file": "requirements.txt"
+    }
+  },
+  "environment": {
+    "python": {
+      "requires": ">=3.12,<3.14"
+    }
+  },
+  "files": {
+    "requirements.txt": {
+      "checksum": "6655f3ea39f5a187d843465e41dd233f"
+    },
+    "app.py": {
+      "checksum": "4a559da04f341c854ad374a3d0529f27"
+    },
+    "lumen/__init__.py": {
+      "checksum": "5c981f50ea96912238cf8ca12e378d64"
+    },
+    "lumen/api/__init__.py": {
+      "checksum": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    "lumen/api/app.py": {
+      "checksum": "03bf1963f3e75d2a854d0ea9c3d20bad"
+    },
+    "lumen/api/routes.py": {
+      "checksum": "b96a37da67f8d6590f051610c34c3dc4"
+    },
+    "lumen/assistant/__init__.py": {
+      "checksum": "79e6958b61d339ee9af215636d0a89a1"
+    },
+    "lumen/assistant/adapter.py": {
+      "checksum": "e57abd87f57e2be268ec592cd21ac95d"
+    },
+    "lumen/assistant/service.py": {
+      "checksum": "ee1f6e49728c08a24ad0983a3a921f5e"
+    },
+    "lumen/config.py": {
+      "checksum": "138dfb6150db9b7aadb30c2327a9ffa6"
+    },
+    "lumen/demo_assets/curve/manifest.json": {
+      "checksum": "792370daabde8adac6c1debfc58eef19"
+    },
+    "lumen/demo_assets/curve/reg_1.jpg": {
+      "checksum": "dca6e69fd692f3a3992cb43f2a74e2e2"
+    },
+    "lumen/demo_assets/curve/reg_2.jpg": {
+      "checksum": "d8205e5986ad667e1f7e7f37e6aa2b1f"
+    },
+    "lumen/demo_assets/curve/reg_3.jpg": {
+      "checksum": "d408394d6437efa0206dc49ed6c07039"
+    },
+    "lumen/demo_assets/curve/reg_4.jpg": {
+      "checksum": "7dff4c3d64766d1c97801872ddfb8c0d"
+    },
+    "lumen/demo_assets/curve/reg_5.jpg": {
+      "checksum": "8ac9fd76d98639977b792598bebfcb81"
+    },
+    "lumen/demo_assets/curve/reg_6.jpg": {
+      "checksum": "d92ad26fad5760e62d673d2645a7136e"
+    },
+    "lumen/demo_assets/curve/reg_7.jpg": {
+      "checksum": "45648e7e39deb208d6669f8bc4eb1763"
+    },
+    "lumen/demo_assets/flat/manifest.json": {
+      "checksum": "a3312d92e4b603a0120f11304f99961e"
+    },
+    "lumen/demo_assets/flat/reg_1.jpg": {
+      "checksum": "679c3e6e975671f4500acba31d70c9b7"
+    },
+    "lumen/demo_assets/flat/reg_2.jpg": {
+      "checksum": "bb09113975926e7eb2bbf19c7fb623c1"
+    },
+    "lumen/demo_assets/flat/reg_3.jpg": {
+      "checksum": "796693b8ac57f0a4be1c795682943651"
+    },
+    "lumen/demo_assets/flat/reg_4.jpg": {
+      "checksum": "031be2683197e2fa8bde4b0fd195cb23"
+    },
+    "lumen/demo_assets/flat/reg_5.jpg": {
+      "checksum": "7e781903c9810d120b01470a148abf05"
+    },
+    "lumen/demo_assets/flat/verify_1.jpg": {
+      "checksum": "1ae760744b2084d70525d6f0a65c34f5"
+    },
+    "lumen/errors.py": {
+      "checksum": "08c1dc49fd852c294b21d2f508194b0a"
+    },
+    "lumen/geometry/__init__.py": {
+      "checksum": "fd4010d4ce32d6b0241fc45cbe3c9126"
+    },
+    "lumen/geometry/camera.py": {
+      "checksum": "d0dadc96b0b34d5eb8998047a6bff3cb"
+    },
+    "lumen/geometry/homography.py": {
+      "checksum": "a1ace85bf436725b904e34ab66cbc618"
+    },
+    "lumen/geometry/lines.py": {
+      "checksum": "98b4f32a321cdf92a3d372cf375b8235"
+    },
+    "lumen/geometry/localframe.py": {
+      "checksum": "38042f331890d6f777798c22c2e490e6"
+    },
+    "lumen/geometry/optimize.py": {
+      "checksum": "ca69cf9ecf887e4e6e0e18ea1a845109"
+    },
+    "lumen/geometry/se3.py": {
+      "checksum": "950cc65e9115cae56bade79aeffe06c2"
+    },
+    "lumen/operations/__init__.py": {
+      "checksum": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    "lumen/operations/data/operations.json": {
+      "checksum": "faea37f84b50023afc40c7ed5aa4f1bb"
+    },
+    "lumen/operations/library.py": {
+      "checksum": "4d1121d404fd7112293a75d32e010064"
+    },
+    "lumen/overlay/__init__.py": {
+      "checksum": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    "lumen/overlay/geometry.py": {
+      "checksum": "e1630069eafb116d4a909006f2cc3b17"
+    },
+    "lumen/policy/__init__.py": {
+      "checksum": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    "lumen/policy/gates.py": {
+      "checksum": "a233299a9d03f404c9b4b5bba564b581"
+    },
+    "lumen/policy/uncertainty.py": {
+      "checksum": "8f9d12e7dfd581059f53ec92697519b9"
+    },
+    "lumen/schemas.py": {
+      "checksum": "1e98cc46d9b75eb9dfacb77499dc968b"
+    },
+    "lumen/services/__init__.py": {
+      "checksum": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    "lumen/services/calibration.py": {
+      "checksum": "4120fb9b55598bce061ef584378e9999"
+    },
+    "lumen/services/capture.py": {
+      "checksum": "2b942d442ea91adb90a2f01f5f1ff9e4"
+    },
+    "lumen/services/context.py": {
+      "checksum": "cf979349a26b08872e3daef6700b5752"
+    },
+    "lumen/services/demo.py": {
+      "checksum": "9161cd55e6c3937be2fc9e125927dc9e"
+    },
+    "lumen/services/export.py": {
+      "checksum": "4999ff355b79d7fce12fe9a14a57b544"
+    },
+    "lumen/services/frames.py": {
+      "checksum": "b81c4708a66470837d917743d5e15d18"
+    },
+    "lumen/services/jobs.py": {
+      "checksum": "fdc1632a1782d12a8c6c6f0159e188b3"
+    },
+    "lumen/services/live.py": {
+      "checksum": "f5bc558117edb968cb1d8f7a6360d658"
+    },
+    "lumen/services/photometric.py": {
+      "checksum": "0b541ab24c896a535583c646fcbebf7f"
+    },
+    "lumen/services/reference.py": {
+      "checksum": "ff9fe64b8ee1888d5f34b6847f5fd779"
+    },
+    "lumen/services/sessions.py": {
+      "checksum": "d26f70c77246ddea5012d58d5f00c382"
+    },
+    "lumen/services/verification.py": {
+      "checksum": "13724c11c38e66f380c24f02a7017413"
+    },
+    "lumen/static/css/lumen.css": {
+      "checksum": "ae53760998d3b20769fbc57677d04b28"
+    },
+    "lumen/static/img/icon.svg": {
+      "checksum": "697017c0200fdaccba1d27c70abd27da"
+    },
+    "lumen/static/index.html": {
+      "checksum": "8119e51a58c327c4f3075d03869d21f6"
+    },
+    "lumen/static/js/api.js": {
+      "checksum": "33558baf6ce7f69c563b6744f579e8cf"
+    },
+    "lumen/static/js/camera.js": {
+      "checksum": "77782d40ba0763190618bee8fa54c2c1"
+    },
+    "lumen/static/js/dom.js": {
+      "checksum": "88542c720490481458a51ccf31e5f482"
+    },
+    "lumen/static/js/main.js": {
+      "checksum": "45d58fcafdac129a3833ac57556b714d"
+    },
+    "lumen/static/js/store.js": {
+      "checksum": "3c73ec7d13cf7fa49bfd64b667afd7c7"
+    },
+    "lumen/static/js/viewer.js": {
+      "checksum": "2353ec8e186d7af6de1c659777a8955f"
+    },
+    "lumen/static/js/views/camera_sheet.js": {
+      "checksum": "995036327c71a9d4b0532eabe2a31ae8"
+    },
+    "lumen/static/js/views/capture.js": {
+      "checksum": "0d64cd7ef7324c459854871dc8a25534"
+    },
+    "lumen/static/js/views/common.js": {
+      "checksum": "c2a409af05b5b5805e6a3d5495a34582"
+    },
+    "lumen/static/js/views/datums.js": {
+      "checksum": "6e7fa3f6ed124b923fb1bf90f42fc670"
+    },
+    "lumen/static/js/views/diagnostics.js": {
+      "checksum": "30c91e2f9f415e1924c5dace35862420"
+    },
+    "lumen/static/js/views/identify.js": {
+      "checksum": "f21dd74499a22202c66717056d5b42c4"
+    },
+    "lumen/static/js/views/live.js": {
+      "checksum": "4463d32316d6916c60eff25fd67d159f"
+    },
+    "lumen/static/js/views/markers.js": {
+      "checksum": "4e033789eb3e4a52261cbb56c79851ef"
+    },
+    "lumen/static/js/views/operation_editor.js": {
+      "checksum": "89659e5532c7603f09c1e469a98a4511"
+    },
+    "lumen/static/js/views/place.js": {
+      "checksum": "f180607d4656dbf31264a17c95b44bb4"
+    },
+    "lumen/static/js/views/rectified.js": {
+      "checksum": "8507f10c6d32cb5c254064b945c0ee97"
+    },
+    "lumen/static/js/views/scan.js": {
+      "checksum": "5b714b708ebcbb97ea47627440b936c1"
+    },
+    "lumen/static/js/views/settings.js": {
+      "checksum": "f4c5ad564e83aaa4ea2c5995fb078652"
+    },
+    "lumen/static/js/views/verify.js": {
+      "checksum": "0257f7734e98ecb76521e2b50f21e44a"
+    },
+    "lumen/storage/__init__.py": {
+      "checksum": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    "lumen/storage/base.py": {
+      "checksum": "6955de85de88692ff0e7db736028707b"
+    },
+    "lumen/synth/__init__.py": {
+      "checksum": "aed88f6110f928d97e4fb0a06e61a7d5"
+    },
+    "lumen/synth/boards.py": {
+      "checksum": "42786cc59d1ea22d6d643e8802aa55a4"
+    },
+    "lumen/synth/fixtures.py": {
+      "checksum": "d3787c8ba2814692a017e3ec00a618ef"
+    },
+    "lumen/synth/render.py": {
+      "checksum": "f48e09cf1d620b2c3789dbec8c4c2cba"
+    },
+    "lumen/synth/scene.py": {
+      "checksum": "9cb7c060849092a66c586a3732d2070e"
+    },
+    "lumen/synth/tags.py": {
+      "checksum": "5e3a8f02d5037ae56c59d7ff5aea1637"
+    },
+    "lumen/units.py": {
+      "checksum": "5d58e409a9c3d5db26a8cb73c59e2af2"
+    },
+    "lumen/validation/__init__.py": {
+      "checksum": "244d71bdc6f1fe8ffcd2733797d6d0c2"
+    },
+    "lumen/validation/benchmark.py": {
+      "checksum": "3a2a0e0601649a6ec7b3ceb86bae115a"
+    },
+    "lumen/vision/__init__.py": {
+      "checksum": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    "lumen/vision/barcode.py": {
+      "checksum": "c111e330450578b8ce5ca4d8576f4aac"
+    },
+    "lumen/vision/calibration.py": {
+      "checksum": "60e1bee9a02080822a25754bf7109731"
+    },
+    "lumen/vision/datums.py": {
+      "checksum": "1d86a7d1718ec8460106522800b37b84"
+    },
+    "lumen/vision/edgefit.py": {
+      "checksum": "458be9b64758349980294128f0efe5ee"
+    },
+    "lumen/vision/imaging.py": {
+      "checksum": "cffefd3213c5ec2e9d34570b15dbd119"
+    },
+    "lumen/vision/markers.py": {
+      "checksum": "72973b11f988f493d501111e748487ef"
+    },
+    "lumen/vision/multiview.py": {
+      "checksum": "e21514c3102d3449f17d2a05ed9a10ec"
+    },
+    "lumen/vision/photometric.py": {
+      "checksum": "ca9edbc64890af819bf4f71968513798"
+    },
+    "lumen/vision/placard.py": {
+      "checksum": "f223600eda64de074efe5fc96f16ac1b"
+    },
+    "lumen/vision/planar.py": {
+      "checksum": "3d996753b58be2b8155031e98fc04ee2"
+    },
+    "lumen/vision/rectify.py": {
+      "checksum": "636663be32e77c12e3006ab4284fcf41"
+    },
+    "lumen/vision/video.py": {
+      "checksum": "4d89fade64a04d2492f5fb3d5ba6393c"
+    }
+  }
+}

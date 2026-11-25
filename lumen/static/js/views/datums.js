@@ -187,6 +187,10 @@ export function mount(root, ctx) {
       d && d.notes && d.notes.length ? h('div', { class: 'hint' }, d.notes.join(' · ')) : null,
       !d && def && def.notes ? h('div', { class: 'hint' }, def.notes) : null,
       d && ambiguous ? banner('warn', 'More than one similar feature was found.', 'Tap “Choose detected line” and select the intended one.') : null,
+      d && d.depth_neighbour ? h('div', { 'data-region': `step-beside-${kind}` }, banner('warn', 'Is this the right line?',
+        `A fixed edge about ${fmt(Math.abs(d.depth_neighbour.height_mm), 0)} mm ${d.depth_neighbour.height_mm > 0 ? 'in front of' : 'behind'} the panel face runs `
+        + `${d.depth_neighbour.relation === 'beyond' ? `${fmt(Math.abs(d.depth_neighbour.gap_mm), 0)} mm beyond` : 'right beside'} it. `
+        + 'The line may be the edge of a trim or moulding, not the feature the record means. Tap “Choose detected line” and select the intended one, or draw it by hand.')) : null,
       needs3d && d && d.feature_kind !== 'cylinder_model' ? banner('warn', 'Rounded-edge datum', 'A line on one flat view cannot locate this edge. Capture 5–9 photos while moving sideways around it, then search again.') : null,
       h('div', { class: 'row wrap' },
         nAlt > 0 && !needs3d ? h('button', { class: 'btn sm toggle grow', type: 'button', 'aria-pressed': picking === kind ? 'true' : 'false', 'data-action': `pick-${kind}`, onclick: () => setMode(null, picking === kind ? null : kind) }, icon('target'), picking === kind ? 'Tap a line… (cancel)' : `Choose detected line (${nAlt})`) : null,

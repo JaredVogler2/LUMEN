@@ -176,7 +176,9 @@ the lens profile invalidates everything computed from them.
 *A new check (gate):* add the fact to `GateInputs`, fill it in
 `SessionService._gate_report`, add the gate in `evaluate_gates` with a message
 and a suggestion, and a test in `tests/unit/test_gates.py` for both outcomes.
-Blocking gates remove the outline; warning gates make it a preview.
+Blocking gates remove the outline; warning gates make it a preview. A fact
+that was not checked but does not lower the status is an `info` gate with
+`caveat=True` (it keeps its suggestion and is shown with an "i").
 
 *A threshold:* gate thresholds are `GatePolicy`, budget bounds are
 `UncertaintyConfig`, detector limits are `MarkerConfig`. The gate thresholds
@@ -250,4 +252,31 @@ Not done, or not possible here:
   about 0.1 px; the benchmark uses a sampling pattern without that fault
   (`pattern="lattice"`).
 * A common error in all declared tag sizes is invisible without the scale
-  check, which is optional.
+  check, which is optional. The list of checks says so on every result that
+  has no rule measurement (`scale_source`).
+* Which feature a record means by "the floor line" is not something the
+  photos contain. LUMEN asks when a raised or recessed edge runs along the
+  line it found (`step_beside` in `vision/datums.py`); the distances that
+  trigger the question (30 mm, a depth under half the distance, 250 mm) were
+  chosen on one synthetic kick strip and its absence on 24 layouts without
+  one. A trim whose other edges are not found in any photo is not noticed.
+* The benchmark's verdict column says whether an outcome was safe. Four
+  faults were once hidden behind it (`docs/BUILD_LOG.md`, "First full
+  benchmark: four faults behind 'handled'"): read the reasons, not only the
+  verdicts.
+* A seam is one feature up to 6 mm of width (`max_line_width_mm`) and is
+  measured at its centre. The model for a seam that a photo resolves (two
+  opposite edges, the same level outside both) was added after the first
+  full-resolution benchmark put every target half a seam's width off; it has
+  seen one seam width in rendered photos (2 mm at 3.4 px/mm) and other widths
+  only as synthetic profiles in unit tests. Seams with a bright line in them,
+  chamfered joints and gaps with something visible inside are untested.
+* Finding the datums automatically on five to seven full-resolution photos
+  took 74 to 103 s on four shared cores (the search re-finds every candidate
+  line in every photo at full size). One such photo with lines drawn by hand
+  takes about four seconds; at 1600x1200 the two figures are 11 s and 1 s.
+* The line finder works on segments that a general detector merges. A long
+  segment that runs over two features is now measured part by part, but only
+  in three fixed parts (middle half, either half); a feature that is the
+  smaller part of a segment split elsewhere can still be missed, and then has
+  to be drawn by hand.

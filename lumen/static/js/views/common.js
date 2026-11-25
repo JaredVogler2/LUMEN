@@ -21,13 +21,14 @@ export function statusHero(report) {
 
 export function gateList(report, { onlyFailed = false } = {}) {
   const gates = report.gates.filter((g) => (onlyFailed ? !g.passed : true));
-  // failed gates first, blocking before qualifying
-  const rank = (g) => (g.passed ? 2 : g.severity === 'blocking' ? 0 : 1);
+  // failed gates first, blocking before qualifying; then what passed with a note; then the ticks
+  const rank = (g) => (g.passed ? (g.caveat ? 2 : 3) : g.severity === 'blocking' ? 0 : 1);
   gates.sort((a, b) => rank(a) - rank(b));
   return h('div', { class: 'gates' }, gates.map((g) =>
-    h('div', { class: `gate ${g.passed ? 'pass' : 'fail'} ${g.severity}`, 'data-gate': g.code },
-      icon(g.passed ? 'check' : g.severity === 'blocking' ? 'block' : 'alert'),
-      h('div', null, g.message, !g.passed && g.suggestion ? h('div', { class: 'fix' }, g.suggestion) : null))));
+    h('div', { class: `gate ${g.passed ? 'pass' : 'fail'} ${g.severity}${g.caveat ? ' caveat' : ''}`, 'data-gate': g.code },
+      // a caveat passes but says what was NOT checked: an "i", not a tick
+      icon(g.passed ? (g.caveat ? 'info' : 'check') : g.severity === 'blocking' ? 'block' : 'alert'),
+      h('div', null, g.message, (!g.passed || g.caveat) && g.suggestion ? h('div', { class: 'fix' }, g.suggestion) : null))));
 }
 
 export function budgetTable(u) {

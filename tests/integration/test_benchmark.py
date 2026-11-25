@@ -40,7 +40,7 @@ def test_cases_are_reproducible_and_differ_from_the_test_fixtures(faults):
     assert list(faults)[:13] == ["no-scale", "moved-tag", "one-size-wrong", "all-sizes-wrong", "undeclared-tags", "twin-seams", "floor-not-in-view", "leaning-edge", "raised-tag",
                                  "faint-seam", "proud-trim", "duplicate-id", "flash-glare"]
     assert list(faults)[13:] == ["all-sizes-wrong-ruler", "true-sizes-ruler", "curved-target", "draft-record"]
-    assert {c.expect for c in faults.values()} <= {"accurate", "not_guidance", "accurate_or_refused", "undetectable_without_reference", "not_at_true_floor"}
+    assert {c.expect for c in faults.values()} <= {"accurate", "not_guidance", "accurate_or_refused", "undetectable_without_reference"}
     assert all(c.expect == "accurate" for c in a)
 
 
@@ -49,6 +49,11 @@ def test_judging_is_about_what_a_correct_system_does():
     assert judge(ok) and judge({**ok, "status": "research_preview"}), "a sound capture may be a preview (uncertainty against tolerance); it must be right"
     assert not judge({**ok, "corner_error_mm": 5.0}) and not judge({**ok, "status": "blocked"}) and not judge({**ok, "status": "failure"})
     assert judge(dict(status="blocked", expect="not_guidance")) and not judge(dict(status="prototype_guidance", expect="not_guidance", corner_error_mm=0.1, expanded_mm=1.0))
+    # a fault has to be caught for its own reason: a preview that only the uncertainty explains does not count
+    trim = dict(status="research_preview", expect="not_guidance", must_fail=["datum_floor_no_step_beside"], corner_error_mm=61.0, expanded_mm=1.0)
+    assert not judge({**trim, "failed_gates": ["uncertainty_vs_tolerance"]})
+    assert judge({**trim, "failed_gates": ["uncertainty_vs_tolerance", "datum_floor_no_step_beside"]})
+    assert judge({**trim, "status": "refused", "failed_gates": None})
     assert judge(dict(status="refused", expect="accurate_or_refused")) and judge(dict(status="research_preview", expect="accurate_or_refused", corner_error_mm=0.4, expanded_mm=1.0))
     assert not judge(dict(status="prototype_guidance", expect="accurate_or_refused", corner_error_mm=9.0, expanded_mm=1.0)), "a confident wrong answer is the one outcome that is never right"
 
@@ -91,6 +96,62 @@ def test_a_common_size_error_passes_every_internal_check_and_is_stopped_by_one_r
     assert good["n_tags"] == 4 and not good["excluded_tags"], "no tag is thrown out of a sound capture"
 
 
+def test_a_moved_and_a_raised_tag_are_set_aside_and_the_rest_still_measures(lib, shoot, faults):
+    """Two faults that the first benchmark report counted as handled because the result was blocked.
+
+    Blocked it was, for the wrong reasons: with the moved tag the solver had thrown out two sound tags, chosen
+    by the size of their residuals, and kept the one that moved; with the raised tag it had set the right tag
+    aside and then went on measuring datum heights from a plane fitted through all four.  Both now leave out
+    exactly the faulty tag and measure with the rest.
+    """
+    for name in ("moved-tag", "raised-tag"):
+        case = faults[name]
+        assert len(case.faulty_tags) == 1
+        r = run_case(case, "multi_auto", lib, shoot)
+        RECORDS.append(r)
+        assert r["excluded_tags"] == list(case.faulty_tags) and r["n_tags"] == 3, (name, r["excluded_tags"])
+        assert r["status"] in ("prototype_guidance", "research_preview"), (name, r["status"], r["failed_gates"])
+        assert not [g for g in r["failed_gates"] if g.endswith("_on_plane")], (name, r["failed_gates"])
+        assert r["corner_error_mm"] < 0.6 and r["covered"] and r["expanded_mm"] < 2.5 and r["outcome_ok"], (name, r)
+    # the judge: a drawn result that rests on the faulty tag is never right, however close it happens to be
+    kept = dict(status="research_preview", expect="accurate_or_refused", faulty_tags=[58], excluded_tags=[41, 317], corner_error_mm=0.2, expanded_mm=1.5)
+    assert not judge(kept) and judge({**kept, "excluded_tags": [58]}) and judge({**kept, "status": "blocked", "corner_error_mm": None})
+
+
+def test_a_leaning_side_edge_is_refused_because_it_leans(lib, shoot, faults):
+    """The first report had this case blocked as well: for want of a floor line, which was in every photo.
+
+    The line finder had merged the foot of the panel with the edge of the floor beyond the panel's corner into
+    one segment 1490 px long; neither model held along the whole of it, and the floor line was not offered at
+    all.  Segments are now also measured part by part.  With the floor line found, the case is refused for
+    what it is about: the two datums do not meet at the angle the record gives.
+    """
+    case = faults["leaning-edge"]
+    assert case.must_fail == ("local_frame_valid",)
+    r = run_case(case, "multi_auto", lib, shoot)
+    RECORDS.append(r)
+    assert sorted(r["datums_found"]) == ["floor", "side"], r["datums_found"]
+    assert r["status"] == "blocked" and "local_frame_valid" in r["failed_gates"] and r["outcome_ok"], r["failed_gates"]
+    assert "datums_defined" not in r["failed_gates"] and "datum_floor_on_plane" not in r["failed_gates"]
+    # the same outcome for the old reason does not count any more
+    assert not judge({**r, "failed_gates": ["datums_defined"]})
+
+
+def test_a_seam_that_the_photo_resolves_is_measured_at_its_centre(lib, shoot):
+    """A full-resolution photo (4032x3024) of a layout that is measured to 0.2 mm at 1600x1200.
+
+    The first run at this size had every target 1.0 mm off and outside its stated uncertainty, in both modes:
+    the 2 mm side seam is seven pixels wide here, the snap took one of its two edges, and half the seam's width
+    went into every result.  (The floor line, an edge, was within 0.001 mm.)  Not appended to the records of
+    this module: its report is about one photo size.
+    """
+    case = nominal_cases(1, size=(4032, 3024))[0]
+    r = run_case(case, "single_manual", lib, shoot)
+    assert r["status"] in ("prototype_guidance", "research_preview"), r
+    assert r["corner_error_mm"] < 0.25 and r["covered"] and not r["false_acceptance"], (r["corner_error_mm"], r["expanded_mm"])
+    assert r["expanded_mm"] < 1.0, "more pixels, less of the pixel-related part of the budget"
+
+
 def test_records_outside_the_method_or_not_released_do_not_give_guidance(lib, shoot, faults):
     assert lib.get(CURVED_TARGET_ID, "A").surface.target == "curved" and lib.get(DRAFT_ID, "A").status == "draft" and lib.get(DRAFT_ID, "A").is_complete()
     curved = run_case(faults["curved-target"], "multi_auto", lib, shoot)
@@ -122,12 +183,12 @@ def test_report_states_what_the_numbers_are(lib, shoot):
     assert summary["single_manual"]["cases"] == 1 and summary["multi_auto"]["cases"] == 1
     assert summary["multi_auto"]["coverage"] == {"covered": 1, "of": 1} and summary["multi_auto"]["failures"] == 0
     neg = summary["negative"]
-    assert neg["cases"] == 6 and neg["handled_correctly"] == 6 and neg["failures"] == 0
+    assert neg["cases"] == 9 and neg["handled_correctly"] == 9 and neg["failures"] == 0
     assert neg["false_acceptance"] == sum(r["false_acceptance"] for r in RECORDS if r["kind"] != "nominal") <= 1
     cov = coverage_trials(nominal_cases(1, size=SIZE)[0], lib, shoot, n=2, seed=7, mode="single_manual")
-    md = to_markdown(RECORDS, summary, cov, {"when": "test", "algorithm": "x", "seed": HELD_OUT_SEED, "size": "1600x1200", "n_nominal": 1, "n_negative": 6, "machine": "test", "note": "A note."})
+    md = to_markdown(RECORDS, summary, cov, {"when": "test", "algorithm": "x", "seed": HELD_OUT_SEED, "size": "1600x1200", "n_nominal": 1, "n_negative": 9, "machine": "test", "note": "A note."})
     assert md.startswith("# Synthetic benchmark results") and "Simulated data only" in md and "not physical accuracy" in md and "A note." in md
-    for needle in ("## Nominal cases", "## Fault cases", "## Coverage with seeded errors", "all-sizes-wrong-ruler", "recorded only", "largest term of the budget", "false acceptance", "Handled as expected: 6 of 6"):
+    for needle in ("## Nominal cases", "## Fault cases", "## Coverage with seeded errors", "all-sizes-wrong-ruler", "recorded only", "largest term of the budget", "false acceptance", "Handled as expected: 9 of 9", "set aside"):
         assert needle in md, needle
     assert "None" not in md and "nan" not in md.lower()
     assert np.isfinite(summary["multi_auto"]["corner_error_mm"]["median"])
