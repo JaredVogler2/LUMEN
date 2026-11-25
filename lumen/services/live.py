@@ -110,7 +110,8 @@ def track_frame(svc: "SessionService", sid: str, data: bytes, *, placard_ids: li
         return _lost("tags_not_usable", "The tags cannot be measured in this frame: hold still and check focus and light.", tags=tag_list, frame=fr, simulated=simulated)
     if not any(m.tag_id in sol.layout.poses for m in accepted):
         return _lost("unknown_tags", "These tags are not part of this session's registration.", suggestions=["Aim at the tags that were on the panel during capture, or analyse again with the new tags."], tags=tag_list, frame=fr, simulated=simulated)
-    view = PlanarView("live", [tag_obs(m) for m in accepted], cam, "auto")
+    pool = svc._pool_for(s, f)  # small tags take the edge shift measured on larger ones (this frame, else the registration photos)
+    view = PlanarView("live", [tag_obs(m, pool) for m in accepted], cam, "auto")
     try:
         with svc.cpu.slot(lim.request_timeout_seconds):
             loc = localize_view(sol.layout, view)
@@ -138,7 +139,7 @@ def track_frame(svc: "SessionService", sid: str, data: bytes, *, placard_ids: li
             pass
     sig = apply_h(loc.H, probe_pts) / float(np.hypot(f.width, f.height))
     used = tuple(sorted(loc.used_ids))
-    bias = tuple(sorted((t.tag_id, bool(t.bias_corrected)) for t in ext_view.tags))
+    bias = tuple(sorted((t.tag_id, bool(t.bias_corrected), bool(t.bias_pooled)) for t in ext_view.tags))
     hit = svc._live.get(key)
     reuse = None
     if (

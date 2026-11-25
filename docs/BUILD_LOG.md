@@ -618,3 +618,199 @@ learned from a delayed browser event that a section had been opened, and
 rebuilt the form before the event arrived. The editor now reads the state of
 its sections from the page before rebuilding; that test then passed four
 times in a row on its own.
+
+## 2026-11-25 — Held-out layouts find two faults in the multi-photo path (prompts 10, 13)
+
+Before the first full benchmark run, six of its held-out layouts were run at
+1280x960, a smaller size than any test uses, with in-camera processing added
+(sharpening, a tone curve, JPEG). Two things were wrong. Both were in code
+whose tests passed.
+
+**1. More photos made the stated uncertainty worse.** A tag under about
+52 px cannot have its edge shift estimated. Such a tag had full weight in the
+scale, and the budget charged 0.25 px of unknown shift to it. A few small
+tags among fifteen observations doubled the stated uncertainty and, in one
+case, tripled the error.
+
+First attempt, discarded: give such a tag a large uncertainty of its own in
+the corner covariance, so that its size counts for little. That fixed the
+multi-photo figures and broke the single-photo check that finds a raised
+tag. The unknown shift is almost the same for every tag of a photo, so it
+cancels when tags are compared with each other; treating it as independent
+noise made that comparison blind.
+
+Change kept: the shift is a property of the camera's blur and processing, so
+a tag too small for its own estimate takes the value measured on the larger
+tags of the same photo, or of all registration photos when its own photo has
+none (`edge_shift_pool`, `tag_obs`). The scatter between the donors, 35 % of
+the value and a floor are kept as its uncertainty; donors that disagree by
+more than 0.12 px are not pooled. The budget charges 0.12 px to a tag
+corrected this way, 0.05 px to a tag with its own estimate, and 0.25 px when
+no tag of the capture was large enough to measure anything. On a test photo
+with a strong tone curve the border of a 36 mm tag is off by more than
+0.08 px uncorrected and by less than 0.06 px after the pooled correction.
+
+**2. Four of six multi-photo runs were blocked: "the floor datum is not on
+the panel face".** It was on the face. Three causes:
+
+* heights were measured from the face of one 50 mm tag (the reference tag of
+  the bundle adjustment); its tilt error of about 0.1 degrees is a millimetre
+  at the floor line;
+* the height was compared with a fixed 1 mm limit, whatever the photos could
+  resolve;
+* all photos look down at the floor line from similar heights; a shift of the
+  edge by a fraction of a pixel, the same in every photo, then looks exactly
+  like a height.
+
+Change: heights are measured from the plane fitted through all tags. Each
+height gets a margin: what a 0.25 px common edge shift could fake, plus two
+standard deviations of the line fits and of that plane at that place. A
+feature is "on the face" only if that is shown at both ends, "off the face"
+only if the whole feature is clear of it, and otherwise "not settled by these
+photos"; it is then taken as the record declares it, and the screen says so.
+
+Same six layouts, same photos, before and after both changes (U = expanded
+uncertainty, error = largest target corner error, both mm):
+
+| Layout, processing | Single photo, before | Single photo, after | All photos, before | All photos, after |
+|---|---|---|---|---|
+| 1, plain | 1.09 / 0.26 | 1.09 / 0.26 | preview, 2.10 / 0.12 | preview, 1.17 / 0.14 |
+| 2, sharpened | 1.15 / 0.16 | 1.15 / 0.16 | preview, 2.39 / 0.54 | guidance, 0.99 / 0.15 |
+| 3, tone curve, tags 34–49 px | 4.23 / 1.62 | 1.93 / 1.31 | **blocked** | preview, 1.44 / 0.33 |
+| 4, sharpened, contrast, JPEG 85 | 1.63 / 0.84 | 1.63 / 0.84 | **blocked** | preview, 1.21 / 0.26 |
+| 5, plain | 1.29 / 0.08 | 1.29 / 0.08 | **blocked** | preview, 1.23 / 0.17 |
+| 6, sharpened | 1.53 / 0.24 | 1.53 / 0.24 | **blocked** | preview, 1.35 / 0.38 |
+
+Every error is inside its stated uncertainty. At this size the status is a
+preview because the uncertainty exceeds half of the ±2 mm sample tolerance.
+The closest case is layout 3 from a single photo: error 1.31 mm against
+1.93 mm. Its tags are 34 to 49 px across the photos, at or below the 40 px
+the gate `tag_resolution` asks for, and the capture screen now warns about
+small tags before the analysis ("The tags are small in the photos: move
+closer, or use Full-res photo").
+
+Datum heights after the change (true value 0): side seams −0.04 to +0.10 mm,
+resolved to ±0.6 to ±0.8 mm, reported "verified in 3-D"; floor lines up to
+1 mm at their far ends, resolved to ±1.1 to ±1.4 mm, reported "not settled".
+On the test scene at 1600x1200 the floor line is likewise "not settled"
+(±0.8 mm); at 4032x3024 it is verified (±0.3 mm). The 8 mm proud trim of the
+fault tests is still reported as off the face (8.0 mm, margin under 3 mm).
+Three tests that expected "verified" for a horizontal line seen from one
+height were changed to accept "not settled"; the side seam must still verify.
+
+What this says about the earlier results: the multi-photo figures recorded
+above in this log were measured on the test layouts only, where neither
+fault showed. The held-out set did its job. Because these six layouts have
+now been looked at, the benchmark report also contains a second set from
+another seed that was not looked at before its run.
+
+`ALGORITHM_VERSION` is now `lumen-algo-2026.11.1`.
+
+## 2026-11-25 — A rendering fault in the benchmark photos, and one bad observation (prompts 05, 13)
+
+A control case of the benchmark (correct tag sizes, five photos) registered
+only two of four tags; the other two were excluded as "moved or misread".
+Nothing had moved.
+
+Cause, in two steps:
+
+* In two of twenty tag observations one border line was rotated by 0.3
+  degrees (0.2 px at its ends). The edge fit was right; the picture was
+  wrong. The benchmark rendered with a regular 2x2 grid of samples per pixel.
+  Along an edge at 45 degrees or at a slope of 1:2 every pixel meets that grid
+  at the same phase and is rounded the same way, so the whole edge is
+  displaced. The affected borders had exactly those slopes.
+* The multi-photo solver answers an observation that does not fit by
+  excluding its tag from the whole session.
+
+Changes:
+
+* The renderer has a second sampling pattern, `pattern="lattice"`: the
+  samples of a pixel sit on a golden-ratio lattice that is shifted
+  differently in every pixel, so rounding no longer adds up along an edge.
+  Displacement of the three affected border lines, at their two ends (px):
+
+  | Sampling | tag 41, photo 5 | tag 102, photo 4 | tag 102, photo 4, next side |
+  |---|---|---|---|
+  | 2x2 grid (benchmark until now) | +0.19 / −0.20 | +0.14 / −0.14 | −0.04 / −0.19 |
+  | 3x3 grid (what the tests use) | −0.05 / −0.04 | −0.04 / +0.05 | +0.03 / −0.13 |
+  | 4x4 grid | −0.02 / −0.00 | −0.03 / −0.01 | +0.06 / −0.10 |
+  | lattice, 4 samples | +0.02 / −0.05 | +0.04 / −0.03 | −0.01 / +0.01 |
+  | lattice, 9 samples (benchmark now) | +0.00 / −0.05 | +0.01 / −0.03 | +0.01 / +0.02 |
+
+  The benchmark photos were rendered again with the lattice. The unit and
+  integration tests keep the 3x3 grid they were written with; part of the
+  corner errors recorded for them earlier in this log may therefore be
+  errors of the picture rather than of the measurement.
+* A tag that does not fit in exactly one photo and is seen in at least three
+  is no longer excluded: that one observation is left out, the tag is kept,
+  and the report says so ("Left out because it did not fit the other photos
+  of the same tag"). A tag that does not fit in two or more photos is
+  excluded as before (the moved-tag test still passes).
+
+Why the tests had not shown it: they use one tag layout and a 3x3 grid, and
+none of its borders fell on such a slope badly enough to cross a test
+threshold.
+
+## 2026-11-25 — Flashlight experiment (prompt 07)
+
+`lumen/vision/photometric.py` fits the start of a rounded edge, its direction
+and its radius to the shading of photos taken with the phone light on,
+together with exposure, beam shape, lens fall-off, ambient light, torch
+position, gloss and tone curve, and decides from its own evidence whether the
+result is supported. The full ablation with every case is in
+`docs/PHOTOMETRIC_ABLATION.md`. Summary of its held-out set (synthetic
+photos, one run; I re-ran the 23 tests of the module myself: all pass):
+
+| Compared with the outline method | Tangent line, median error | Photometric closer in |
+|---|---|---|
+| on the same torch-on photos (39 cases) | 0.04 mm against 0.58 mm | 37 of 39 |
+| against torch-off photos from the same places (17 cases) | 0.09 mm against 0.02 mm | 5 of 17 |
+
+* It helps when the sweep was taken with the light on, most in a dark room.
+  The outline of a lit rounded edge is found 0.4 to 0.9 mm too far in,
+  because the surface darkens toward its outline when the light sits next to
+  the lens.
+* It does not help when photos without the light exist.
+* It was wrong without refusing on a surface with smooth brightness
+  variation (−1.1 mm at a stated ±0.3 mm) and for the radius under a mild
+  tone curve (+0.5 mm at ±0.16). The renderer and the fitted model contain
+  the same physics, so these numbers are an upper limit on how good it is.
+
+Decision: the module stays research evidence. In the application it is a
+step that can be run from the Datums screen for rounded-edge operations
+(`POST /api/sessions/{id}/research/photometric`); the result is stored under
+`research`, labelled "research evidence only", shown next to the outline
+method, and never used for a datum, a check or a target (a test compares the
+datums and the whole check report before and after). `LUMEN_PHOTOMETRIC_ENABLED=false`
+removes it.
+
+Two things the ablation changed in the main path:
+
+* Heights and outlines were measured from the face of one tag; the ablation
+  measured up to 0.27 mm of height error at the edge from that. The plane
+  through all tags is used now (entry above).
+* A rounded-edge datum fitted to torch-on photos now carries a note that
+  such outlines are found too far in and that photos without the light
+  should be used.
+
+Guided sweep: the capture coach already directs the sweep (more views, step
+sideways, floor or edge missing); the experiment adds its own requests
+("take the sweep with the light on", "add a view", "move toward the edge")
+to its card. Nothing was tried on a real phone: whether a web page can
+switch the torch at all depends on the browser, and the camera sheet says so
+when it cannot.
+
+## 2026-11-25 — Clean installs on other Python versions (prompts 14, 15)
+
+`requirements.txt` and `pyproject.toml` said Python 3.11 to 3.13. That was
+not true:
+
+| Python | Clean environment from `requirements-dev.txt` | Tests |
+|---|---|---|
+| 3.11.15 | **fails**: the pinned numpy 2.5.5 needs Python 3.12 or newer | — |
+| 3.12 | installs (the development environment) | full suite |
+| 3.13.18 | installs; OpenCV 4.14.0, numpy 2.5.5, SciPy 1.18.1, FastAPI 0.165.0, pydantic 2.14.4 | 249 of 249 in a representative part of the suite (geometry, units, library, gates, storage, local frame, planar solver, tags, codes, API flow, library flow, deployment) |
+
+The files and documents now say Python 3.12 or 3.13. Other versions of the
+libraries, and OpenCV 5, were not tried.

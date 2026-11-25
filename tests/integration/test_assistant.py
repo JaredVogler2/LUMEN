@@ -73,6 +73,20 @@ def reply(**kw):
     return json.dumps(base)
 
 
+def test_mock_adapter_answers_with_a_citation_when_no_check_is_failing(library):
+    """The reply for a clean report used to carry no citation and was (rightly) discarded by the validator."""
+    with app_with(library, MockAdapter())[0] as c:
+        sid = c.post("/api/sessions", json={"mode": "demo"}).json()["id"]
+        c.post(f"/api/sessions/{sid}/demo/load", json={"scenario": "flat"})
+        c.post(f"/api/sessions/{sid}/register")
+        c.post(f"/api/sessions/{sid}/datums/propose")
+        c.post(f"/api/sessions/{sid}/datums/confirm")
+        r = c.post(f"/api/sessions/{sid}/assistant", json={"kind": "explain_capture", "question": "What does this status mean?"})
+        assert r.status_code == 200, r.text
+        out = r.json()
+        assert "prototype_guidance" in out["answer"] and out["citations"][0]["source"] == "status" and "not acceptance" in out["citations"][0]["quote"]
+
+
 @pytest.mark.parametrize(
     "raw,reason",
     [

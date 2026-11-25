@@ -159,6 +159,8 @@ class MarkerObservation(_Model):
     bias_px: float = 0.0
     bias_sigma_px: float | None = None
     bias_applied: bool = False
+    #: corner displacement (8 values) per pixel of outward shift of the tag border; None for unrefined tags
+    scale_mode: list[float] | None = None
     max_sagitta_px: float = 0.0
     saturation: float = 0.0
     quality: float = 0.0

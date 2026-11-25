@@ -322,6 +322,16 @@ def capture_advice(svc: "SessionService", s: Session) -> dict[str, Any]:
     unmeasured = [i for i in seen if str(i) not in (s.tag_sizes.get("measured_mm") or {})]
     if unmeasured:
         add("unmeasured_tags", "warn", "Tags without a measured size: " + ", ".join(f"ID {i}" for i in unmeasured) + ".")
+    # Tags that are small in the picture cannot measure their own edge shift, and every pixel is a larger part
+    # of their size: the stated uncertainty grows.  (About 6.5 px per tag cell are needed, i.e. 52 px per edge.)
+    obs = [m for f in usable for m in f.markers if m.accepted]
+    if obs:
+        small = [m for m in obs if not m.bias_applied]
+        smallest = min(min(m.edge_px) for m in obs)
+        if len(small) > len(obs) / 2:
+            add("tags_low_resolution", "warn", f"The tags are small in the photos (smallest {smallest:.0f} px): move closer, or use Full-res photo. Small tags make the result less certain.", "closer")
+    if usable and s.calibration is None:
+        add("no_lens_profile", "info", "No lens profile is attached: results stay a research preview. Make one once per phone under Settings.")
 
     # ---- constraints that only the datum step can report
     props = s.research.get("datum_proposals") if reg else None

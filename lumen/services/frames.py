@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any
+from dataclasses import dataclass
+from typing import Any, Iterable
 
 import numpy as np
 
@@ -80,14 +81,67 @@ def marker_from_detection(d: TagDetection) -> MarkerObservation:
         bias_px=d.bias_px,
         bias_sigma_px=None if not np.isfinite(d.bias_sigma_px) else float(d.bias_sigma_px),
         bias_applied=d.bias_applied,
+        scale_mode=None if d.scale_mode is None else [float(x) for x in d.scale_mode],
         max_sagitta_px=d.max_sagitta_px,
         saturation=d.saturation,
         quality=d.quality(),
     )
 
 
-def tag_obs(m: MarkerObservation) -> TagObs:
-    return TagObs(m.tag_id, np.asarray(m.corners_ideal, dtype=float), np.asarray(m.cov, dtype=float), float(m.size_mm), bool(m.bias_applied))
+@dataclass(frozen=True)
+class EdgeShiftPool:
+    """The dark-side edge shift measured on the tags that are large enough for it (px), to use on those that are not."""
+
+    delta_px: float
+    sigma_px: float
+    n: int
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"delta_px": round(self.delta_px, 4), "sigma_px": round(self.sigma_px, 4), "n": self.n}
+
+
+#: Part of a pooled shift that is kept as uncertainty: the shift is not exactly the same on every tag.
+POOL_MODEL_FRACTION = 0.35
+POOL_FLOOR_PX = 0.03
+#: Tags whose own estimates disagree by more than this are not pooled at all.
+POOL_MAX_SPREAD_PX = 0.12
+
+
+def edge_shift_pool(markers: Iterable[MarkerObservation]) -> EdgeShiftPool | None:
+    """Pooled edge shift of the accepted tags that carry their own estimate.
+
+    The shift comes from lens blur and from the camera's tone and sharpening
+    processing, which are the same for every tag of a photo and nearly the same
+    for every photo of a capture.  A tag too small for its own estimate
+    therefore takes the pooled value; what is kept as its uncertainty is the
+    scatter between the donors, a fraction of the value itself and a floor.
+    """
+    d = [(float(m.bias_px), float(m.bias_sigma_px)) for m in markers if m.accepted and m.bias_applied and m.bias_sigma_px]
+    if not d:
+        return None
+    v = np.array([x[0] for x in d])
+    w = 1.0 / np.maximum(np.array([x[1] for x in d]), 1e-3) ** 2
+    mean = float(np.sum(w * v) / np.sum(w))
+    spread = float(np.sqrt(np.sum(w * (v - mean) ** 2) / np.sum(w))) if len(d) > 1 else 0.0
+    if spread > POOL_MAX_SPREAD_PX:
+        return None
+    sigma = float(np.sqrt(1.0 / np.sum(w) + spread**2 + (POOL_MODEL_FRACTION * mean) ** 2 + POOL_FLOOR_PX**2))
+    return EdgeShiftPool(mean, sigma, len(d))
+
+
+def tag_obs(m: MarkerObservation, pool: EdgeShiftPool | None = None) -> TagObs:
+    """Observation for the solvers.  With ``pool``, a tag without its own edge-shift estimate is corrected with
+    the pooled one: its border moves outward by that amount and the uncertainty of the amount goes into its
+    covariance as one common move of the four border lines."""
+    corners = np.asarray(m.corners_ideal, dtype=float)
+    cov = np.asarray(m.cov, dtype=float)
+    pooled = False
+    if pool is not None and not m.bias_applied and m.scale_mode is not None:
+        g = np.asarray(m.scale_mode, dtype=float)
+        corners = corners + pool.delta_px * g.reshape(4, 2)
+        cov = cov + np.outer(g, g) * pool.sigma_px**2
+        pooled = True
+    return TagObs(m.tag_id, corners, cov, float(m.size_mm), bool(m.bias_applied), pooled)
 
 
 def capture_identity(img: DecodedImage, client: dict[str, Any] | None) -> dict[str, Any]:

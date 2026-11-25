@@ -12,7 +12,7 @@ from lumen.config import Limits
 from lumen.services.jobs import JobRunner
 from lumen.synth import LightSpec
 from lumen.synth.fixtures import flat_panel_scene, phone_camera, sweep_stations
-from tests.conftest import jpeg_bytes, make_settings, px, render_cached, sweep_video_frames, write_video
+from tests.conftest import calibration_for, jpeg_bytes, make_settings, px, render_cached, sweep_video_frames, write_video
 
 MEASURED = {"nominal_mm": 50.0, "measured_mm": {"3": 50.0, "7": 50.0, "11": 50.0, "20": 50.0}}
 
@@ -232,6 +232,30 @@ def test_advice_reports_tag_problems_with_a_direction(client):
     adv = client.get(f"/api/sessions/{sid}/capture/advice").json()
     small = next(i for i in adv["items"] if i["code"] == "tag_small")
     assert small["arrow"] == "closer" and not adv["ready"]
+
+
+def test_advice_mentions_small_tags_and_a_missing_lens_profile(client):
+    scene = flat_panel_scene()
+    # usable but small: about 45 px per tag, too few pixels per cell for the tags' own edge-shift estimate
+    sid = new_session(client)
+    mid = phone_camera((270.0, -1500.0, 420.0), width=1600, height=1200)
+    f = add(client, sid, render_cached(scene, mid, seed=0).image)
+    acc = [m for m in f["markers"] if m["accepted"]]
+    assert len(acc) == 4 and not any(m["bias_applied"] for m in acc) and all(m["scale_mode"] is not None and len(m["scale_mode"]) == 8 for m in acc)
+    adv = client.get(f"/api/sessions/{sid}/capture/advice").json()
+    low = next(i for i in adv["items"] if i["code"] == "tags_low_resolution")
+    assert low["level"] == "warn" and low["arrow"] == "closer" and "Full-res photo" in low["text"]
+    # the session has no lens profile: said once, as information (it is not something a photo can fix)
+    prof = next(i for i in adv["items"] if i["code"] == "no_lens_profile")
+    assert prof["level"] == "info" and adv["next"]["code"] != "no_lens_profile"
+    # at working distance neither hint about the tags appears
+    sid2 = new_session(client)
+    near = phone_camera((330.0, -720.0, 430.0), width=1600, height=1200)
+    add(client, sid2, render_cached(scene, near, seed=1).image)
+    codes = {i["code"] for i in client.get(f"/api/sessions/{sid2}/capture/advice").json()["items"]}
+    assert "tags_low_resolution" not in codes and "tag_small" not in codes and "no_lens_profile" in codes
+    client.put(f"/api/sessions/{sid2}/calibration", json={"profile": calibration_for(near)})
+    assert "no_lens_profile" not in {i["code"] for i in client.get(f"/api/sessions/{sid2}/capture/advice").json()["items"]}
 
 
 def test_flash_pairs_are_checked_for_motion_and_exposure(client):

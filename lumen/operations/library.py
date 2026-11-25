@@ -100,8 +100,10 @@ class DatumDefinition(_Model):
     * ``planar_edge`` — a visible line lying on the target plane (seam, joint,
       trim line, the floor interface of a panel that reaches the floor);
     * ``curve_tangent`` — the line where the flat panel starts to curve.  It is
-      not directly visible; it needs 3-D evidence (multi-view silhouette fit,
-      experimental photometric fit) or a configured ``radius``;
+      not directly visible; it needs 3-D evidence (a silhouette fit over
+      several photos) or a configured ``radius``.  The experimental
+      photometric analysis is research diagnostics only and is never datum
+      evidence;
     * ``curve_outer_extreme`` — the outermost line of a rounded edge projected
       perpendicularly onto the plane.  Off-plane; needs the same evidence.
     """

@@ -112,6 +112,43 @@ def test_moving_tag_is_detected_and_excluded(sweep):
     assert cam_err < 1.0 and tag_err < 0.3
 
 
+def test_one_disturbed_observation_is_left_out_and_the_tag_is_kept(sweep):
+    """A tag that fits in five photos and not in the sixth has not moved: only that observation is dropped."""
+    scene, cams = sweep
+    views = make_views(scene, cams)
+    clean = solve_multiview(make_views(scene, cams))
+    assert not clean.excluded_observations and not clean.excluded_tags and "observations_excluded" not in clean.flags
+    # one border line of tag 11 in photo 2 is half a pixel off (glare on that edge, something lying on it)
+    v = views[2]
+    t = next(x for x in v.tags if x.tag_id == 11)
+    corners = t.corners.copy()
+    edge = corners[2] - corners[1]
+    n = np.array([edge[1], -edge[0]]) / np.linalg.norm(edge)
+    corners[1] += 0.5 * n
+    corners[2] += 0.5 * n
+    views[2] = MVView(v.frame_id, [TagObs(11, corners, t.cov, t.size_mm) if x.tag_id == 11 else x for x in v.tags], v.camera, v.raw, v.image_size)
+    sol = solve_multiview(views)
+    assert sol.excluded_observations == {"f2": [11]} and "observations_excluded" in sol.flags
+    assert not sol.excluded_tags and not sol.excluded_views and 11 in sol.tags and "f2" in sol.cameras
+    assert ("f2", 11) not in sol.obs_chi2 and max(sol.obs_chi2.values()) < 9.0
+    cam_err, tag_err = errors(scene, cams, sol)
+    c0, t0 = errors(scene, cams, clean)
+    assert cam_err < c0 + 0.15 and tag_err < t0 + 0.05, "the result is as good as without the disturbance"
+    assert sol.to_dict()["excluded_observations"] == {"f2": [11]}
+    # the same disturbance in three photos is not one odd observation: the tag goes, as before
+    for k in (3, 4):
+        v = views[k]
+        t = next(x for x in v.tags if x.tag_id == 11)
+        c = t.corners.copy()
+        e = c[2] - c[1]
+        nn = np.array([e[1], -e[0]]) / np.linalg.norm(e)
+        c[1] += 0.5 * nn
+        c[2] += 0.5 * nn
+        views[k] = MVView(v.frame_id, [TagObs(11, c, t.cov, t.size_mm) if x.tag_id == 11 else x for x in v.tags], v.camera, v.raw, v.image_size)
+    sol3 = solve_multiview(views)
+    assert 11 in sol3.excluded_tags or len(sol3.excluded_observations) == 0 or "inconsistent_observations" in sol3.flags
+
+
 def test_wrong_tag_size_is_detected(sweep):
     scene, cams = sweep
     sol = solve_multiview(make_views(scene, cams, sizes={7: 52.0}))

@@ -170,6 +170,8 @@ class TagDetection:
     bias_px: float = 0.0
     bias_sigma_px: float = float("nan")
     bias_applied: bool = False
+    #: displacement of the four corners (8 values, ideal px) per pixel of outward shift of all four border lines
+    scale_mode: np.ndarray | None = None
     n_interior_edges: int = 0
     max_sagitta_px: float = 0.0
     saturation: float = 0.0
@@ -646,6 +648,15 @@ def detect_tags(
                         det.flags.append("bias_estimate_unreasonable")
                 else:
                     det.flags.append("bias_not_estimated")
+                # How the four corners move when all four border lines move outward by one pixel.
+                # A tag too small for its own edge-shift estimate can be corrected later with the
+                # shift measured on larger tags of the same camera (services.frames.tag_obs).
+                g = np.zeros(8)
+                for k in range(4):
+                    n_prev, n_next = fits[(k - 1) % 4].n, fits[k].n
+                    assert n_prev is not None and n_next is not None
+                    g[2 * k : 2 * k + 2] = np.linalg.solve(np.stack([n_prev, n_next]), np.ones(2))
+                det.scale_mode = g
 
                 cov = cov * cfg.covariance_inflation + np.eye(8) * cfg.sigma_floor_px**2
                 det.corners_ideal = q

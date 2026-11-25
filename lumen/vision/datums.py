@@ -70,6 +70,13 @@ class DatumConfig:
     #: between them with margin for pose error on real captures.
     stationary_rms_mm: float = 0.25
     on_plane_mm: float = 1.0
+    #: A seam or step edge is located a little toward its dark side, by an amount that depends on blur and tone
+    #: mapping and is the same in every photo of a capture.  Seen from similar elevations such a shift looks
+    #: exactly like a height above the plane, so the height of a line is only known to within what this bound
+    #: (px, per photo, same sign in all) and the fit noise allow.  A line is called on or off the plane only
+    #: when that margin permits a decision; otherwise it stays "unverified".
+    edge_shift_bound_px: float = 0.25
+    height_k: float = 2.0
     #: an edge this many times softer than the tag edges may be a lighting gradient
     soft_edge_factor: float = 3.5
     #: pair search: tolerance around the configured nominal datum angle
@@ -96,6 +103,8 @@ class LineCandidate:
     matches: dict[str, tuple[EdgeFit, Line2D, np.ndarray]] = field(default_factory=dict)
     classification: str = "unverified"  # on_plane | off_plane | view_dependent | unverified
     height_mm: float | None = None
+    #: how well the photos resolve that height: edge-shift bound plus ``height_k`` standard deviations (mm)
+    height_margin_mm: float | None = None
     stationarity_rms_mm: float | None = None
     spread_mm: float | None = None  # spread of the plane-projected position across views
     soft: bool = False
@@ -117,6 +126,7 @@ class LineCandidate:
             "n_views": 1 + len(self.matches),
             "classification": self.classification,
             "height_mm": None if self.height_mm is None else round(self.height_mm, 3),
+            "height_margin_mm": None if self.height_margin_mm is None else round(self.height_margin_mm, 3),
             "stationarity_rms_mm": None if self.stationarity_rms_mm is None else round(self.stationarity_rms_mm, 3),
             "spread_mm": None if self.spread_mm is None else round(self.spread_mm, 3),
             "soft": self.soft,
@@ -360,8 +370,13 @@ class FrameContext:
     tag_blur_px: float = 1.0
 
 
-def match_and_classify(cand: LineCandidate, frames: dict[str, FrameContext], cfg: DatumConfig | None = None) -> None:
-    """Find ``cand`` again in the other photos and decide what it is."""
+def match_and_classify(cand: LineCandidate, frames: dict[str, FrameContext], cfg: DatumConfig | None = None, plane_cov: np.ndarray | None = None) -> None:
+    """Find ``cand`` again in the other photos and decide what it is.
+
+    ``plane_cov`` is the covariance of the reference plane ``z = a x + b y + c`` as the tags define it
+    (order a, b, c; plane-frame millimetres).  The plane is known best between the tags and less well away from
+    them, and a feature cannot be placed on or off it more precisely than that.
+    """
     cfg = cfg or DatumConfig()
     home = frames[cand.frame_id]
     cand.soft = bool(cand.kind == "step" and cand.sigma_blur_px > cfg.soft_edge_factor * max(home.tag_blur_px, 0.5))
@@ -394,36 +409,118 @@ def match_and_classify(cand: LineCandidate, frames: dict[str, FrameContext], cfg
         cand.notes.append("camera positions unknown: cannot tell an on-plane seam from an off-plane edge")
         return
     planes = []
+    shifted = []  # the same view planes with the image line moved one pixel toward its bright side
+    fits = []
     for fid in posed:
         fc = frames[fid]
         e = cand.fit if fid == cand.frame_id else cand.matches[fid][0]
-        assert e.mid is not None and fc.pose is not None and fc.K is not None
+        assert e.mid is not None and e.n is not None and fc.pose is not None and fc.K is not None
         h = 0.5 * e.length
         planes.append(view_plane_of_image_line(fc.pose, fc.K, e.mid - h * e.t, e.mid + h * e.t))
+        shifted.append(view_plane_of_image_line(fc.pose, fc.K, e.mid - h * e.t + e.n, e.mid + h * e.t + e.n))
+        fits.append((fc, e))
     tri = triangulate_line(planes)
     cand.stationarity_rms_mm = tri["rms_offset_mm"]
     if tri["baseline_quality"] < 0.02:
         cand.notes.append("the photos look along this feature from almost the same side: height above the plane is not observable")
         return
-    # height of the 3-D line above the plane z = 0 (world z points out of the panel), at the feature's two ends
-    P, d = tri["point"], tri["direction"]
-    heights = []
-    for q in cand.endpoints:
-        s = float((np.array([q[0], q[1], 0.0]) - P) @ d)
-        heights.append(float((P + s * d)[2]))
-    stationary = tri["rms_offset_mm"] <= cfg.stationary_rms_mm and tri["max_angle_deg"] <= 1.0
+    heights, shift_part, sigma_line, noise_mm = _line_heights(cand, planes, shifted, fits, cfg)
+    if heights is None:
+        cand.notes.append("the photos look along this feature from almost the same side: height above the plane is not observable")
+        return
+    margins = []
+    for q, b, sl in zip(cand.endpoints, shift_part, sigma_line):
+        sp = 0.0
+        if plane_cov is not None:
+            v = np.array([q[0], q[1], 1.0])
+            sp = float(np.sqrt(max(v @ plane_cov @ v, 0.0)))
+        margins.append(b + cfg.height_k * float(np.hypot(sl, sp)))
+    cand.height_mm = float(np.mean(heights))
+    cand.height_margin_mm = float(np.max(margins))
+    # a fixed line leaves residuals of the size of the fit noise; anything clearly larger moves with the viewpoint
+    stationary = tri["rms_offset_mm"] <= max(cfg.stationary_rms_mm, 3.0 * noise_mm) and tri["max_angle_deg"] <= 1.0
+    lo = [abs(h) - m for h, m in zip(heights, margins)]  # smallest height the photos allow
+    hi = [abs(h) + m for h, m in zip(heights, margins)]  # largest
     if not stationary and len(posed) >= 3:
         cand.classification = "view_dependent"
         cand.notes.append("its position changes with the viewpoint in a way no fixed line explains: silhouette of a curved surface, shadow or reflection")
     elif stationary or len(posed) == 2:
-        cand.height_mm = float(np.mean(heights))
-        if max(abs(h) for h in heights) <= cfg.on_plane_mm:
+        # on the plane: shown at both ends.  Off the plane: the whole feature is clear of it (a height at one end
+        # only is what a small rotation error of a long line looks like, and decides nothing).
+        if max(hi) <= cfg.on_plane_mm:
             cand.classification = "on_plane"
-        else:
+        elif min(lo) > cfg.on_plane_mm:
             cand.classification = "off_plane"
-            cand.notes.append(f"a fixed edge about {abs(cand.height_mm):.1f} mm {'in front of' if cand.height_mm > 0 else 'behind'} the panel face")
+            cand.notes.append(f"a fixed edge about {abs(cand.height_mm):.1f} mm {'in front of' if cand.height_mm > 0 else 'behind'} the panel face (resolved to ±{cand.height_margin_mm:.1f} mm)")
+        else:
+            cand.notes.append(
+                f"the photos do not settle whether this line lies on the panel face: height {cand.height_mm:+.1f} mm, resolved only to ±{cand.height_margin_mm:.1f} mm "
+                "(photos from more different heights or distances would settle it)"
+            )
         if len(posed) == 2:
             cand.notes.append("only two views: a silhouette cannot be told from a fixed edge yet")
+
+
+def _line_heights(
+    cand: LineCandidate, planes: list[np.ndarray], shifted: list[np.ndarray], fits: list[tuple[FrameContext, EdgeFit]], cfg: DatumConfig
+) -> tuple[list[float] | None, list[float], list[float], float]:
+    """Height of the feature above the plane at its two ends, and how well the photos resolve it.
+
+    At a plane point ``Q`` of the feature the 3-D line is ``Q + e m + h z`` (``m`` the in-plane normal of the
+    line, ``z`` the plane normal).  Every view plane ``n . X = d`` gives one equation
+    ``(n . m) e + (n . z) h = d - n . Q``; ``(e, h)`` follow by weighted least squares.  The weight of a view is
+    the noise of its fitted image line at that place, expressed as a displacement of its view plane at ``Q``.
+    The answer to "all image lines sit ``edge_shift_bound_px`` toward the same side" is solved the same way and
+    gives the part of ``h`` that such a common shift could fake.
+
+    Returns ``(heights, part a common edge shift could fake, standard deviation from the line fits, typical
+    view noise)``, all in millimetres, the first three per end; ``heights`` is ``None`` when the views cannot
+    separate ``h`` from ``e`` at all.
+    """
+    m3 = np.array([cand.line.n[0], cand.line.n[1], 0.0])
+    z3 = np.array([0.0, 0.0, 1.0])
+    heights: list[float] = []
+    shift_part: list[float] = []
+    sigma_line: list[float] = []
+    noise: list[float] = []
+    for q in cand.endpoints:
+        Q = np.array([q[0], q[1], 0.0])
+        A, r, g, sig = [], [], [], []
+        for pl, ps, (fc, e) in zip(planes, shifted, fits):
+            n, d = pl[:3], float(pl[3])
+            sgn = 1.0 if n @ m3 >= 0 else -1.0  # one orientation for all views: toward the same physical side
+            n, d = sgn * n, sgn * d
+            n1, d1 = ps[:3], float(ps[3])
+            if n1 @ n < 0:
+                n1, d1 = -n1, -d1
+            res = d - n @ Q
+            per_px = (d1 - n1 @ Q) - res  # change of the right-hand side per pixel of image shift toward the bright side
+            # noise of the fitted image line where Q is seen (it grows away from the middle of the fitted stretch)
+            assert e.mid is not None and fc.pose is not None and fc.K is not None
+            Xc = fc.pose.apply(Q)
+            if Xc[2] <= 1e-6:
+                continue
+            uv = (fc.K @ (Xc / Xc[2]))[:2]
+            t_along = float((uv - e.mid) @ e.t)
+            var_px = max(e.var_d + 2.0 * t_along * e.cov_d_theta + t_along * t_along * e.var_theta, 0.0) + 0.02**2
+            A.append([float(n @ m3), float(n @ z3)])
+            r.append(res)
+            g.append(per_px)
+            sig.append(abs(per_px) * float(np.sqrt(var_px)))
+        if len(A) < 2:
+            return None, [], [], 0.0
+        A_, r_, g_, w = np.asarray(A), np.asarray(r), np.asarray(g), 1.0 / np.maximum(np.asarray(sig), 1e-6) ** 2
+        Nmat = A_.T @ (A_ * w[:, None])
+        if np.linalg.cond(Nmat) > 1e8:
+            return None, [], [], 0.0
+        cov = np.linalg.inv(Nmat)
+        x = cov @ (A_.T @ (w * r_))
+        x_shift = cov @ (A_.T @ (w * g_ * cfg.edge_shift_bound_px))
+        heights.append(float(x[1]))
+        shift_part.append(float(abs(x_shift[1])))
+        sigma_line.append(float(np.sqrt(max(cov[1, 1], 0.0))))
+        noise.append(float(np.median(sig)))
+    return heights, shift_part, sigma_line, float(np.median(noise))
 
 
 def _clip_to_image(p0: np.ndarray, p1: np.ndarray, w: int, h: int, margin: float = 6.0) -> np.ndarray | None:

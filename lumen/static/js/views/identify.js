@@ -77,7 +77,9 @@ export function mount(root, ctx) {
       h('div', { class: 'eyebrow' }, 'No panel at hand?'),
       h('h3', null, 'Open the simulated demo session'),
       h('p', { class: 'hint' }, 'Loads computer-generated photos of an invented panel and runs the real measurement pipeline on them. Clearly marked as simulated throughout.'),
-      h('button', { class: 'btn', type: 'button', 'data-action': 'demo', onclick: loadDemo }, icon('play'), 'Load demo session')));
+      h('div', { class: 'row wrap' },
+        h('button', { class: 'btn grow', type: 'button', 'data-action': 'demo', onclick: () => loadDemo('flat') }, icon('play'), 'Load demo session'),
+        h('button', { class: 'btn grow', type: 'button', 'data-action': 'demo-curve', onclick: () => loadDemo('curve') }, icon('play'), 'Demo with a rounded edge'))));
   }
 
   function renderList() {
@@ -209,13 +211,13 @@ export function mount(root, ctx) {
     } catch (err) { showError(err); } finally { b.done(); }
   }
 
-  async function loadDemo() {
+  async function loadDemo(scenario = 'flat') {
     const b = busy('Generating the demo session…');
     try {
       if (state.session) await endSession();
       const sess = await api('POST', 'api/sessions', { mode: 'demo' });
       setSession(sess);
-      const out = await api('POST', `api/sessions/${sess.id}/demo/load`, { scenario: 'flat' }, { timeout: 180000 });
+      const out = await api('POST', `api/sessions/${sess.id}/demo/load`, { scenario }, { timeout: 180000 });
       setSession(out);
       toast({ title: 'Demo session loaded', detail: 'Simulated photos of an invented panel.', kind: 'ok' });
       setState({});

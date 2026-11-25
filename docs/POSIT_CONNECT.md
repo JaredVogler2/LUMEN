@@ -29,7 +29,8 @@ against the version of your server):
 Connect "may launch multiple processes" for one content item and does not
 coordinate them; LUMEN is built for that (section 5).
 
-Python: 3.11, 3.12 or 3.13 (`pyproject.toml`: `>=3.11,<3.14`). Dependencies
+Python: 3.12 or 3.13 (`pyproject.toml`: `>=3.12,<3.14`; the pinned NumPy and SciPy
+do not install on 3.11). Dependencies
 are pinned to exact versions in `requirements.txt`; all of them install as
 binary wheels on x86-64 Linux. `opencv-python-headless` is used, so no display
 libraries (`libGL`) are required. Clean installs and test runs on this

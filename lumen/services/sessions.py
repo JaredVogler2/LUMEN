@@ -56,7 +56,7 @@ from ..vision.multiview import MVConfig, MVSolution, MVView, solve_multiview
 from ..vision.planar import PlanarSolution, PlanarView, ViewLocalization, localize_view, solve_planar
 from ..vision.rectify import RectSpec, plan_rectification, rectify_image
 from .context import CpuGate, LruCache, utcnow
-from .frames import build_frame, camera_for_frame, decode_for_session, detect_in_image, sizes_from_state, tag_obs
+from .frames import EdgeShiftPool, build_frame, camera_for_frame, decode_for_session, detect_in_image, edge_shift_pool, sizes_from_state, tag_obs
 from .jobs import JobRunner
 
 import cv2
@@ -148,6 +148,7 @@ class SessionService:
             # verification results were measured against the old registration
             s.verifications = []
             s.research.pop("verification_detail", None)
+            s.research.pop("photometric", None)  # research evidence computed from the old registration
             # ruler measurements are kept; they are compared again at the next registration
             from .reference import reevaluate_all
 
@@ -469,10 +470,16 @@ class SessionService:
         cam, _ = camera_for_frame(s.calibration, f.width, f.height, f.native_width, f.native_height, f.processing_scale, device=f.camera_label, lens=f.lens, zoom=f.zoom)
         return cam
 
+    def _pool_for(self, s: Session, f: Frame) -> EdgeShiftPool | None:
+        """Edge shift to use on the tags of ``f`` that are too small for their own estimate: measured on the
+        larger tags of the same photo if there are any, else on those of all registration photos together."""
+        return edge_shift_pool(f.markers) or edge_shift_pool(m for x in self._registration_frames(s) for m in x.markers)
+
     def _views(self, s: Session, frames: list[Frame]) -> list[PlanarView]:
         out = []
         for f in frames:
-            tags = [tag_obs(m) for m in f.markers if m.accepted]
+            pool = self._pool_for(s, f)
+            tags = [tag_obs(m, pool) for m in f.markers if m.accepted]
             if tags:
                 out.append(PlanarView(f.id, tags, self._camera(s, f), "auto"))
         return out
@@ -520,8 +527,10 @@ class SessionService:
             if mv is not None:
                 drop |= {int(k) for k in mv["excluded_tags"]}
                 drop |= set(mv["checks"].get("coplanarity", {}).get("off_plane_tags", []))
-                if drop:
-                    views = [PlanarView(v.frame_id, [t for t in v.tags if t.tag_id not in drop], v.camera, v.mode) for v in views]
+                # single observations that fit no other photo of the same tag (the tag itself is kept)
+                drop_obs = {(fid, int(t)) for fid, ts in (mv.get("excluded_observations") or {}).items() for t in ts}
+                if drop or drop_obs:
+                    views = [PlanarView(v.frame_id, [t for t in v.tags if t.tag_id not in drop and (v.frame_id, t.tag_id) not in drop_obs], v.camera, v.mode) for v in views]
                     views = [v for v in views if v.tags]
                     if not views:
                         raise GeometryError("no_consistent_tags", "After removing inconsistent tags none is left to establish scale.")
@@ -603,6 +612,15 @@ class SessionService:
         summary["computed_at"] = utcnow()
         summary["method"] = "planar_joint" + ("+multiview_ba" if mv and "skipped" not in mv else "")
         summary["multiview"] = mv
+        # how the dark-side edge shift of the tag borders was handled, per observation used
+        obs = [t for v in views for t in v.tags]
+        pool_all = edge_shift_pool(m for x in self._registration_frames(s) for m in x.markers)
+        summary["edge_shift"] = {
+            "own_estimate": sum(1 for t in obs if t.bias_corrected),
+            "pooled": sum(1 for t in obs if t.bias_pooled),
+            "uncorrected": sum(1 for t in obs if not t.bias_corrected and not t.bias_pooled),
+            "pool": None if pool_all is None else pool_all.to_dict(),
+        }
         surface = self._surface_from(mv, sol)
         px_per_mm = {}
         for fid, v in sol.views.items():
@@ -673,7 +691,8 @@ class SessionService:
         """Homography of a frame: from the joint solution, or localised against the layout."""
         if f.id in sol.views:
             return sol.views[f.id].H, None, None
-        tags = [tag_obs(m) for m in f.markers if m.accepted]
+        pool = self._pool_for(s, f)
+        tags = [tag_obs(m, pool) for m in f.markers if m.accepted]
         view = PlanarView(f.id, tags, self._camera(s, f), "auto")
         loc = localize_view(sol.layout, view)
         return loc.H, loc, PlanarView(f.id, [t for t in tags if t.tag_id in sol.layout.poses], view.camera, view.mode)
@@ -766,7 +785,7 @@ class SessionService:
                     cand.notes.append(f"{r.n_candidates} feature(s) in the search band") if r.n_candidates > 1 else None
                     ctxs = self._frame_contexts(sid, s, sol, mv)
                     if len(ctxs) > 1:
-                        match_and_classify(cand, ctxs, self._datum_cfg)
+                        match_and_classify(cand, ctxs, self._datum_cfg, self._tag_plane(sol, mv)[1])
                 else:
                     notes.append(f"no edge found near the drawn line ({r.reason}); kept as drawn")
         if cand is not None:
@@ -797,11 +816,10 @@ class SessionService:
         frames = {f.id: f for f in s.frames}
         poses: dict[str, Pose] = {}
         K = None
-        g = str(sol.layout.gauge_id)
-        if mv and "skipped" not in mv and g in mv.get("tags", {}):
-            T_w_g = Pose.from_dict(mv["tags"][g])
+        T_w_p, _ = self._tag_plane(sol, mv)
+        if T_w_p is not None and mv is not None:
             for fid, d in mv["cameras"].items():
-                poses[fid] = Pose.from_dict(d) @ T_w_g  # T_cam_plane
+                poses[fid] = Pose.from_dict(d) @ T_w_p  # T_cam_plane
             i = mv["intrinsics"]
             K = np.array([[i["fx"], 0.0, i["cx"]], [0.0, i["fy"], i["cy"]], [0.0, 0.0, 1.0]])
         out: dict[str, FrameContext] = {}
@@ -819,6 +837,60 @@ class SessionService:
             )
         return out
 
+    @staticmethod
+    def _tag_plane(sol: PlanarSolution, mv: dict[str, Any] | None) -> tuple[Any, np.ndarray | None]:
+        """Reference plane for 3-D reasoning about datum features, and how well the tags define it.
+
+        The bundle adjustment gives every tag its own position and tilt.  Heights are measured from the plane
+        fitted through *all* of them, not from the face of one 50 mm tag: the tilt error of a single tag grows
+        to a millimetre a few hundred millimetres away.  In-plane coordinates stay those of the gauge tag.
+
+        Returns ``(T_world_plane, covariance of (a, b, c) of the plane z = a x + b y + c in that frame)``;
+        ``(None, None)`` without a multi-view solution.  With a single tag the plane is that tag's face and no
+        covariance is given.
+        """
+        from ..geometry.se3 import Pose
+
+        g = str(sol.layout.gauge_id)
+        if not mv or "skipped" in mv or g not in mv.get("tags", {}):
+            return None, None
+        T_w_g = Pose.from_dict(mv["tags"][g])
+        cop = (mv.get("checks") or {}).get("coplanarity") or {}
+        per = cop.get("tags") or {}
+        if cop.get("normal") is None or len(mv["tags"]) < 2:
+            return T_w_g, None
+        z = np.asarray(cop["normal"], dtype=float)
+        z = z / np.linalg.norm(z)
+        d = float(cop["d"])
+        if z @ T_w_g.R[:, 2] < 0:
+            z, d = -z, -d
+        x = T_w_g.R[:, 0] - (T_w_g.R[:, 0] @ z) * z
+        x = x / np.linalg.norm(x)
+        T_w_p = Pose(np.stack([x, np.cross(z, x), z], axis=1), T_w_g.t - (z @ T_w_g.t - d) * z)
+        # how well the tags pin that plane down: each tag gives a height at its centre and a slope
+        so = [float(v.get("offset_sigma_mm") or 0.0) for v in per.values()]
+        st = [float(np.radians(v.get("tilt_sigma_deg") or 0.0)) for v in per.values()]
+        so_d = float(np.median([v for v in so if v > 0])) if any(v > 0 for v in so) else 0.3
+        st_d = float(np.median([v for v in st if v > 0])) if any(v > 0 for v in st) else float(np.radians(0.3))
+        rows, wts = [], []
+        T_p_w = T_w_p.inv()
+        for k, td in mv["tags"].items():
+            c = T_p_w.apply(Pose.from_dict(td).t)
+            v = per.get(str(k), {})
+            s_off = max(float(v.get("offset_sigma_mm") or 0.0) or so_d, 0.02)  # the gauge tag is given the typical value
+            s_tilt = max(float(np.radians(v.get("tilt_sigma_deg") or 0.0)) or st_d, 1e-4)
+            rows += [[c[0], c[1], 1.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]
+            wts += [1.0 / s_off**2, 1.0 / s_tilt**2, 1.0 / s_tilt**2]
+        A = np.asarray(rows)
+        N = A.T @ (A * np.asarray(wts)[:, None])
+        return T_w_p, (np.linalg.inv(N) if np.linalg.cond(N) < 1e12 else None)
+
+    @staticmethod
+    def _datum_cfg_on_plane_mm() -> float:
+        from ..vision.datums import DatumConfig
+
+        return DatumConfig().on_plane_mm
+
     def _datum_from_candidate(self, s: Session, sol: PlanarSolution, kind: str, c: LineCandidate, n_candidates: int | None) -> DatumObservation:
         ddef = self._datum_def(s, kind)
         declared = None if ddef is None else ddef.on_target_plane
@@ -827,7 +899,7 @@ class SessionService:
             evidence = "configured" if declared else "unverified"
         notes = list(c.notes)
         if c.classification == "on_plane":
-            notes.append(f"stays fixed on the panel face across {1 + len(c.matches)} photos (spread {c.spread_mm:.2f} mm)")
+            notes.append(f"stays fixed on the panel face across {1 + len(c.matches)} photos (spread {c.spread_mm:.2f} mm; height {c.height_mm:+.1f} mm, resolved to ±{c.height_margin_mm:.1f} mm)")
         fit_d = fit_to_dict(c.fit, self._marker_cfg.covariance_inflation)
         fit_d["classification"] = c.classification
         fit_d["height_mm"] = c.height_mm
@@ -912,7 +984,7 @@ class SessionService:
                 for c in propose_in_frame(fid, self._image(sid, f).bgr, self._camera(s, f), H, rect, spec, tag_c, self._datum_cfg):
                     c.id = f"c{len(cands)}"
                     if len(ctxs) > 1:
-                        match_and_classify(c, ctxs, self._datum_cfg)
+                        match_and_classify(c, ctxs, self._datum_cfg, self._tag_plane(sol, mv)[1])
                     # the same feature seen from a second home photo is one candidate
                     dup = False
                     for o in cands:
@@ -1055,7 +1127,13 @@ class SessionService:
         sil = [
             c for c in cands
             if c.kind == "step" and not c.soft and len(c.matches) >= 1
-            and (c.classification == "view_dependent" or (c.classification == "off_plane" and (c.height_mm or 0.0) < 0.0))
+            and (
+                c.classification == "view_dependent"
+                or (c.classification == "off_plane" and (c.height_mm or 0.0) < 0.0)
+                # ... also when the photos do not resolve the height well enough to call it off the plane;
+                # the cylinder fit below has its own acceptance tests
+                or (c.classification == "unverified" and c.height_mm is not None and c.height_mm < -self._datum_cfg_on_plane_mm())
+            )
         ]
         # also allow a single calibrated view when the radius is configured
         if not sil and radius_cfg is not None:
@@ -1101,6 +1179,12 @@ class SessionService:
         }
         inferred = bool(mv and mv.get("intrinsics_provenance") == "inferred")
         notes = [f"tangent line of a cylindrical edge fitted to {best.n_views} silhouettes: radius {best.radius:.1f} mm" + (" (configured)" if best.radius_fixed else f" ± {best.sigma_radius_mm:.1f} mm")] + best.notes
+        by_id = {f.id: f for f in s.frames}
+        lit = [fid for fid in [best_c.frame_id, *best_c.matches] if fid in by_id and getattr(by_id[fid].torch, "value", by_id[fid].torch) == "on"]
+        if lit:
+            # With the light next to the lens the surface darkens toward its outline, so the outline is found
+            # too far in (about +0.4 to +0.9 mm on simulated photos, more in a dark room).
+            notes.append(f"{len(lit)} of the outline photos were taken with the phone light on: the outline of a lit rounded edge is found too far in. Use photos without the light for this datum.")
         if inferred:
             notes.append("camera positions come from a self-calibrated focal length (inferred)")
         obs = self._datum_from_fit(
@@ -1274,6 +1358,7 @@ class SessionService:
             if mv and "skipped" not in mv:
                 inp.multiview = True
                 inp.multiview_flags = list(mv.get("flags", []))
+                inp.excluded_observations = [f"tag {t} in photo {fid}" for fid, ts in sorted((mv.get("excluded_observations") or {}).items()) for t in ts]
                 inp.coplanarity_verdict = mv["checks"].get("coplanarity", {}).get("verdict")
                 inp.coplanarity_power_mm = mv["checks"].get("coplanarity", {}).get("resolving_power_mm")
                 cc = mv.get("calibration_check")
@@ -1413,7 +1498,6 @@ class SessionService:
             focal_prior_px={i: float(frames[i].exif["focal_px_prior"]) for i in ids if i in frames and "focal_px_prior" in frames[i].exif},
             size_info=info,
             calibration_sigma=(s.calibration.param_sigma if s.calibration is not None else None),
-            all_bias_corrected=all(m.bias_applied for x in s.frames if x.id in ids for m in x.markers if m.accepted and m.tag_id in sol.layout.poses),
             # evidence at the tags only: the panel between them is not measured,
             # so the bound never drops below a small floor
             out_of_plane_bound_mm=(max(0.15, float(s.surface.out_of_plane_max_mm)) if s.surface.out_of_plane_max_mm is not None else None),
