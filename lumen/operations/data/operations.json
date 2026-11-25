@@ -1,0 +1,101 @@
+{
+  "schema_version": 1,
+  "library_revision": "lumen-sample-2026.11.1",
+  "notice": "SYNTHETIC SAMPLE DATA. Generic invented panels, placards, offsets and tolerances for demonstrating LUMEN. Not derived from any real product, drawing or requirement.",
+  "operations": [
+    {
+      "operation_id": "DEMO-FLAT-01",
+      "title": "Demo flat panel with joint seam (planar datums)",
+      "revision": "A",
+      "status": "released",
+      "synthetic": true,
+      "effectivity": {"configuration": "DEMO-CFG-1", "notes": "Synthetic demonstration configuration."},
+      "provenance": {"source": "LUMEN synthetic sample library", "author": "LUMEN project", "date": "2026-11-25", "notes": "Invented values. Tolerances are placeholders for demonstration only."},
+      "panel": {"panel_id": "PNL-DEMO-FLAT", "description": "Generic flat sidewall panel meeting the floor; vertical joint seam on the left.", "barcodes": ["LUMEN-DEMO-PNL-FLAT"]},
+      "surface": {"target": "plane", "notes": "Placards and both datums lie on the flat panel face."},
+      "datums": {
+        "floor": {"id": "A", "name": "Floor / panel interface", "feature": "planar_edge", "on_target_plane": true, "positive": "toward_panel", "offset": {"value": 0, "unit": "mm"}, "notes": "Line where the panel face meets the floor. +z points up the panel."},
+        "side": {"id": "B", "name": "Left joint seam", "feature": "planar_edge", "on_target_plane": true, "positive": "toward_panel", "offset": {"value": 0, "unit": "mm"}, "side_of_panel": "left", "notes": "Vertical joint seam on the panel face. +x points away from the seam into the panel."},
+        "axis_policy": "floor_primary",
+        "nominal_angle": {"value": 90, "unit": "deg"},
+        "max_axis_disagreement": {"value": 1.0, "unit": "deg"}
+      },
+      "placards": [
+        {
+          "placard_id": "PLC-DEMO-101",
+          "title": "Demo information placard",
+          "barcodes": ["LUMEN-DEMO-PLC-101"],
+          "position": {"x": {"value": 240, "unit": "mm"}, "z": {"value": 300, "unit": "mm"}, "reference_point": "center", "x_semantics": "projected"},
+          "size": {"width": {"value": 120, "unit": "mm"}, "height": {"value": 60, "unit": "mm"}},
+          "rotation": {"value": 0, "unit": "deg"},
+          "tolerance": {"position": {"value": 2.0, "unit": "mm"}, "rotation": {"value": 1.0, "unit": "deg"}, "provenance": "Generic placeholder for demonstration; not an engineering requirement."}
+        },
+        {
+          "placard_id": "PLC-DEMO-102",
+          "title": "Demo square label (inch dimensions)",
+          "barcodes": ["LUMEN-DEMO-PLC-102"],
+          "position": {"x": {"value": 16.5, "unit": "in"}, "z": {"value": 5.0, "unit": "in"}, "reference_point": "bottom_left", "x_semantics": "projected"},
+          "size": {"width": {"value": 3.0, "unit": "in"}, "height": {"value": 3.0, "unit": "in"}},
+          "rotation": {"value": 0, "unit": "deg"},
+          "tolerance": {"position": {"value": 0.06, "unit": "in"}, "rotation": {"value": 1.0, "unit": "deg"}, "provenance": "Generic placeholder for demonstration; not an engineering requirement."}
+        }
+      ]
+    },
+    {
+      "operation_id": "DEMO-CURVE-01",
+      "title": "Demo panel with rounded side edge (curve tangent datum)",
+      "revision": "A",
+      "status": "released",
+      "synthetic": true,
+      "effectivity": {"configuration": "DEMO-CFG-1", "notes": "Synthetic demonstration configuration."},
+      "provenance": {"source": "LUMEN synthetic sample library", "author": "LUMEN project", "date": "2026-11-25", "notes": "Invented values. Tolerances are placeholders for demonstration only."},
+      "panel": {"panel_id": "PNL-DEMO-CURVE", "description": "Generic panel whose left side bends away in a uniform rounded edge.", "barcodes": ["LUMEN-DEMO-PNL-CURVE"]},
+      "surface": {"target": "plane", "notes": "Placards sit on the flat region; the side datum is realised by the rounded edge."},
+      "datums": {
+        "floor": {"id": "A", "name": "Floor / panel interface", "feature": "planar_edge", "on_target_plane": true, "positive": "toward_panel", "offset": {"value": 0, "unit": "mm"}},
+        "side": {"id": "B", "name": "Left rounded-edge tangent line", "feature": "curve_tangent", "on_target_plane": true, "positive": "toward_panel", "offset": {"value": 0, "unit": "mm"}, "radius": {"value": 35, "unit": "mm"}, "side_of_panel": "left", "notes": "Line where the flat face begins to curve. Not directly visible: needs a multi-view silhouette fit or the configured radius with a calibrated view."},
+        "axis_policy": "floor_primary",
+        "nominal_angle": {"value": 90, "unit": "deg"},
+        "max_axis_disagreement": {"value": 1.0, "unit": "deg"}
+      },
+      "placards": [
+        {
+          "placard_id": "PLC-DEMO-201",
+          "title": "Demo placard near rounded edge",
+          "barcodes": ["LUMEN-DEMO-PLC-201"],
+          "position": {"x": {"value": 150, "unit": "mm"}, "z": {"value": 320, "unit": "mm"}, "reference_point": "center", "x_semantics": "projected"},
+          "size": {"width": {"value": 100, "unit": "mm"}, "height": {"value": 50, "unit": "mm"}},
+          "rotation": {"value": 0, "unit": "deg"},
+          "tolerance": {"position": {"value": 2.5, "unit": "mm"}, "rotation": {"value": 1.5, "unit": "deg"}, "provenance": "Generic placeholder for demonstration; not an engineering requirement."}
+        }
+      ]
+    },
+    {
+      "operation_id": "DEMO-INCOMPLETE-01",
+      "title": "Demo incomplete record (no tolerance, no datum sign)",
+      "revision": "A",
+      "status": "draft",
+      "synthetic": true,
+      "effectivity": {"configuration": "DEMO-CFG-1", "notes": "Shows how LUMEN treats a record that lacks required definitions."},
+      "provenance": {"source": "LUMEN synthetic sample library", "author": "LUMEN project", "date": "2026-11-25", "notes": "Deliberately incomplete."},
+      "panel": {"panel_id": "PNL-DEMO-FLAT-X", "description": "Same generic flat panel, record left incomplete on purpose.", "barcodes": []},
+      "surface": {"target": "plane"},
+      "datums": {
+        "floor": {"id": "A", "name": "Floor / panel interface", "feature": "planar_edge", "on_target_plane": true, "positive": "toward_panel"},
+        "side": {"id": "B", "name": "Left joint seam", "feature": "planar_edge", "on_target_plane": true},
+        "axis_policy": "floor_primary",
+        "nominal_angle": {"value": 90, "unit": "deg"},
+        "max_axis_disagreement": {"value": 1.0, "unit": "deg"}
+      },
+      "placards": [
+        {
+          "placard_id": "PLC-DEMO-901",
+          "title": "Demo placard without tolerance",
+          "position": {"x": {"value": 200, "unit": "mm"}, "z": {"value": 250, "unit": "mm"}, "reference_point": "center", "x_semantics": "projected"},
+          "size": {"width": {"value": 100, "unit": "mm"}, "height": {"value": 50, "unit": "mm"}},
+          "rotation": {"value": 0, "unit": "deg"}
+        }
+      ]
+    }
+  ]
+}
