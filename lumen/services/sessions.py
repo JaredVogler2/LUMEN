@@ -51,6 +51,7 @@ from ..storage.base import SessionStore, new_session_id
 from ..vision.edgefit import snap_line
 from ..vision.imaging import DecodedImage, encode_jpeg, to_gray
 from ..vision.markers import MarkerConfig, TagSizeTable
+from ..vision.multiview import MVConfig, MVSolution, MVView, solve_multiview
 from ..vision.planar import PlanarSolution, PlanarView, ViewLocalization, localize_view, solve_planar
 from ..vision.rectify import RectSpec, plan_rectification, rectify_image
 from .context import CpuGate, LruCache, utcnow
@@ -72,6 +73,7 @@ class SessionService:
         self._policy = load_policy(os.environ.get("LUMEN_POLICY_FILE") or None)
         self._ucfg = UncertaintyConfig()
         self._marker_cfg = MarkerConfig()
+        self._mv_cfg = MVConfig()
         self._domain: dict[str, Any] | None = None
         if settings.validated_domain_file:
             try:
@@ -384,6 +386,10 @@ class SessionService:
         )
 
     def _solve(self, s: Session) -> tuple[PlanarSolution, list[PlanarView]]:
+        sol, views, _ = self._solve_full(s)
+        return sol, views
+
+    def _solve_full(self, s: Session) -> tuple[PlanarSolution, list[PlanarView], dict[str, Any] | None]:
         key = self._solution_key(s)
         hit = self._solutions.get(key)
         if hit is not None:
@@ -403,25 +409,97 @@ class SessionService:
                 _, prov = sizes.size(t.tag_id)
                 size_u[t.tag_id] = sizes.measured_u_mm if prov == "measured" else sizes.nominal_tolerance_mm / np.sqrt(3.0)
         with self.cpu.slot(self.settings.limits.request_timeout_seconds):
+            # 3-D bundle adjustment first: it is the only thing that can see a
+            # tag that moved between photos or sits off the common plane.
+            mv = self._multiview(s, frames, views)
+            drop = set()
+            if mv is not None:
+                drop |= {int(k) for k in mv["excluded_tags"]}
+                drop |= set(mv["checks"].get("coplanarity", {}).get("off_plane_tags", []))
+                if drop:
+                    views = [PlanarView(v.frame_id, [t for t in v.tags if t.tag_id not in drop], v.camera, v.mode) for v in views]
+                    views = [v for v in views if v.tags]
+                    if not views:
+                        raise GeometryError("no_consistent_tags", "After removing inconsistent tags none is left to establish scale.")
             sol = solve_planar(views, size_u_mm=size_u)
+            if mv is not None:
+                for k, reasons in mv["excluded_tags"].items():
+                    sol.excluded_tags.setdefault(int(k), list(reasons))
+                for k in mv["checks"].get("coplanarity", {}).get("off_plane_tags", []):
+                    sol.excluded_tags.setdefault(int(k), ["off_the_common_plane"])
         used = [v for v in views if v.frame_id in sol.views]
         # keep only tags that survived the consistency checks
         used = [PlanarView(v.frame_id, [t for t in v.tags if t.tag_id in sol.layout.poses], v.camera, v.mode) for v in used]
-        self._solutions.put(key, (sol, used))
-        return sol, used
+        out = (sol, used, mv)
+        self._solutions.put(key, out)
+        return out
+
+    def _multiview(self, s: Session, frames: list[Frame], views: list[PlanarView]) -> dict[str, Any] | None:
+        """3-D diagnostics of the capture (needs at least two views).
+
+        With a calibration the intrinsics are fixed and, when the views are
+        diverse enough, an independent focal length is self-calibrated from the
+        tags and compared with the profile.  Without one, the focal length is
+        self-calibrated (labelled *inferred*) just to obtain the 3-D checks.
+        """
+        if len(views) < 2:
+            return None
+        by_id = {f.id: f for f in frames}
+        cams = [v.camera for v in views]
+        calibrated = all(c is not None for c in cams)
+        same_geom = len({(by_id[v.frame_id].width, by_id[v.frame_id].height) for v in views}) == 1
+        if not same_geom:
+            return {"skipped": "photos have different pixel sizes; 3-D checks need one camera configuration", "excluded_tags": {}, "checks": {}, "flags": ["mixed_resolutions"]}
+        mvviews = []
+        for v in views:
+            f = by_id[v.frame_id]
+            raw = {m.tag_id: np.asarray(m.corners_px, dtype=float) for m in f.markers if m.accepted}
+            mvviews.append(MVView(v.frame_id, list(v.tags), v.camera, raw, (f.width, f.height)))
+        try:
+            if calibrated:
+                sol = solve_multiview(mvviews, camera=cams[0], cfg=self._mv_cfg)
+            else:
+                sol = solve_multiview(mvviews, refine_intrinsics=("f",), cfg=self._mv_cfg)
+        except GeometryError as exc:
+            return {"skipped": exc.message, "excluded_tags": {}, "checks": {}, "flags": ["multiview_failed"]}
+        out = sol.to_dict()
+        out["intrinsics_provenance"] = "measured" if calibrated else "inferred"
+        out["calibrated"] = calibrated
+        # independent focal-length check of an attached profile
+        if calibrated and sol.checks.get("diversity", {}).get("diverse") and len(sol.cameras) >= 3:
+            try:
+                keep = [v for v in mvviews if v.frame_id in sol.cameras]
+                keep = [MVView(v.frame_id, [t for t in v.tags if t.tag_id in sol.tags], v.camera, v.raw, v.image_size) for v in keep]
+                sc = solve_multiview(keep, camera=cams[0], refine_intrinsics=("f",), cfg=self._mv_cfg, checks=False)
+                a = sc.param_index.get("intr:f")
+                sf = float(np.sqrt(max(sc.cov[a[0], a[0]], 0.0))) if a else float("inf")
+                f_cal = 0.5 * (cams[0].fx + cams[0].fy)
+                rel = (sc.intrinsics.fx - f_cal) / f_cal
+                ok = abs(rel) <= max(4.0 * sf / f_cal, 0.004)
+                out["calibration_check"] = {
+                    "f_profile": f_cal, "f_from_tags": sc.intrinsics.fx, "sigma_f": sf, "relative_difference": rel, "consistent": bool(ok),
+                    "note": "Focal length re-estimated from the tags with the profile's distortion and principal point held fixed.",
+                }
+                if not ok:
+                    out["flags"].append("calibration_inconsistent")
+            except GeometryError:
+                pass
+        return out
 
     def register(self, sid: str) -> dict[str, Any]:
         s = self._load(sid)
         self._redetect_stale(sid)
         s = self._load(sid)
-        sol, views = self._solve(s)
+        sol, views, mv = self._solve_full(s)
         frames = {f.id: f for f in s.frames}
         ref = self._pick_reference(sol, frames)
         summary = sol.to_dict()
         summary["reference_frame_id"] = ref
         summary["frames_used"] = sorted(sol.views)
         summary["computed_at"] = utcnow()
-        summary["method"] = "planar_joint"
+        summary["method"] = "planar_joint" + ("+multiview_ba" if mv and "skipped" not in mv else "")
+        summary["multiview"] = mv
+        surface = self._surface_from(mv, sol)
         px_per_mm = {}
         for fid, v in sol.views.items():
             px_per_mm[fid] = float(np.median(local_scale_px_per_mm(v.H, sol.layout.all_corners())))
@@ -429,6 +507,7 @@ class SessionService:
 
         def fn(s2: Session) -> None:
             s2.registration = summary
+            s2.surface = surface
             # datums measured in frames that are no longer registered are dropped
             for k in [k for k, d in s2.datums.items() if d.frame_id not in sol.views]:
                 del s2.datums[k]
@@ -436,6 +515,38 @@ class SessionService:
 
         self._mutate(sid, fn, "registered", {"n_tags": sol.n_tags, "n_views": len(sol.views), "flags": sol.flags})
         return summary
+
+    @staticmethod
+    def _surface_from(mv: dict[str, Any] | None, sol: PlanarSolution) -> Any:
+        from ..schemas import SurfaceModel
+
+        notes: list[str] = []
+        if mv is None or "skipped" in (mv or {}):
+            how = "crossvalidated_single_view" if sol.independently_checked else "assumed"
+            if mv and mv.get("skipped"):
+                notes.append(f"3-D check skipped: {mv['skipped']}")
+            return SurfaceModel(kind="plane", planarity=how, notes=notes)
+        cop = mv["checks"].get("coplanarity", {})
+        verdict = cop.get("verdict")
+        keep = [str(i) for i in sol.layout.poses]
+        offs = [abs(cop["tags"][k]["offset_mm"]) + 2.0 * cop["tags"][k]["offset_sigma_mm"] for k in keep if k in cop.get("tags", {})]
+        if verdict == "coplanar":
+            how = "verified_multiview"
+        elif verdict == "not_coplanar" and cop.get("off_plane_tags"):
+            how = "verified_multiview_after_exclusion"
+            notes.append("tags off the common plane were excluded: " + ", ".join(f"ID {i}" for i in cop["off_plane_tags"]))
+        elif verdict == "not_coplanar":
+            how = "violated"
+        else:
+            how = "crossvalidated_single_view" if sol.independently_checked else "assumed"
+            notes.append("views are too similar to establish coplanarity in 3-D")
+        return SurfaceModel(
+            kind="plane",
+            planarity=how,
+            out_of_plane_rms_mm=cop.get("rms_mm"),
+            out_of_plane_max_mm=(float(max(offs)) if offs and how.startswith("verified") else None),
+            notes=notes,
+        )
 
     @staticmethod
     def _pick_reference(sol: PlanarSolution, frames: dict[str, Frame]) -> str:
@@ -758,6 +869,17 @@ class SessionService:
             inp.rms_px = sol.rms_px
             inp.all_tags_measured = all(sizes.size(i)[1] == "measured" for i in sol.layout.poses)
             inp.all_frames_calibrated = all(v.camera is not None for v in views)
+            mv = (s.registration or {}).get("multiview")
+            if mv and "skipped" not in mv:
+                inp.multiview = True
+                inp.multiview_flags = list(mv.get("flags", []))
+                inp.coplanarity_verdict = mv["checks"].get("coplanarity", {}).get("verdict")
+                inp.coplanarity_power_mm = mv["checks"].get("coplanarity", {}).get("resolving_power_mm")
+                cc = mv.get("calibration_check")
+                inp.calibration_consistent = None if cc is None else bool(cc["consistent"])
+                ho = mv["checks"].get("held_out", {})
+                inp.held_out_consistent = ho.get("consistent")
+                inp.plane_violated = s.surface.planarity == "violated"
             fid = frame_id or (s.registration or {}).get("reference_frame_id")
             if ext is not None:
                 f, loc, ext_view = ext
@@ -885,7 +1007,9 @@ class SessionService:
             size_info=info,
             calibration_sigma=(s.calibration.param_sigma if s.calibration is not None else None),
             all_bias_corrected=all(m.bias_applied for x in s.frames if x.id in ids for m in x.markers if m.accepted and m.tag_id in sol.layout.poses),
-            out_of_plane_bound_mm=None,
+            # evidence at the tags only: the panel between them is not measured,
+            # so the bound never drops below a small floor
+            out_of_plane_bound_mm=(max(0.15, float(s.surface.out_of_plane_max_mm)) if s.surface.out_of_plane_max_mm is not None else None),
         )
         with self.cpu.slot(self.settings.limits.request_timeout_seconds):
             return evaluate_uncertainty(ctx, self._ucfg)

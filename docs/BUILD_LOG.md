@@ -180,3 +180,52 @@ overlay with uncertainty 0.5 s.
 
 Test count at this point: 227 passed (unit + API integration), about 3 min on
 first run (rendering) and under 1 min with the render cache.
+
+## 2026-11-25 — Multi-view localisation and bundle adjustment (prompt 05)
+
+`lumen/vision/multiview.py`: SE(3) bundle adjustment (left-multiplicative
+updates, analytic Jacobians, Huber loss, whitened by the corner covariances),
+gauge = one tag, every tag metric. Initialisation keeps both IPPE branches of
+each tag observation and chooses tag-to-tag transforms by consensus across
+views.
+
+Synthetic sweep, 6 views on a 55° arc at about 740 mm, 1280x960, tags about
+65–80 px, noise on (`tests/unit/test_multiview.py`, exploratory run):
+
+| Case | camera-centre error (max) | tag-centre error (max) | Outcome |
+|---|---|---|---|
+| 6 views, K known | 0.16 mm | 0.10 mm | coplanar (could have seen 0.6 mm / 0.18°); held-out ratio 1.10 |
+| 2 views (13° apart) | 0.63 mm | 0.41 mm | coplanar, resolving power 1.4 mm |
+| 3 views within 1.6° | 0.10 mm | 0.12 mm | `narrow_baseline`; coplanarity **not established** (power 1.7 mm) |
+| no calibration, focal length self-calibrated | 0.17 mm | 0.10 mm | f = 966.91 ± 0.17 px, true 966.93 |
+| one tag raised 8 mm | 0.17 mm | 0.10 mm | `not_coplanar`; raised tag identified, measured 8.6 mm off |
+| one tag declared 52 mm (true 50) | 0.26 mm | 0.14 mm | excluded as `declared_size_inconsistent` |
+| one tag moved 6.7 mm after the third photo | < 1.0 mm | < 0.3 mm | excluded as `moved_or_misread` |
+| all sizes declared 4 % large | — | — | same reprojection error; distances 4.0 % off (low residual ≠ accuracy) |
+
+Single view versus multi-view: tag-pose covariance trace falls by more than
+half from 1 to 6 views; tag-centre error is lower in the multi-view solution
+(asserted in `test_multi_view_beats_single_view_for_the_tag_layout`).
+
+What did not work at first:
+
+* Coplanarity against a plane fitted to *all* tags hid a raised tag (the plane
+  tilted toward it: 2.3 mm reported for an 8 mm lift). Each tag is now compared
+  with the plane of the others, and off-plane tags are found by asking which
+  removal leaves the most coplanar set.
+* A mis-sized tag was first reported as "moved". The solver now frees the tag
+  sizes before labelling; if a different size explains the residuals the
+  reason is `declared_size_inconsistent`.
+
+Integration (`tests/integration/test_multiview_flow.py`): registration now runs
+the 3-D adjustment whenever there are two or more photos of one camera
+configuration. It excludes moved/raised/mis-sized tags from the planar
+solution, records the surface model (`verified_multiview`, with the measured
+out-of-plane bound feeding the uncertainty budget) and, with an attached lens
+profile, re-estimates the focal length from the tags: a profile whose focal
+length was 6 % wrong was flagged with a measured difference of −5.7 %.
+Without a profile the focal length is self-calibrated for the 3-D checks only
+(labelled inferred; it does not satisfy the calibration gate).
+
+Cost: about 2.3 s for 6 views including held-out re-solves and the free-size
+test (single core).
