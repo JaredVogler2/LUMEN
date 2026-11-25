@@ -3,7 +3,7 @@ import { api, upload, url } from '../api.js';
 import { h, clear, icon, chip, banner, toast, showError, busy, sheet } from '../dom.js';
 import { state, setSession, refreshSession, registrationFrames, acceptedTags } from '../store.js';
 import { Viewer } from '../viewer.js';
-import { frameQualityChips } from './common.js';
+import { frameQualityChips, coachLine, coachList } from './common.js';
 import { fetchBlob, loadImage } from '../api.js';
 import { openCamera } from './camera_sheet.js';
 
@@ -35,8 +35,11 @@ export function mount(root, ctx) {
   const progress = h('div', { class: 'stack', 'aria-live': 'polite' });
   const checklist = h('ul', { class: 'checklist' });
   const summary = h('div');
+  const coachBox = h('div', { class: 'stack', 'data-region': 'coach' });
+  const pairBox = h('div', { class: 'stack' });
   let uploading = 0;
   let destroyed = false;
+  let adviceSeq = 0;
 
   const pickMany = h('input', { type: 'file', accept: 'image/*', multiple: true, hidden: true, 'data-input': 'photos', onchange: (ev) => { handleFiles([...ev.target.files], 'photo_upload'); ev.target.value = ''; } });
   const pickCamera = h('input', { type: 'file', accept: 'image/*', capture: 'environment', hidden: true, 'data-input': 'native-camera', onchange: (ev) => { handleFiles([...ev.target.files], 'camera_still'); ev.target.value = ''; } });
@@ -47,20 +50,46 @@ export function mount(root, ctx) {
     ondragleave: () => drop.classList.remove('over'),
     ondrop: (ev) => { ev.preventDefault(); drop.classList.remove('over'); handleFiles([...ev.dataTransfer.files].filter((f) => f.type.startsWith('image/') || /\.(heic|heif)$/i.test(f.name)), 'photo_upload'); },
   },
-    h('div', { class: 'row wrap', style: { justifyContent: 'center' } },
-      h('button', { class: 'btn primary lg', type: 'button', 'data-action': 'live-camera', onclick: () => openCamera({ onChange: render }) }, icon('camera'), 'Open camera'),
-      h('button', { class: 'btn lg', type: 'button', 'data-action': 'native-photo', onclick: () => pickCamera.click() }, icon('camera'), 'Full-resolution photo'),
-      h('button', { class: 'btn lg', type: 'button', 'data-action': 'choose-photos', onclick: () => pickMany.click() }, icon('upload'), 'Choose photos'),
-      h('button', { class: 'btn lg', type: 'button', 'data-action': 'choose-video', onclick: () => pickVideo.click() }, icon('video'), 'Use a video')),
-    h('div', { class: 'hint' }, 'Full-resolution photos give the best accuracy. The in-app camera is quicker and can coach the sweep.'),
+    h('button', { class: 'btn primary lg block', type: 'button', 'data-action': 'live-camera', onclick: () => openCamera({ onChange: render, onFallback: () => pickCamera.click() }) }, icon('camera'), 'Open camera'),
+    h('div', { class: 'tiles3' },
+      h('button', { class: 'btn tile', type: 'button', 'data-action': 'native-photo', onclick: () => pickCamera.click() }, icon('camera'), h('span', null, 'Full-res photo')),
+      h('button', { class: 'btn tile', type: 'button', 'data-action': 'choose-photos', onclick: () => pickMany.click() }, icon('upload'), h('span', null, 'Choose photos')),
+      h('button', { class: 'btn tile', type: 'button', 'data-action': 'choose-video', onclick: () => pickVideo.click() }, icon('video'), h('span', null, 'Use a video'))),
+    h('div', { class: 'hint' }, 'Full-resolution photos from the phone camera give the best accuracy. The in-app camera is quicker and coaches the sweep.'),
     pickMany, pickCamera, pickVideo);
 
   root.append(
     h('h1', { class: 'view-title' }, 'Capture the panel'),
     h('p', { class: 'view-lead' }, 'Take 3–9 overlapping photos from different positions. Every photo should show the tags; between them the photos should show the floor seam and the side edge that the datums refer to.'),
-    summary, drop, progress,
+    summary, coachBox, drop, progress,
     h('div', { class: 'card' }, h('h3', null, 'Before you analyse'), checklist),
+    pairBox,
     h('div', { class: 'eyebrow' }, 'Photos'), grid);
+
+  // What to do next, from the server's look at the photos taken so far.
+  async function loadAdvice() {
+    const seq = ++adviceSeq;
+    try {
+      const adv = await api('GET', `api/sessions/${s().id}/capture/advice`);
+      if (destroyed || seq !== adviceSeq) return;
+      clear(coachBox);
+      const line = coachLine(adv);
+      if (line) coachBox.append(line);
+      const rest = { ...adv, items: adv.items.filter((i) => !adv.next || i.code !== adv.next.code) };
+      const list = coachList(rest);
+      if (list) coachBox.append(h('details', { class: 'fold' }, h('summary', null, `${rest.items.length} more hint${rest.items.length === 1 ? '' : 's'}`), h('div', { class: 'body' }, list)));
+      if (adv.spread_deg !== null) coachBox.append(h('p', { class: 'hint' }, `Viewpoints differ by up to ${adv.spread_deg.toFixed(0)}° (${adv.spread_source === 'registered' ? 'from the analysis' : 'rough estimate from the tags'}).`));
+      clear(pairBox);
+      if (adv.pairs && adv.pairs.length) {
+        pairBox.append(h('div', { class: 'card tight' }, h('h3', null, 'Flash pairs'),
+          adv.pairs.map((p) => h('div', { class: 'row wrap', 'data-pair': p.pair_id },
+            chip(p.usable ? 'aligned' : p.status.replace(/_/g, ' '), p.usable ? 'ok' : 'warn'),
+            h('span', { class: 'hint' }, p.usable
+              ? `camera moved ${p.max_shift_px.toFixed(1)} px between light off and on · brightness ×${p.brightness_on_over_off.toFixed(2)}${p.exposure && p.exposure.source === 'unknown' ? ' (exposure not known to the browser)' : ''}`
+              : (p.reasons || []).join(' '))))));
+      }
+    } catch (_) { /* coaching is optional; the checklist below still works */ }
+  }
 
   async function handleFiles(files, source) {
     if (!files.length) return;
@@ -111,7 +140,8 @@ export function mount(root, ctx) {
       }
       if (job.state !== 'done') throw Object.assign(new Error(job.error ? job.error.message : 'Video processing failed'), { lumen: job.error });
       await refreshSession();
-      toast({ title: `${job.result.selected.length} frames selected`, detail: `from ${job.result.candidates} candidates. Review and remove any you do not want.`, kind: 'ok' });
+      const r = job.result;
+      toast({ title: `${r.selected.length} frame${r.selected.length === 1 ? '' : 's'} chosen from the video`, detail: [`${r.candidates} candidates, sharpest frame of each ${r.window_s.toFixed(2)} s.`, ...(r.hints || []), 'Review them below and remove any you do not want.'].join(' '), kind: r.selected.length ? 'ok' : 'error', timeout: 10000 });
     } catch (err) { showError(err, 'Video could not be used'); } finally { b.done(); render(); }
   }
 
@@ -131,7 +161,18 @@ export function mount(root, ctx) {
         m.reject_reasons.length ? h('span', { class: 'hint' }, m.reject_reasons.map(rejectText).join(', ')) : null))
         : banner('warn', 'No AprilTag found in this photo.'),
       f.notes.length ? h('p', { class: 'hint' }, f.notes.join(' · ')) : null,
-      h('p', { class: 'hint' }, `${f.width}×${f.height} px analysed · native ${f.native_width}×${f.native_height}${f.calibration_note ? ` · ${f.calibration_note}` : ''}`));
+      h('p', { class: 'hint' }, `${f.width}×${f.height} px analysed · native ${f.native_width}×${f.native_height}${f.calibration_note ? ` · ${f.calibration_note}` : ''}${f.video_time_s !== null && f.video_time_s !== undefined ? ` · video frame at ${f.video_time_s.toFixed(2)} s` : ''}${f.camera_label ? ` · ${f.camera_label}` : ''}`),
+      h('div', { class: 'field' }, h('span', { class: 'label' }, 'Phone light / flash in this photo'),
+        h('div', { class: 'seg', role: 'radiogroup', 'aria-label': 'Light state' }, ['off', 'on', 'unknown'].map((t) =>
+          h('button', { type: 'button', role: 'radio', 'aria-checked': f.torch === t ? 'true' : 'false', 'aria-pressed': f.torch === t ? 'true' : 'false', 'data-torch': t,
+            onclick: async (ev) => {
+              try {
+                setSession(await api('PATCH', `api/sessions/${s().id}/frames/${f.id}`, { torch: t }));
+                ev.currentTarget.parentNode.querySelectorAll('button').forEach((b) => { const on = b === ev.currentTarget; b.setAttribute('aria-pressed', String(on)); b.setAttribute('aria-checked', String(on)); });
+                render();
+              } catch (err) { showError(err); }
+            } }, t === 'unknown' ? 'Not known' : `Light ${t}`)))),
+      f.pair_id ? h('p', { class: 'hint' }, `Part of flash pair ${f.pair_id}.`) : null);
     const ref = sheet({ title: `Photo ${f.index}`, content: h('div', { class: 'stack' }, wrap, info), wide: true });
     const viewer = new Viewer(wrap, { label: `Photo ${f.index} with detected tags` });
     try {
@@ -157,8 +198,12 @@ export function mount(root, ctx) {
           h('img', { src: url(`api/sessions/${sess.id}/frames/${f.id}/image?max=360`), alt: `Photo ${f.index}`, loading: 'lazy' })),
         h('span', { class: 'idx' }, `#${f.index}`),
         h('button', { class: 'x', type: 'button', 'aria-label': `Remove photo ${f.index}`, onclick: () => removeFrame(f.id) }, icon('trash')),
-        h('div', { class: 'meta' }, h('div', { class: 'badges' }, frameQualityChips(f)))));
+        h('div', { class: 'meta' }, h('div', { class: 'badges' }, frameQualityChips(f),
+          f.torch === 'on' ? chip('light on', 'info') : null,
+          f.pair_id ? chip('pair', 'solid') : null,
+          f.video_time_s !== null && f.video_time_s !== undefined ? chip(`${f.video_time_s.toFixed(1)} s`, 'solid') : null))));
     });
+    loadAdvice();
 
     const withTags = frames.filter((f) => acceptedTags(f).length > 0);
     const ids = new Set();

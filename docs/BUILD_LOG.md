@@ -309,3 +309,133 @@ The page's content security policy forbids `eval`, so the tests pass functions
 (not expression strings) to the browser.
 
 Test count at this point: 273 unit/integration + 9 browser, all passing.
+
+## 2026-11-25 — Camera, video and capture coaching (prompt 02)
+
+**In-app camera** (`lumen/static/js/camera.js`, `views/camera_sheet.js`): rear
+camera through `getUserMedia` (no audio, `playsinline`, opened only by a button
+press), still capture of the full stream frame, recorded sweep, flash on/off
+pair, camera/lens choice, permission and interruption recovery. The camera is
+stopped when its screen closes and when the page goes to the background.
+
+**Torch**: the control exists only when the browser lists the capability. The
+light state written into a photo is `on`/`off` only if the browser reports it
+or the picture got measurably brighter/darker; otherwise it is `unknown`. A
+flash pair without a confirmed light is discarded.
+
+**Video** (`lumen/vision/video.py`): one decoding pass; the sharpest frame of
+each time window becomes a candidate; tags are located in each candidate;
+frames are then chosen greedily for viewpoint spread, weighted by sharpness,
+tag coverage and exposure. No random numbers: the same file gives the same
+frames. Viewpoints for the ranking use an assumed field of view and are used
+for nothing else. The video is never stored; chosen frames go through the
+normal photo path. Processing runs as a background job whose state lives in
+the session record, so any worker process can answer a status poll.
+
+Measured (synthetic 2 s sweep, 24 frames 1280x720 at 12 fps, 8 viewpoints on a
+44° arc, two of every three frames motion-blurred):
+
+| Check | Result |
+|---|---|
+| candidates | exactly the 8 unblurred frames |
+| estimated spread of the chosen frames | 45.1° (true 44°); pairwise angles within 8° of truth |
+| registration from the chosen frames | tag-to-tag distances within 0.06 mm of truth |
+| analysis time | 0.16 s decode and candidates, 4 ms selection; whole job 4.2 s (8 frames measured) |
+| H.264-in-MOV and HEVC-in-MP4 stored sideways with rotation metadata (built with the ffmpeg command) | decoded upright, tags within 3 px of the original |
+| static video | flagged `narrow_baseline`, no padding with look-alike frames beyond the minimum of 3 |
+| junk, oversize, undecodable uploads | refused with reasons (415 / 413 / failed job) |
+
+**Coaching** (`lumen/services/capture.py`): after every photo the server says
+what is missing — more views, which way there is room to move, tags too
+small/clipped/oblique, glare, a tag missing from the newest photo, and (after
+analysis) a floor line or side edge that no photo shows. Two identical
+features are reported as something more photos cannot resolve.
+
+**Flash pairs**: a pair is `aligned` when the tags moved less than
+max(1 px, 0.08 % of the long edge) between light-off and light-on; otherwise
+`moved` with the shift in pixels and millimetres. Exposure ratio is reported
+from EXIF when both photos have it and as *unknown* for browser captures.
+
+Browser tests (headless Chromium, fake camera fed with a synthetic video of
+the panel; 8 tests): photo capture, five-photo sweep registering end to end,
+recorded WebM sweep through the server, torch reported / torch silent,
+permission refusal, interruption and background stop.
+
+Not run: any real phone. iPhone Safari behaviour (stream resolution, torch
+capability, MediaRecorder container, lens switching) is unverified.
+
+## 2026-11-25 — Live guidance (prompt 09)
+
+Each live frame is sent to the server, measured and localised against the
+registered tag layout, and returned with the overlay for *that frame*; the
+viewer shows the same frame with it. Nothing is drawn when a frame cannot be
+localised, when the target is outside the picture, when a registered tag has
+moved, or when no answer has arrived for 2.5 s. Live frames are never stored.
+
+Measured (synthetic, registration from five 1600x1200 photos, live frames
+1280x960 from viewpoints not used for registration):
+
+| Check | Result |
+|---|---|
+| target outline versus truth | 0.03 mm |
+| time per frame on one busy core | tags 320–400 ms, localisation 5–14 ms, overlay with uncertainty 410–440 ms, or 50–65 ms when the uncertainty of a nearly identical view is reused |
+| lost states | no tag / tags too small (arrow: closer) / unknown tags / target off-screen (arrow toward it) / tag moved |
+| 960x540 browser stream | outline within 0.8 mm; status `research_preview` (tags too small for the edge-bias estimate: 1.04 mm expanded against a 1.0 mm limit) |
+
+Uncertainty is reused only for the same tags seen from a view whose projected
+points moved less than 2 % of the frame diagonal, and for at most 6 s.
+
+Live frames reduced by the browser are matched to a lens profile through the
+stream size the browser reports; without it they count as uncalibrated.
+
+## 2026-11-25 — Verification after installation (prompt 11)
+
+`lumen/vision/placard.py` finds the installed placard near the target and
+measures its outline; `lumen/services/verification.py` turns that into signed
+deviations in the local frame with an uncertainty, and a guard-banded
+observation (`within` / `outside` / `indeterminate`), never an acceptance.
+
+Outline measurement alone (true mapping, 1600x1200, 1.66 px/mm):
+
+| Case | Corner error (max) | Centre error |
+|---|---|---|
+| on target / shifted / rotated / 40 mm away | 0.11–0.18 mm | 0.003–0.006 mm |
+| plain white placard, no border | 0.09 mm | 0.013 mm |
+| rounded corners (6 mm) | 0.15 mm | 0.005 mm |
+| one corner folded over 12 mm | 0.12 mm | 0.003 mm; flagged, gap measured 12.1 mm |
+| corner covered by a block | < 0.4 mm | located from the two sides, flagged |
+| narrower part than recorded | width within 0.4 mm | flagged `size_differs_from_record` |
+| no placard | — | `placard_not_found` |
+
+Whole chain through the API (registration, datums, new viewpoint; target
+±2.0 mm, ±1°):
+
+| Installed at (dx, dz, rotation) | Measured | Expanded U | Observation |
+|---|---|---|---|
+| +0.3, −0.2, 0° | +0.320, −0.178, 0.000° | 0.92 mm | within |
+| +1.4, −0.9, 0° | +1.423, −0.885, −0.001° | 0.92 mm | indeterminate |
+| +4.0, +2.5, 0° | +4.014, +2.518, −0.010° | 0.92 mm | outside |
+| +0.2, +0.1, 2.5° | +0.225, +0.115, +2.505° | 0.92 mm | outside (rotation) |
+| −0.4, +0.3, −0.5° | −0.379, +0.314, −0.504° | 0.92 mm | within |
+
+The measured size is 0.10–0.13 mm small on every placard: each edge sits about
+0.1 px toward its dark side. The budget carries a 0.25 px bound per side for
+this; it cancels in the centre.
+
+What did not work at first:
+
+* The search locked onto the printed border 3 mm inside the edge. Both edge
+  signs are now measured and the outline whose size matches the record wins.
+* A proposal found in bare panel texture is now "not found" when no side can
+  be measured.
+* The edge-noise estimate included the edge itself and failed in a narrow
+  scan; it now uses the outer end of the profiles.
+* A browser test showed the outline centred on a hidden (zero-size) canvas;
+  the picture area is now laid out before anything is centred in it.
+
+Evidence is refused when the photo is one of the registration photos, cannot
+be registered, or shows a moved tag. A clean number from an outline with
+quality flags is reported as indeterminate, not within.
+
+Test count at this point: 327 unit/integration + 22 browser, all passing
+(calibration and photometric modules are still in progress and not counted).

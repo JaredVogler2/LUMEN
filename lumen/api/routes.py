@@ -237,6 +237,34 @@ def resolve(request: Request, body: ResolveBody) -> dict[str, Any]:
     return _svc(request).library.resolve(body.code)
 
 
+@router.post("/scan")
+async def scan(request: Request, thorough: bool = True) -> dict[str, Any]:
+    """Read barcodes / QR codes from an uploaded picture and look each one up.
+
+    The picture is used for this one answer and is not stored.  Code geometry
+    is returned for display only and is never used as a scale reference.
+    """
+    from ..vision.barcode import decoders_available, read_codes
+    from ..vision.imaging import decode_image
+
+    svc = _svc(request)
+    lim = svc.settings.limits
+    data = await _read_body(request, lim.max_image_bytes)
+
+    def work() -> dict[str, Any]:
+        img = decode_image(data, max_bytes=lim.max_image_bytes, max_pixels=lim.max_image_pixels, max_long_edge=2400)
+        with svc.cpu.slot(lim.request_timeout_seconds):
+            codes = read_codes(img.bgr, thorough=thorough)
+        return {
+            "codes": [{**c.to_dict(), "resolved": svc.library.resolve(c.text)} for c in codes],
+            "frame": {"width": img.width, "height": img.height},
+            "decoders": decoders_available(),
+            "geometry_used_for_scale": False,
+        }
+
+    return await run_in_threadpool(work)
+
+
 class SaveOperationBody(BaseModel):
     operation: dict[str, Any]
 
@@ -345,13 +373,89 @@ def remove_frame(request: Request, sid: str, fid: str) -> dict[str, Any]:
 
 
 class FramePatch(BaseModel):
-    selected: bool
+    selected: bool | None = None
+    torch: str | None = Field(default=None, max_length=8)
+    pair_id: str | None = Field(default=None, max_length=40)
+    clear_pair: bool = False
 
 
 @router.patch("/sessions/{sid}/frames/{fid}")
 def patch_frame(request: Request, sid: str, fid: str, body: FramePatch) -> dict[str, Any]:
     _session(request, sid)
-    return public_session(_svc(request).set_frame_selected(sid, fid, body.selected))
+    return public_session(_svc(request).set_frame_attributes(sid, fid, selected=body.selected, torch=body.torch, pair_id=body.pair_id, clear_pair=body.clear_pair))
+
+
+# --------------------------------------------------------------------------
+# video and capture coaching
+# --------------------------------------------------------------------------
+_VIDEO_EXT = {"mp4": ".mp4", "webm": ".webm", "avi": ".avi"}
+
+
+@router.post("/sessions/{sid}/video")
+async def add_video(request: Request, sid: str, source: str = "video_upload") -> dict[str, Any]:
+    """Upload a video (raw body); frames are chosen by a background job."""
+    from ..errors import UnsupportedMediaError
+    from ..services.capture import temp_video_path
+    from ..vision.video import sniff_video_type
+
+    _session(request, sid)
+    svc = _svc(request)
+    limit = svc.settings.limits.max_video_bytes
+    path = None
+    n = 0
+    fh = None
+    try:
+        async for chunk in request.stream():
+            if not chunk:
+                continue
+            if fh is None:
+                kind = sniff_video_type(chunk[:16])
+                if kind is None:
+                    raise UnsupportedMediaError(
+                        "unsupported_video", "This file is not an MP4/MOV, WebM or AVI video.",
+                        suggestions=["Record with the phone camera (MOV/MP4) or use the in-app recorder."],
+                    )
+                path = temp_video_path(_VIDEO_EXT[kind])
+                fh = open(path, "wb")
+            n += len(chunk)
+            if n > limit:
+                raise LimitExceededError("payload_too_large", f"Video exceeds the {limit / 1e6:.0f} MB limit.", suggestions=["Record a shorter sweep (10–20 s is enough)."])
+            fh.write(chunk)
+        if fh is None or path is None:
+            raise LumenValidationError("empty_upload", "The upload was empty.")
+        fh.close()
+        fh = None
+        job = svc.start_video_job(sid, path, source=source, meta=_meta(request))
+        path = None  # the job owns (and deletes) the file now
+        return {"job": job}
+    finally:
+        if fh is not None:
+            fh.close()
+        if path is not None:
+            import os
+
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+
+
+@router.get("/sessions/{sid}/jobs/{jid}")
+def get_job(request: Request, sid: str, jid: str) -> dict[str, Any]:
+    _session(request, sid)
+    return _svc(request).jobs.get(sid, jid)
+
+
+@router.delete("/sessions/{sid}/jobs/{jid}")
+def cancel_job(request: Request, sid: str, jid: str) -> dict[str, Any]:
+    _session(request, sid)
+    return _svc(request).jobs.cancel(sid, jid)
+
+
+@router.get("/sessions/{sid}/capture/advice")
+def capture_advice(request: Request, sid: str) -> dict[str, Any]:
+    _session(request, sid)
+    return _svc(request).capture_advice(sid)
 
 
 @router.get("/sessions/{sid}/frames/{fid}/image")
@@ -445,6 +549,50 @@ def overlay(request: Request, sid: str, frame: str, view: str = "image", placard
     return _svc(request).overlay(sid, frame, view=view, placard_ids=pids, with_uncertainty=uncertainty, rect_max_edge=rect_max, candidates=candidates)
 
 
+class VerifyBody(BaseModel):
+    frame_id: str = Field(max_length=16)
+    placard_id: str | None = Field(default=None, max_length=64)
+    #: operator-marked corners in image pixels (any order); omit for automatic detection
+    corners_px: list[list[float]] | None = Field(default=None, min_length=4, max_length=4)
+    snap: bool = True
+
+
+@router.post("/sessions/{sid}/verify")
+def verify(request: Request, sid: str, body: VerifyBody) -> dict[str, Any]:
+    """Measure the installed placard in a verification photo (evidence, not acceptance)."""
+    _session(request, sid)
+    svc = _svc(request)
+    out = svc.verify(sid, body.frame_id, placard_id=body.placard_id, manual_corners_px=body.corners_px, snap=body.snap)
+    out["session"] = public_session(svc.get(sid))
+    return out
+
+
+class ConfirmBody(BaseModel):
+    confirmed: bool = True
+
+
+@router.post("/sessions/{sid}/verifications/{vid}/confirm")
+def confirm_verification(request: Request, sid: str, vid: str, body: ConfirmBody | None = None) -> dict[str, Any]:
+    _session(request, sid)
+    return public_session(_svc(request).confirm_verification(sid, vid, True if body is None else body.confirmed))
+
+
+@router.delete("/sessions/{sid}/verifications/{vid}")
+def delete_verification(request: Request, sid: str, vid: str) -> dict[str, Any]:
+    _session(request, sid)
+    return public_session(_svc(request).delete_verification(sid, vid))
+
+
+@router.post("/sessions/{sid}/track")
+async def track(request: Request, sid: str, placards: str | None = None, full: bool = False) -> dict[str, Any]:
+    """Live guidance: overlay for the uploaded camera frame.  The frame is not stored."""
+    _session(request, sid)
+    svc = _svc(request)
+    data = await _read_body(request, svc.settings.limits.max_image_bytes)
+    pids = [p for p in placards.split(",") if p] if placards else None
+    return await run_in_threadpool(svc.track, sid, data, placard_ids=pids, meta=_meta(request), force_full=full)
+
+
 @router.get("/sessions/{sid}/report")
 def report(request: Request, sid: str, frame: str | None = None, placard: str | None = None) -> dict[str, Any]:
     _session(request, sid)
@@ -471,6 +619,35 @@ def demo_load(request: Request, sid: str, body: DemoBody) -> dict[str, Any]:
 
     _session(request, sid)
     return public_session(load_demo(_svc(request), sid, body.scenario))
+
+
+@router.post("/sessions/{sid}/assistant")
+async def assistant(request: Request, sid: str) -> dict[str, Any]:
+    """Optional explanation of LUMEN's own results (disabled unless an administrator enables it)."""
+    from ..assistant.service import AssistantRequest, AssistantService
+    from ..errors import FeatureDisabledError
+
+    _session(request, sid)
+    svc = _svc(request)
+    if not svc.settings.llm_enabled:
+        raise FeatureDisabledError("assistant_disabled", "The assistant is not enabled on this deployment.")
+    raw = await _read_body(request, 64 * 1024)
+    try:
+        body = AssistantRequest.model_validate_json(raw or b"{}")
+    except Exception:
+        raise LumenValidationError("invalid_request", "The assistant request is not valid.") from None
+    adapter = getattr(request.app.state, "assistant_adapter", None)
+    return await run_in_threadpool(AssistantService(svc, adapter).ask, sid, body)
+
+
+@router.post("/sessions/{sid}/demo/verification")
+def demo_verification(request: Request, sid: str) -> dict[str, Any]:
+    from ..services.demo import add_demo_verification
+
+    _session(request, sid)
+    svc = _svc(request)
+    frame = add_demo_verification(svc, sid)
+    return {"frame": {"id": frame.id}, "session": public_session(svc.get(sid))}
 
 
 # --------------------------------------------------------------------------

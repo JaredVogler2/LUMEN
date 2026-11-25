@@ -68,6 +68,8 @@ class Limits:
     session_ttl_seconds: int = 4 * 3600
     #: Wall-clock budget of one analysis job.
     job_timeout_seconds: float = 120.0
+    #: Wall-clock budget of one video (decode, frame selection, tag measurement).
+    video_job_timeout_seconds: float = 300.0
     #: Wall-clock budget of one synchronous request (detection, overlay, track).
     request_timeout_seconds: float = 30.0
     #: Concurrent CPU-heavy computations per worker process.
@@ -117,6 +119,7 @@ def load_settings() -> Settings:
         max_sessions=_env_int("LUMEN_MAX_SESSIONS", 40),
         session_ttl_seconds=_env_int("LUMEN_SESSION_TTL_SECONDS", 4 * 3600),
         job_timeout_seconds=_env_float("LUMEN_JOB_TIMEOUT_SECONDS", 120.0),
+        video_job_timeout_seconds=_env_float("LUMEN_VIDEO_JOB_TIMEOUT_SECONDS", 300.0),
         request_timeout_seconds=_env_float("LUMEN_REQUEST_TIMEOUT_SECONDS", 30.0),
         max_concurrent_jobs=max(1, _env_int("LUMEN_MAX_CONCURRENT_JOBS", 2)),
         max_track_long_edge=_env_int("LUMEN_MAX_TRACK_LONG_EDGE", 1600),

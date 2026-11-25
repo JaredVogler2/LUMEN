@@ -57,6 +57,7 @@ from ..vision.planar import PlanarSolution, PlanarView, ViewLocalization, locali
 from ..vision.rectify import RectSpec, plan_rectification, rectify_image
 from .context import CpuGate, LruCache, utcnow
 from .frames import build_frame, camera_for_frame, decode_for_session, detect_in_image, sizes_from_state, tag_obs
+from .jobs import JobRunner
 
 import cv2
 import json
@@ -85,6 +86,11 @@ class SessionService:
                 self._domain = None
         self._last_purge = 0.0
         self._purge_lock = threading.Lock()
+        self.jobs = JobRunner(self._load, self._mutate, max_workers=1)
+        self._live = LruCache(8)
+        from ..vision.placard import PlacardConfig
+
+        self._placard_cfg = PlacardConfig()
 
     # ------------------------------------------------------------------ util
     @property
@@ -100,6 +106,12 @@ class SessionService:
                 return
             self._last_purge = now
         self.store.purge_expired(self.settings.limits.session_ttl_seconds, now)
+        from .capture import purge_stale_temp
+
+        purge_stale_temp()
+
+    def log_event(self, sid: str, action: str, detail: dict[str, Any] | None = None) -> None:
+        self._mutate(sid, lambda s: None, action, detail or {})
 
     def _load(self, sid: str) -> Session:
         return Session.model_validate(self.store.load(sid))
@@ -130,6 +142,9 @@ class SessionService:
         if registration:
             s.registration = None
             self._solutions.drop_prefix(s.id)
+            # verification results were measured against the old registration
+            s.verifications = []
+            s.research.pop("verification_detail", None)
         if datums:
             s.datums = {}
             s.local_frame = None
@@ -319,6 +334,67 @@ class SessionService:
             return s
 
         return self._mutate(sid, fn, "frame_selection", {"frame_id": frame_id, "selected": selected})
+
+    def set_frame_attributes(self, sid: str, frame_id: str, *, selected: bool | None = None, torch: str | None = None, pair_id: str | None = None, clear_pair: bool = False) -> Session:
+        """Operator edits of a frame: include/exclude, light state, flash pairing."""
+        from ..schemas import TorchState
+
+        if torch is not None and torch not in ("on", "off", "unknown"):
+            raise LumenValidationError("invalid_torch", "torch must be 'on', 'off' or 'unknown'.")
+
+        def fn(s: Session) -> Session:
+            f = self._frame(s, frame_id)
+            if selected is not None and bool(selected) != f.selected:
+                f.selected = bool(selected)
+                self._invalidate(s, registration=True, datums=False)
+            if torch is not None:
+                f.torch = TorchState(torch)
+            if clear_pair:
+                f.pair_id = None
+            elif pair_id is not None:
+                f.pair_id = str(pair_id)[:40]
+            return s
+
+        return self._mutate(sid, fn, "frame_attributes", {"frame_id": frame_id, "selected": selected, "torch": torch, "pair": None if clear_pair else pair_id})
+
+    # ------------------------------------------------------------------ video
+    def start_video_job(self, sid: str, path: str, source: str = "video_upload", meta: dict[str, Any] | None = None) -> dict[str, Any]:
+        from .capture import process_video
+
+        if source not in (FrameSource.VIDEO_UPLOAD.value, FrameSource.LIVE_SWEEP.value):
+            raise LumenValidationError("invalid_frame_kind", "Video source must be 'video_upload' or 'live_sweep'.")
+        s = self._load(sid)
+        if len(s.frames) >= self.settings.limits.max_frames_per_session:
+            raise LimitExceededError("too_many_frames", "This session already holds the maximum number of frames.", suggestions=["Remove frames you do not need before adding a video."])
+        m = dict(meta or {})
+        return self.jobs.submit(sid, "video", lambda job: process_video(self, sid, path, source, m, job))
+
+    def capture_advice(self, sid: str) -> dict[str, Any]:
+        from .capture import capture_advice
+
+        return capture_advice(self, self._load(sid))
+
+    # ----------------------------------------------------------- verification
+    def verify(self, sid: str, frame_id: str, *, placard_id: str | None = None, manual_corners_px: list[list[float]] | None = None, snap: bool = True) -> dict[str, Any]:
+        from .verification import verify_frame
+
+        return verify_frame(self, sid, frame_id, placard_id=placard_id, manual_corners_px=manual_corners_px, snap=snap)
+
+    def confirm_verification(self, sid: str, vid: str, confirmed: bool = True) -> Session:
+        from .verification import confirm_verification
+
+        return confirm_verification(self, sid, vid, confirmed)
+
+    def delete_verification(self, sid: str, vid: str) -> Session:
+        from .verification import delete_verification
+
+        return delete_verification(self, sid, vid)
+
+    def track(self, sid: str, data: bytes, *, placard_ids: list[str] | None = None, meta: dict[str, Any] | None = None, force_full: bool = False) -> dict[str, Any]:
+        """Overlay for one live camera frame (never stored); see services/live.py."""
+        from .live import track_frame
+
+        return track_frame(self, sid, data, placard_ids=placard_ids, meta=meta, force_full=force_full)
 
     def frame_image(self, sid: str, frame_id: str, max_edge: int | None = None) -> tuple[bytes, str]:
         s = self._load(sid)
@@ -1106,6 +1182,7 @@ class SessionService:
         placard_id: str | None,
         with_uncertainty: bool,
         ext: tuple[Frame, ViewLocalization, PlanarView] | None = None,
+        unc_override: Any | None = None,
     ) -> GateReport:
         inp = GateInputs(demo=(s.mode == SessionMode.DEMO.value))
         pid = placard_id or s.active_placard_id
@@ -1231,7 +1308,10 @@ class SessionService:
             ctr = sol.layout.centroid()
             radius = max(sol.layout.extent_radius(), 1e-6)
             inp.extrapolation_ratio = float(np.max(np.linalg.norm(rect.corners - ctr, axis=1)) / radius)
-            if with_uncertainty and inp.target_in_view and sol.consistent:
+            if unc_override is not None and inp.target_in_view and sol.consistent:
+                # evaluated moments ago for a nearly identical view of the same tags (live guidance)
+                unc = unc_override
+            elif with_uncertainty and inp.target_in_view and sol.consistent:
                 try:
                     unc = self._uncertainty(s, sol, views, f, loc, ext_view, spec)
                 except Exception as exc:  # uncertainty must never crash the report; it then fails its gate
@@ -1346,8 +1426,9 @@ class SessionService:
         with_uncertainty: bool,
         ext: tuple[Frame, ViewLocalization, PlanarView] | None = None,
         candidates: bool = False,
+        unc_override: Any | None = None,
     ) -> dict[str, Any]:
-        cam = self._camera(s, f)
+        cam = self._camera(s, f) if ext is None else ext[2].camera
         lf = self._local_frame(s)
         ctr = sol.layout.centroid()
         footprint = footprint_for_image(H, f.width, f.height, ctr)
@@ -1371,7 +1452,7 @@ class SessionService:
         for pid in pids:
             if pid is None or op is None:
                 continue
-            rep = self._gate_report(s, f.id, pid, with_uncertainty and pid == s.active_placard_id, ext=ext)
+            rep = self._gate_report(s, f.id, pid, with_uncertainty and pid == s.active_placard_id, ext=ext, unc_override=(unc_override if pid == s.active_placard_id else None))
             reports[pid] = rep
             spec = PlacementSpec(**op.placard(pid).resolved())
             if rep.status == GuidanceStatus.BLOCKED.value or lf is None or not lf.valid or not self._spec_complete(spec):
@@ -1411,6 +1492,10 @@ class SessionService:
             mapper=mapper, view_w=vw, view_h=vh, px_per_mm=scale, visible_plane_pts=visible,
             frame=lf, floor=floor, side=side, targets=targets, tags=tags, labels=names,
         )
+        if s.verifications and ext is None:
+            from .verification import verification_primitives
+
+            ov["primitives"].extend(verification_primitives(s, f.id, mapper, vw, vh))
         if candidates:
             # automatically found straight features, so the operator can pick one
             for c in (s.research.get("datum_proposals") or {}).get("candidates", []):

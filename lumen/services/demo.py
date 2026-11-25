@@ -59,7 +59,24 @@ def load_demo(svc: SessionService, sid: str, scenario: str) -> Session:
             continue  # verification photos are added on the Verify step
         data = (d / fr["file"]).read_bytes()
         svc.add_frame(sid, data, role="registration", source="demo", client={"camera_label": "synthetic renderer", "captured_at": man.get("generated", "")})
+
+    def remember(x: Session) -> None:
+        x.research["demo_scenario"] = scenario
+
+    svc._mutate(sid, remember)
     return svc.get(sid)
+
+
+def add_demo_verification(svc: SessionService, sid: str) -> Any:
+    """Add the scenario's bundled photo of the installed placard (demo sessions only)."""
+    s = svc.get(sid)
+    if s.mode != SessionMode.DEMO.value:
+        raise ConflictError("not_a_demo_session", "Demo content can only be loaded into a demo session.")
+    scenario = str(s.research.get("demo_scenario") or "")
+    if not scenario:
+        raise ConflictError("no_demo_loaded", "No demo scenario is loaded in this session.")
+    data = demo_frame_bytes(scenario, "verification")
+    return svc.add_frame(sid, data, role="verification", source="demo", client={"camera_label": "synthetic renderer"})
 
 
 def demo_frame_bytes(scenario: str, role: str) -> bytes:
