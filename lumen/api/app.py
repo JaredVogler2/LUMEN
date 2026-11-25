@@ -86,6 +86,9 @@ def create_app(settings: Settings | None = None, service: SessionService | None 
     app.state.settings = settings
     app.state.service = service or SessionService(get_store(), settings, get_library())
     app.state.started = time.time()
+    from ..services.calibration import CalibrationService
+
+    app.state.calibration = CalibrationService(app.state.service.store, settings, app.state.service.cpu)
 
     # ------------------------------------------------------------ errors
     @app.exception_handler(LumenError)

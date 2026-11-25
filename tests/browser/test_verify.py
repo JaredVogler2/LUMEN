@@ -9,7 +9,7 @@ import math
 
 import pytest
 
-from tests.browser.conftest import load_demo_to_place, shot
+from tests.browser.conftest import assert_clean_text, load_demo_to_place, shot
 
 pytestmark = pytest.mark.browser
 
@@ -45,6 +45,7 @@ def test_verify_reports_signed_deviations_as_evidence_not_acceptance(page):
     kinds = page.evaluate("() => window.__lumenViewer.overlay.primitives.map((p) => p.kind)")
     assert "measured" in kinds and any(k.startswith("target") for k in kinds)
     shot(page, "verify_result")
+    assert_clean_text(page)
     # confirming records the outline as evidence and completes the step
     page.click('[data-action="confirm"]')
     page.wait_for_selector('[data-action="unconfirm"]')

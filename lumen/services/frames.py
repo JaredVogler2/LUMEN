@@ -14,7 +14,10 @@ from ..vision.markers import MarkerConfig, TagDetection, TagSizeTable, detect_ta
 from ..vision.planar import TagObs
 
 
-def camera_for_frame(cal: Calibration | None, width: int, height: int, native_w: int, native_h: int, scale: float) -> tuple[CameraModel | None, str]:
+def camera_for_frame(
+    cal: Calibration | None, width: int, height: int, native_w: int, native_h: int, scale: float,
+    *, device: str = "", lens: str = "", zoom: float | None = None,
+) -> tuple[CameraModel | None, str]:
     """Camera model for a frame, or ``None`` with the reason it does not apply.
 
     A profile is applied only to frames whose *upright native* pixel geometry
@@ -23,9 +26,20 @@ def camera_for_frame(cal: Calibration | None, width: int, height: int, native_w:
     orientation — is a different capture configuration and is refused, because
     crop, binning and electronic stabilisation change the intrinsics in ways a
     web page cannot observe.
+
+    Where both the profile and the frame say which camera, lens or zoom was
+    used and they differ, the profile is refused as well: a phone's lenses
+    often deliver pictures of the same pixel size with different intrinsics.
+    A value missing on either side is not a reason to refuse (the browser
+    does not always report it).
     """
     if cal is None:
         return None, "no calibration profile attached"
+    for what, have, want in (("camera", device, cal.device), ("lens", lens, cal.lens)):
+        if have and want and have.strip().lower() != want.strip().lower():
+            return None, f"profile is for {what} {want!r} but this picture reports {have!r}"
+    if zoom is not None and cal.zoom is not None and abs(float(zoom) - float(cal.zoom)) > 1e-3:
+        return None, f"profile is for zoom {cal.zoom:g} but this picture reports zoom {float(zoom):g}"
     upright_native = (native_w, native_h)
     if upright_native != (cal.width, cal.height):
         if (native_h, native_w) == (cal.width, cal.height):
@@ -76,13 +90,24 @@ def tag_obs(m: MarkerObservation) -> TagObs:
     return TagObs(m.tag_id, np.asarray(m.corners_ideal, dtype=float), np.asarray(m.cov, dtype=float), float(m.size_mm), bool(m.bias_applied))
 
 
+def capture_identity(img: DecodedImage, client: dict[str, Any] | None) -> dict[str, Any]:
+    """Which camera / lens / zoom a picture reports (browser stream label or EXIF); empty when unknown."""
+    client = client or {}
+    return {
+        "device": str(client.get("camera_label") or img.meta.model or "")[:120],
+        "lens": str(client.get("lens") or img.meta.lens_model or "")[:120],
+        "zoom": _opt_float(client.get("zoom")),
+    }
+
+
 def detect_in_image(
     img: DecodedImage,
     cal: Calibration | None,
     sizes: TagSizeTable,
     cfg: MarkerConfig | None = None,
+    client: dict[str, Any] | None = None,
 ) -> tuple[list[TagDetection], CameraModel | None, str]:
-    cam, note = camera_for_frame(cal, img.width, img.height, _upright(img)[0], _upright(img)[1], img.processing_scale)
+    cam, note = camera_for_frame(cal, img.width, img.height, _upright(img)[0], _upright(img)[1], img.processing_scale, **capture_identity(img, client))
     dets = detect_tags(img.bgr, camera=cam, sizes=sizes, cfg=cfg)
     return dets, cam, note
 
@@ -167,8 +192,8 @@ def build_frame(
         processing_scale=img.processing_scale,
         exif_orientation=img.meta.exif_orientation,
         orientation_applied=img.meta.orientation_applied,
-        camera_label=str(client.get("camera_label", ""))[:120],
-        lens=str(client.get("lens", img.meta.lens_model or ""))[:120],
+        camera_label=str(client.get("camera_label") or img.meta.model or "")[:120],
+        lens=str(client.get("lens") or img.meta.lens_model or "")[:120],
         zoom=_opt_float(client.get("zoom")),
         facing_mode=str(client.get("facing_mode", ""))[:24],
         torch=TorchState(torch),

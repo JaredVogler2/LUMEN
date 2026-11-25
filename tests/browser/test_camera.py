@@ -7,7 +7,7 @@ stopping the camera); they say nothing about iPhone Safari.
 
 import pytest
 
-from tests.browser.conftest import camera_frames, launch_with_camera, open_app, shot, to_capture_step, write_y4m
+from tests.browser.conftest import assert_clean_text, camera_frames, launch_with_camera, open_app, shot, to_capture_step, write_y4m
 
 pytestmark = pytest.mark.browser
 
@@ -135,6 +135,20 @@ def test_sweep_of_photos_registers_end_to_end(sweep_cam, live_server):
     assert reg["consistent"] and reg["n_tags"] == 4 and len(reg["frames_used"]) == 5
     # the photos really came from different places (the fake camera cycles through 5 viewpoints)
     assert reg["multiview"]["checks"]["diversity"]["max_view_angle_deg"] > 10.0
+    # a real (not demo) session all the way to the placement and verification screens
+    assert_clean_text(page)
+    page.wait_for_selector('.busy', state="detached", timeout=120_000)
+    page.wait_for_selector('[data-datum="side"] .chip', timeout=120_000)
+    if page.is_enabled('[data-action="confirm-datums"]'):
+        page.click('[data-action="confirm-datums"]')
+        page.wait_for_selector(".status-hero", timeout=120_000)
+    for step in ("rectified", "place"):
+        page.click(f'[data-step="{step}"]')
+        page.wait_for_selector(".status-hero", timeout=120_000)
+        page.wait_for_selector('.busy', state="detached", timeout=60_000)
+        assert_clean_text(page)
+    assert "research prototype" in page.inner_text(".research-strip").lower() and "simulated" not in page.inner_text(".research-strip").lower()
+    shot(page, "place_real_mode")
     assert not page._lumen_errors
     page.context.close()
 

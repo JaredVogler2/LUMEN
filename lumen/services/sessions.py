@@ -114,7 +114,10 @@ class SessionService:
         self._mutate(sid, lambda s: None, action, detail or {})
 
     def _load(self, sid: str) -> Session:
-        return Session.model_validate(self.store.load(sid))
+        d = self.store.load(sid)
+        if d.get("kind") == "calibration":  # a calibration workspace shares the store but is not a session
+            raise NotFoundError("session_not_found", "Unknown or expired session.")
+        return Session.model_validate(d)
 
     def _save(self, s: Session) -> None:
         s.updated = utcnow()
@@ -293,7 +296,7 @@ class SessionService:
         img = decode_for_session(data, self.settings)
         sizes = sizes_from_state(s0.tag_sizes)
         with self.cpu.slot(self.settings.limits.request_timeout_seconds):
-            dets, cam, note = detect_in_image(img, s0.calibration, sizes, self._marker_cfg)
+            dets, cam, note = detect_in_image(img, s0.calibration, sizes, self._marker_cfg, client)
         ext = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/bmp": "bmp"}.get(img.meta.mime, "bin")
 
         def fn(s: Session) -> Frame:
@@ -444,7 +447,7 @@ class SessionService:
         for f in stale:
             img = self._image(sid, f)
             with self.cpu.slot(self.settings.limits.request_timeout_seconds):
-                results[f.id] = detect_in_image(img, s.calibration, sizes, self._marker_cfg)
+                results[f.id] = detect_in_image(img, s.calibration, sizes, self._marker_cfg, {"camera_label": f.camera_label, "lens": f.lens, "zoom": f.zoom})
 
         def fn(s2: Session) -> None:
             from .frames import marker_from_detection
@@ -463,7 +466,7 @@ class SessionService:
     def _camera(self, s: Session, f: Frame) -> CameraModel | None:
         if not f.calibration_id or s.calibration is None or s.calibration.id != f.calibration_id:
             return None
-        cam, _ = camera_for_frame(s.calibration, f.width, f.height, f.native_width, f.native_height, f.processing_scale)
+        cam, _ = camera_for_frame(s.calibration, f.width, f.height, f.native_width, f.native_height, f.processing_scale, device=f.camera_label, lens=f.lens, zoom=f.zoom)
         return cam
 
     def _views(self, s: Session, frames: list[Frame]) -> list[PlanarView]:
@@ -1217,6 +1220,7 @@ class SessionService:
         if s.operation:
             op = self._operation(s)
             inp.operation_selected = True
+            inp.record_status = op.status
             inp.surface_target = op.surface.target
             if pid:
                 try:

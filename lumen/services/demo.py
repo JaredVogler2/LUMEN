@@ -54,11 +54,14 @@ def load_demo(svc: SessionService, sid: str, scenario: str) -> Session:
         cal = Calibration(**man["calibration"])
         cal.provenance = Provenance.SIMULATED
         svc.set_calibration(sid, cal)
+    # the simulated photos report the same camera and lens as the simulated profile
+    device = str((man.get("calibration") or {}).get("device") or "synthetic renderer")
+    lens = str((man.get("calibration") or {}).get("lens") or "")
     for fr in man["frames"]:
         if fr.get("role", "registration") != "registration":
             continue  # verification photos are added on the Verify step
         data = (d / fr["file"]).read_bytes()
-        svc.add_frame(sid, data, role="registration", source="demo", client={"camera_label": "synthetic renderer", "captured_at": man.get("generated", "")})
+        svc.add_frame(sid, data, role="registration", source="demo", client={"camera_label": device, "lens": lens, "captured_at": man.get("generated", "")})
 
     def remember(x: Session) -> None:
         x.research["demo_scenario"] = scenario
@@ -76,7 +79,8 @@ def add_demo_verification(svc: SessionService, sid: str) -> Any:
     if not scenario:
         raise ConflictError("no_demo_loaded", "No demo scenario is loaded in this session.")
     data = demo_frame_bytes(scenario, "verification")
-    return svc.add_frame(sid, data, role="verification", source="demo", client={"camera_label": "synthetic renderer"})
+    cal = s.calibration
+    return svc.add_frame(sid, data, role="verification", source="demo", client={"camera_label": cal.device if cal else "synthetic renderer", "lens": cal.lens if cal else ""})
 
 
 def demo_frame_bytes(scenario: str, role: str) -> bytes:

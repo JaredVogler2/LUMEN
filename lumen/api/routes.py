@@ -12,6 +12,7 @@ Conventions
 
 from __future__ import annotations
 
+import builtins
 import json
 import platform
 import sys
@@ -210,6 +211,7 @@ def operations(request: Request) -> dict[str, Any]:
     return {
         "library_revision": lib.library_revision,
         "editable": lib.editable,
+        "storage": lib.storage(),
         "errors": lib.load_errors,
         "operations": [{**op.summary(), "origin": lib.origin(op)} for op in lib.all()],
     }
@@ -269,12 +271,67 @@ class SaveOperationBody(BaseModel):
     operation: dict[str, Any]
 
 
+def _record_view(lib: Any, op: Any) -> dict[str, Any]:
+    return {"summary": op.summary(), "placards_resolved": [p.resolved() for p in op.placards]}
+
+
+@router.post("/operations/validate")
+def validate_operation(request: Request, body: SaveOperationBody) -> dict[str, Any]:
+    """Check a record as typed so far, without storing it.
+
+    Answers with what cannot be read (``problems``), what is missing for a
+    release (``summary.issues``) and every length as the app will use it (mm).
+    """
+    from ..operations.library import analyse_record
+
+    lib = _svc(request).library
+    op, problems = analyse_record(body.operation)
+    out: dict[str, Any] = {"problems": problems, "summary": None, "placards_resolved": [], "existing": None, "can_save": False, "can_release": False}
+    if op is None:
+        return out
+    out.update(_record_view(lib, op))
+    if not problems:
+        existing = next((o for o in lib.revisions(op.operation_id) if o.revision == op.revision), None)
+        if existing is not None:
+            out["existing"] = {"status": existing.status, "origin": lib.origin(existing), "same_content": existing.model_copy(update={"status": op.status}).content_hash() == op.content_hash()}
+        fixed = existing is not None and (lib.origin(existing) == "bundled" or existing.status in ("released", "superseded"))
+        out["can_save"] = lib.editable and not fixed
+        out["can_release"] = out["can_save"] and not op.issues()
+    return out
+
+
 @router.post("/operations")
 def save_operation(request: Request, body: SaveOperationBody) -> dict[str, Any]:
     lib = _svc(request).library
     op = parse_operation(body.operation)
+    if op.synthetic and op.key() not in {o.key() for o in lib.all() if lib.origin(o) == "bundled"}:
+        # only the bundled sample is "synthetic sample data"; a record entered here is the operator's own
+        op = op.model_copy(update={"synthetic": False})
     saved = lib.save(op, author=_user(request))
-    return {"summary": saved.summary(), "origin": lib.origin(saved)}
+    return {**_record_view(lib, saved), "origin": lib.origin(saved)}
+
+
+class RevisionRef(BaseModel):
+    operation_id: str = Field(max_length=64)
+    revision: str = Field(max_length=64)
+
+
+@router.post("/operations/supersede")
+def supersede_operation(request: Request, body: RevisionRef) -> dict[str, Any]:
+    lib = _svc(request).library
+    op = lib.supersede(body.operation_id, body.revision, author=_user(request))
+    return {**_record_view(lib, op), "origin": lib.origin(op)}
+
+
+@router.post("/operations/delete")
+def delete_operation(request: Request, body: RevisionRef) -> dict[str, Any]:
+    _svc(request).library.delete(body.operation_id, body.revision, author=_user(request))
+    return {"deleted": True}
+
+
+@router.get("/operations-audit")
+def operations_audit(request: Request, operation_id: str | None = None) -> dict[str, Any]:
+    return {"audit": _svc(request).library.audit(operation_id)[-200:]}
 
 
 # --------------------------------------------------------------------------
@@ -347,6 +404,90 @@ class CalibrationBody(BaseModel):
 def set_calibration(request: Request, sid: str, body: CalibrationBody) -> dict[str, Any]:
     _session(request, sid)
     return public_session(_svc(request).set_calibration(sid, body.profile))
+
+
+# --------------------------------------------------------------------------
+# camera calibration from a printed board
+# --------------------------------------------------------------------------
+def _cal(request: Request) -> Any:
+    return request.app.state.calibration
+
+
+@router.get("/calibration/board.png")
+def calibration_board(request: Request, kind: str = "charuco", squares_x: int = 9, squares_y: int = 6, square_mm: float = 30.0, marker_mm: float | None = 21.0, dictionary: str | None = "DICT_5X5_100", dpi: int = 300) -> Response:
+    """A printable calibration target.  Measure the print: printers do not keep the requested size."""
+    from ..services.calibration import board_png
+    from ..vision.calibration import BoardSpec
+
+    spec = BoardSpec.from_dict({"kind": kind, "squares_x": squares_x, "squares_y": squares_y, "square_mm": square_mm, "marker_mm": marker_mm if kind == "charuco" else None, "dictionary": dictionary if kind == "charuco" else None, "size_provenance": "nominal"})
+    return Response(board_png(spec, dpi), media_type="image/png", headers={"Content-Disposition": f'attachment; filename="lumen-{kind}-{squares_x}x{squares_y}.png"'})
+
+
+class CalibrationCreateBody(BaseModel):
+    board: dict[str, Any]
+
+
+@router.post("/calibration")
+def calibration_create(request: Request, body: CalibrationCreateBody) -> dict[str, Any]:
+    return _cal(request).create(body.board, _user(request))
+
+
+@router.get("/calibration/{cid}")
+def calibration_get(request: Request, cid: str) -> dict[str, Any]:
+    return _cal(request).get(cid, _user(request))
+
+
+@router.delete("/calibration/{cid}")
+def calibration_delete(request: Request, cid: str) -> dict[str, Any]:
+    return {"deleted": _cal(request).delete(cid, _user(request))}
+
+
+@router.post("/calibration/{cid}/photos")
+async def calibration_add_photo(request: Request, cid: str) -> dict[str, Any]:
+    svc = _cal(request)
+    svc.get(cid, _user(request))
+    data = await _read_body(request, svc.settings.limits.max_image_bytes)
+    return await run_in_threadpool(svc.add_photo, cid, data, _meta(request), _user(request))
+
+
+@router.delete("/calibration/{cid}/photos/{vid}")
+def calibration_remove_photo(request: Request, cid: str, vid: str) -> dict[str, Any]:
+    return _cal(request).remove_photo(cid, vid, _user(request))
+
+
+@router.get("/calibration/{cid}/photos/{vid}/image")
+def calibration_photo(request: Request, cid: str, vid: str, max: int = 480) -> Response:
+    if not (64 <= max <= 4096):
+        raise LumenValidationError("invalid_size", "max must be between 64 and 4096.")
+    import cv2 as _cv2
+
+    from ..vision.imaging import decode_image, encode_jpeg
+
+    svc = _cal(request)
+    lim = svc.settings.limits
+    img = decode_image(svc.photo(cid, vid, _user(request)), max_bytes=lim.max_image_bytes, max_pixels=lim.max_image_pixels, max_long_edge=lim.max_analysis_long_edge).bgr
+    k = max / float(builtins.max(img.shape[:2]))
+    if k < 1.0:
+        img = _cv2.resize(img, (int(round(img.shape[1] * k)), int(round(img.shape[0] * k))), interpolation=_cv2.INTER_AREA)
+    return Response(encode_jpeg(img, 85), media_type="image/jpeg", headers={"Cache-Control": "private, max-age=3600"})
+
+
+class CalibrationSolveBody(BaseModel):
+    label: str = Field(default="", max_length=80)
+
+
+@router.post("/calibration/{cid}/solve")
+async def calibration_solve(request: Request, cid: str, body: CalibrationSolveBody | None = None) -> dict[str, Any]:
+    svc = _cal(request)
+    return await run_in_threadpool(lambda: svc.solve(cid, label=(body.label if body else ""), operator=_user(request)))
+
+
+@router.post("/calibration/{cid}/validate")
+async def calibration_validate(request: Request, cid: str) -> dict[str, Any]:
+    svc = _cal(request)
+    svc.get(cid, _user(request))
+    data = await _read_body(request, svc.settings.limits.max_image_bytes)
+    return await run_in_threadpool(svc.validate, cid, data, _meta(request), _user(request))
 
 
 # --------------------------------------------------------------------------

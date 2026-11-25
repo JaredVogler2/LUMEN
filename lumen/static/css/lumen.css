@@ -245,6 +245,14 @@ main#view.flush { padding: 0; gap: 0; overflow: hidden; }
 .input-unit .input { padding-right: 52px; }
 .input-unit .unit { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); color: var(--text-faint); font-weight: 700; pointer-events: none; }
 .check { display: flex; gap: 12px; align-items: center; min-height: var(--tap); cursor: pointer; }
+/* record editor: two fields per row on a phone, a quantity is a number with its unit */
+.op-editor .row.wrap { align-items: flex-start; }
+.op-editor .row.wrap > .field { flex: 1 1 140px; min-width: 140px; }
+.op-editor .qty { display: flex; gap: 6px; }
+.op-editor .qty .input.num { flex: 1 1 auto; min-width: 0; padding: 0 10px; }
+.op-editor .qty select.input { flex: none; width: 66px; padding: 0 2px 0 8px; font-size: 16px; }
+.op-editor select.input { text-overflow: ellipsis; }
+.op-editor textarea.input { padding: 10px 12px; line-height: 1.35; }
 .check input { width: 26px; height: 26px; accent-color: var(--accent); flex: none; }
 
 /* ----------------------------------------------------------- status bits */

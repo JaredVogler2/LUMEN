@@ -87,6 +87,8 @@ class GateInputs:
     placard_selected: bool = False
     spec_geometry_complete: bool = False
     spec_issues: list[str] | None = None  # issues of the operation record relevant here
+    #: "released", "draft" or "superseded"
+    record_status: str = "released"
     surface_target: str = "plane"
     tolerance_position_mm: float | None = None
     tolerance_rotation_rad: float | None = None
@@ -220,6 +222,12 @@ def evaluate_gates(inp: GateInputs, policy: GatePolicy | None = None, placard_id
          "The operation record is complete (datum signs, axis policy, tolerances)." if spec_ok
          else "The operation record is incomplete: " + ", ".join(inp.spec_issues or []) + ".",
          suggestion="Complete the record; a missing tolerance or datum definition prevents guidance status.")
+    if inp.operation_selected:
+        released = inp.record_status == "released"
+        gate("operation_record_released", released, W,
+             "The operation record is a released revision." if released
+             else f"The operation record is a {inp.record_status} revision: its values have not been released for use.",
+             suggestion="Have the record reviewed and saved as a released revision, or select the released revision.")
     if inp.registered:
         if policy.require_measured_tags:
             gate("tag_sizes_measured", inp.all_tags_measured, W,

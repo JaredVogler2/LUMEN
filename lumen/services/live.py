@@ -69,6 +69,13 @@ def _client_native(meta: dict[str, Any], w: int, h: int) -> tuple[int, int]:
     return w, h
 
 
+def _zoom(v: Any) -> float | None:
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return None
+
+
 def track_frame(svc: "SessionService", sid: str, data: bytes, *, placard_ids: list[str] | None = None, meta: dict[str, Any] | None = None, force_full: bool = False) -> dict[str, Any]:
     t0 = time.perf_counter()
     meta = meta or {}
@@ -79,7 +86,7 @@ def track_frame(svc: "SessionService", sid: str, data: bytes, *, placard_ids: li
     img = decode_image(data, max_bytes=lim.max_image_bytes, max_pixels=lim.max_image_pixels, max_long_edge=lim.max_track_long_edge)
     nat_w, nat_h = _client_native(meta, int(img.meta.native_width), int(img.meta.native_height))
     scale = img.width / float(nat_w)
-    cam, note = camera_for_frame(s.calibration, img.width, img.height, nat_w, nat_h, scale)
+    cam, note = camera_for_frame(s.calibration, img.width, img.height, nat_w, nat_h, scale, device=str(meta.get("camera_label") or ""), zoom=_zoom(meta.get("zoom")))
     sizes = sizes_from_state(s.tag_sizes)
     t1 = time.perf_counter()
     with svc.cpu.slot(lim.request_timeout_seconds):

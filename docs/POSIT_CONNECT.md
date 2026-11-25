@@ -156,6 +156,17 @@ The processes then do not share a local directory. Use one of:
 `LUMEN_STORAGE=memory` keeps sessions inside one process and must not be used
 with more than one process.
 
+**Operation records entered in the app** are written to one JSON file
+(`LUMEN_OPERATIONS_DIR`, see section 6) under a file lock, and every process
+re-reads it when it changes, so several processes on one host stay
+consistent. Connect replaces the content directory at each deployment and its
+temporary directory at each restart: point `LUMEN_OPERATIONS_DIR` at storage
+that outlives both, or treat entered records as temporary and keep the
+exported JSON files. Anyone who can open the app can enter and release
+records; the change log in that file names the Connect user for each change.
+Released revisions cannot be edited afterwards, only superseded by a new
+revision.
+
 ## 6. Environment variables
 
 Set these in the content's **Vars** panel. None is required. Nothing secret
@@ -176,7 +187,8 @@ has a default, and no value is returned by the API.
 | `LUMEN_MAX_CONCURRENT_JOBS` | `2` | heavy computations at once per process; others get "server busy" |
 | `LUMEN_REQUEST_TIMEOUT_SECONDS` | `30` | wait for a free computation slot |
 | `LUMEN_JOB_TIMEOUT_SECONDS` / `LUMEN_VIDEO_JOB_TIMEOUT_SECONDS` | `120` / `300` | budgets for analysis and for one video |
-| `LUMEN_OPERATIONS_DIR` | empty | directory of your own operation records; empty = the bundled read-only sample |
+| `LUMEN_OPERATIONS_DIR` | empty | directory for operation records entered in the app (`operations.json` with its change log). Empty = `<LUMEN_DATA_DIR>/library`, which is temporary storage unless `LUMEN_DATA_DIR` is set: the Identify screen then tells the operator that records can disappear and offers export |
+| `LUMEN_OPERATIONS_READONLY` | `false` | `true` = the bundled sample records only; nothing can be entered |
 | `LUMEN_DEMO_ENABLED` | `true` | offer the simulated demo session |
 | `LUMEN_BASE_PATH` | empty | external path of the app, only for proxies that send no base header |
 | `LUMEN_POLICY_FILE` | empty | JSON file overriding gate thresholds |
@@ -213,7 +225,10 @@ placement guidance in all four cases with no request outside the content path
 * Uploads: type checked from the file's first bytes, size and pixel limits,
   bounded analysis size; videos are decoded once and deleted.
 * Session ids are 144 random bits; session and file names are validated
-  against fixed patterns before touching the filesystem.
+  against fixed patterns before touching the filesystem. A session id is part
+  of the address of its requests and therefore appears in the access log of
+  the content: treat that log as confidential. On Connect a session can be
+  used only by the signed-in user who created it, and it expires.
 * Photos exist only inside their session and go with it (time limit, operator's
   "End session", or deletion through the API). Live-guidance frames and scanned
   code pictures are never stored. The exported summary contains no image.

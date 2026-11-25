@@ -189,3 +189,10 @@ def to_capture_step(page: Any, operation: str = "DEMO-FLAT-01") -> None:
         page.click('[data-action="add-tag"]')
     page.click('[data-action="continue"]')
     page.wait_for_selector('[data-action="live-camera"]')
+
+
+def assert_clean_text(page: Any) -> None:
+    """No programming artefacts in what the operator reads (stray null / undefined / object text)."""
+    text = page.evaluate("() => document.body.innerText")
+    for bad in ("null", "undefined", "[object", "NaN"):
+        assert bad not in text, f"stray {bad!r} on screen: ..." + text[max(0, text.find(bad) - 80): text.find(bad) + 80].replace("\n", " | ")

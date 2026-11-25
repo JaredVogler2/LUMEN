@@ -9,8 +9,10 @@ let lastConfig = { sid: null, key: null };
 
 // role 'registration' (default): photos, sweep and flash pairs for the capture step.
 // role 'verification' with single = true: one photo of the installed placard, then close.
-export function openCamera({ onChange = () => {}, onFallback = null, role = 'registration', single = false, onCaptured = null } = {}) {
-  const sid = state.session.id;
+// custom = { url, hint, coach, count(), onResult(out) }: photos go to another endpoint (lens calibration);
+// no session is needed then.
+export function openCamera({ onChange = () => {}, onFallback = null, role = 'registration', single = false, onCaptured = null, custom = null } = {}) {
+  const sid = state.session ? state.session.id : null;
   const lim = state.config.limits;
   let mode = 'photo';            // photo | sweep | pair
   let busyCount = 0;             // uploads in flight
@@ -53,8 +55,8 @@ export function openCamera({ onChange = () => {}, onFallback = null, role = 'reg
   function renderModes() {
     clear(modeSeg);
     const canRecord = !!Camera.recordingType();
-    const opts = single ? [['photo', 'Photo']] : [['photo', 'Photo'], ...(canRecord ? [['sweep', 'Sweep video']] : []), ...(cam.torch.supported ? [['pair', 'Flash pair']] : [])];
-    modeSeg.hidden = single;
+    const opts = single || custom ? [['photo', 'Photo']] : [['photo', 'Photo'], ...(canRecord ? [['sweep', 'Sweep video']] : []), ...(cam.torch.supported ? [['pair', 'Flash pair']] : [])];
+    modeSeg.hidden = single || !!custom;
     if (!opts.some((o) => o[0] === mode)) mode = 'photo';
     opts.forEach(([id, label]) => modeSeg.append(h('button', {
       type: 'button', role: 'radio', 'aria-checked': mode === id ? 'true' : 'false', 'aria-pressed': mode === id ? 'true' : 'false', 'data-action': `cam-mode-${id}`,
@@ -67,17 +69,22 @@ export function openCamera({ onChange = () => {}, onFallback = null, role = 'reg
     hint.textContent = mode === 'sweep'
       ? (recording ? '' : `Record up to ${Math.min(30, lim.max_video_seconds)} s while moving slowly around the panel.`)
       : mode === 'pair' ? 'Rest the phone on something: two photos, light off then on.'
-        : single ? 'One photo: the whole placard and the tags in view.'
-          : 'Full frame is captured. Keep every tag in view.';
+        : custom ? custom.hint
+          : single ? 'One photo: the whole placard and the tags in view.'
+            : 'Full frame is captured. Keep every tag in view.';
   }
 
   function renderCount() {
-    const n = state.session.frames.filter((f) => f.role === role).length;
+    const n = custom ? custom.count() : state.session.frames.filter((f) => f.role === role).length;
     count.textContent = `${n} photo${n === 1 ? '' : 's'}${busyCount ? ` · ${busyCount} uploading` : ''}`;
     count.dataset.camCount = String(n);
   }
 
   async function refreshAdvice() {
+    if (custom) {
+      clear(coach).append(coachLine({ next: { code: 'custom', level: 'info', text: custom.coach(), arrow: null } }));
+      return;
+    }
     if (role !== 'registration') {
       clear(coach).append(coachLine({ next: { code: 'verify_photo', level: 'info', text: 'Photograph the installed placard with the tags still in place. Keep the whole placard in view.', arrow: null } }));
       return;
@@ -122,7 +129,7 @@ export function openCamera({ onChange = () => {}, onFallback = null, role = 'reg
   function checkConfig() {
     const key = cam.configKey();
     const s = cam.settings();
-    if (lastConfig.sid === sid && lastConfig.key && lastConfig.key !== key && state.session.frames.length) {
+    if (lastConfig.sid === sid && lastConfig.key && lastConfig.key !== key && (custom ? custom.count() : state.session.frames.length)) {
       toast({ title: 'The camera configuration changed', detail: `Now ${s.width}×${s.height}${s.camera_label ? ` (${s.camera_label})` : ''}. Photos from different configurations are not combined in the 3-D checks: use one orientation, lens and zoom for a session.`, kind: 'error', timeout: 10000 });
     }
     lastConfig = { sid, key };
@@ -144,6 +151,17 @@ export function openCamera({ onChange = () => {}, onFallback = null, role = 'reg
 
   async function send(shot, extraMeta = {}, source = 'camera_still') {
     busyCount += 1; renderCount();
+    if (custom) {
+      try {
+        const out = await upload(custom.url, shot.blob, { meta: { ...shot.meta, ...extraMeta } });
+        const msg = custom.onResult(out);
+        if (msg) toast(msg);
+        return out;
+      } catch (err) { showError(err, 'Upload failed'); return null; } finally {
+        busyCount -= 1;
+        if (!closed) { renderCount(); refreshAdvice(); }
+      }
+    }
     try {
       const out = await upload(`api/sessions/${sid}/frames?role=${role}&source=${source}`, shot.blob, { meta: { ...shot.meta, ...extraMeta } });
       const f = out.frame;
@@ -164,7 +182,7 @@ export function openCamera({ onChange = () => {}, onFallback = null, role = 'reg
   async function onShutter() {
     if (cam.state !== 'live') return;
     if (mode === 'photo') {
-      if (state.session.frames.length + busyCount >= lim.max_frames) { toast({ title: 'Frame limit reached', detail: `This session holds at most ${lim.max_frames} frames.`, kind: 'error' }); return; }
+      if (!custom && state.session.frames.length + busyCount >= lim.max_frames) { toast({ title: 'Frame limit reached', detail: `This session holds at most ${lim.max_frames} frames.`, kind: 'error' }); return; }
       try {
         checkConfig();
         const shot = await cam.grab(); blink();

@@ -5,7 +5,7 @@ import re
 
 import pytest
 
-from tests.browser.conftest import PHONE_LANDSCAPE, load_demo_to_place, shot
+from tests.browser.conftest import assert_clean_text, PHONE_LANDSCAPE, load_demo_to_place, shot
 
 pytestmark = pytest.mark.browser
 
@@ -54,6 +54,7 @@ def test_choosing_an_operation_shows_its_definition_and_units(page):
 
 def test_demo_walkthrough_reaches_guidance_and_labels_everything(page):
     load_demo_to_place(page)
+    assert_clean_text(page)
     assert page.get_attribute(".status-hero", "data-status") == "prototype_guidance"
     hero = page.inner_text(".status-hero").lower()
     assert "simulated" in hero and "not been validated" in hero

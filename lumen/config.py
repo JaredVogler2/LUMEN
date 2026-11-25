@@ -85,6 +85,10 @@ class Settings:
     data_dir: Path = field(default_factory=_default_data_dir)
     #: Directory of the editable operation library ("" = bundled read-only sample).
     operations_dir: str = ""
+    #: no local operation records at all (the bundled sample only)
+    operations_readonly: bool = False
+    #: LUMEN_DATA_DIR was set by the administrator (otherwise sessions and local records are in a temporary directory)
+    data_dir_configured: bool = False
     #: External base path when it cannot be discovered from proxy headers.
     base_path: str = ""
     demo_enabled: bool = True
@@ -130,6 +134,8 @@ def load_settings() -> Settings:
         storage=storage,
         data_dir=_default_data_dir(),
         operations_dir=_env("LUMEN_OPERATIONS_DIR", "") or "",
+        operations_readonly=_env_bool("LUMEN_OPERATIONS_READONLY", False),
+        data_dir_configured=bool(_env("LUMEN_DATA_DIR")),
         base_path=(_env("LUMEN_BASE_PATH", "") or "").rstrip("/"),
         demo_enabled=_env_bool("LUMEN_DEMO_ENABLED", True),
         llm_enabled=_env_bool("LUMEN_LLM_ENABLED", False),

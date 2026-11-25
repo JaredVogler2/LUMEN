@@ -439,3 +439,182 @@ quality flags is reported as indeterminate, not within.
 
 Test count at this point: 327 unit/integration + 22 browser, all passing
 (calibration and photometric modules are still in progress and not counted).
+
+## 2026-11-25 — Lens profiles from board photos (prompt 03)
+
+A web page is not given the camera's lens parameters, so they are measured:
+`lumen/vision/calibration.py` (board detection, calibration, refusals,
+uncertainty, held-out check), `lumen/synth/boards.py` (simulated board
+photos), `lumen/services/calibration.py` and `/api/calibration/*` (a
+workspace of board photos that is not a measurement session), and the
+Settings screen (download a board, enter its *measured* square size, take or
+choose photos, coverage map, calibrate, check on one more photo, save on the
+phone, attach to a session).
+
+Simulated 1600x1200 phone camera with the principal point 7.3 / −5.1 px off
+centre, fy/fx = 1.001 and distortion (0.08, −0.15, 0.0006, −0.0004); 12
+photos, one more held out. Figures are from a run made for this entry, with
+a different random seed than the tests:
+
+| | ChArUco 9x6, 30 mm | Checkerboard 10x7, 25 mm |
+|---|---|---|
+| corner position against the true projection, RMS (max) | 0.033 px (0.10) | 0.027 px (0.07) |
+| reprojection RMS of the fit | 0.031 px | 0.026 px |
+| focal length error fx, fy | +0.02, +0.02 px | −0.07, −0.06 px |
+| principal point error cx, cy | −0.17, −0.01 px | −0.02, −0.09 px |
+| distortion k1, k2 found | 0.07995, −0.14999 | 0.08011, −0.15012 |
+| stated standard uncertainty of fx, cx | 0.14, 0.14 px | 0.10, 0.10 px |
+| held-out board fitted as a plane, with the lens model | 0.034 px (0.015 mm) | 0.027 px (0.011 mm) |
+| the same without a lens model | 0.21 px (0.09 mm, 0.37 mm worst distance) | 0.22 px (0.09 mm, 0.37 mm) |
+| fitted against true lens over the whole picture, after the best plane mapping | 0.07 px max | 0.05 px max |
+
+Both runs carry the notes "few or no calibration points near three picture
+corners" and "distortion is an extrapolation beyond the outermost point":
+the profile is usable, and says where it is weakest.
+
+Whole chain through the API (board photos → profile → five panel photos
+through the same lens → target outline): outline within 0.3 mm of truth and
+inside the stated uncertainty; the focal length the tags imply agrees with
+the profile within 0.3 %.
+
+Refusals covered by tests (58 unit, 4 API, 1 browser): no board in the photo,
+too few photos, all photos square-on, all photos with the same tilt, photos
+that contradict each other, a print stretched in one direction, mixed pixel
+sizes in one calibration, a "check" photo that was already used for the
+calibration, a checkerboard cut off by the picture edge.
+
+A profile is applied only to pictures of exactly its pixel size and
+orientation, and not to a picture that reports a different camera, lens or
+zoom (`camera_for_frame`); such a picture is measured as uncalibrated and
+says why. Lens profiles are stored in the browser of the phone they belong
+to; the server keeps calibration photos only as long as a session.
+
+What did not work at first:
+
+* A test compared two identical calibrations to 1e-9; multi-threaded linear
+  algebra differs by 5e-9 between runs. Tolerance is now 1e-6.
+* The Settings screen printed `null[object HTMLDivElement]`: the browser's
+  own `append()` writes `null` and arrays as text. Elements made by the `h()`
+  helper now skip and flatten them, and browser tests fail on any stray
+  `null`, `undefined`, `NaN` or `[object` in what the operator reads.
+* The coverage map was empty: the board extent is reported as fractions of
+  the picture and was drawn as pixels. A test now reads the canvas.
+
+Not done: nothing here has been run with a real phone or a real print
+(physical protocol: NOT RUN). The simulated lens has no rolling shutter,
+focus breathing or optical image stabilisation; a phone that refocuses
+between calibration and measurement changes its focal length by an amount
+this profile does not know.
+
+## 2026-11-25 — Independent scale check (prompts 03, 10)
+
+Every length comes from the declared tag sizes, so an error common to all of
+them (the sticker measured instead of its black square, a wrong nominal) is
+invisible to every tag-to-tag check. `lumen/services/reference.py` compares
+one ruler measurement between two marked tag corners with the same distance
+from the registration; a contradiction is a blocking gate
+(`independent_length_check`).
+
+| Declared (true 50 mm) | Tag-to-tag checks | Target error | Report before the ruler | After the ruler |
+|---|---|---|---|---|
+| 50 mm | consistent | < 0.2 mm | prototype guidance | agrees, unchanged |
+| 52 mm on all four | consistent | 12–22 mm (4 % of the distance to the datums) | prototype guidance — a false result with a clean report | blocked, no outline drawn, "+4 %" stated |
+| corrected to 50 mm | consistent | < 0.2 mm | prototype guidance | re-checked against the new registration, agrees |
+
+Without the ruler measurement the app cannot detect this fault. The check is
+offered on the Rectified screen and is not mandatory.
+
+## 2026-11-25 — Code scanning for identification (prompt 08)
+
+`lumen/vision/barcode.py` reads codes with zxing-cpp (plain, contrast
+equalised, enlarged, and rotated in steps for 1-D codes) and falls back to
+OpenCV's QR decoder; `/api/scan` matches the text exactly against the
+operation library. A scan selects a record only on exactly one exact match;
+two codes in view are offered for choice; an unknown code selects nothing.
+A code never supplies a dimension or the scale.
+
+| Case (simulated label photos, blur 1.2 px, noise) | Result |
+|---|---|
+| QR, Data Matrix (8 px modules), Code 128, Code 39 (3 px narrow bar), tilted 14° with keystone | read, outline at the label |
+| Code 128 at 0°, 14°, −31°, 47°, 90°, 118° | read in thorough mode; the quick mode used by the live loop does not search rotations (the same code at 31° is not read) |
+| two QR labels in one picture | both, once each |
+| AprilTags, blank picture | no code |
+| QR without zxing-cpp | read by the OpenCV fallback |
+
+Limit found: about 3 px per narrowest bar is needed; smaller codes are not
+read and the screen says to move closer.
+
+## 2026-11-25 — Optional assistant (prompt 12)
+
+Off unless `LUMEN_LLM_ENABLED=1` and an HTTPS endpoint are configured; no
+part of measurement, gating or verification calls it. It explains the gate
+report of a session in words. Replies are discarded unless they fit the
+schema, quote the provided sources, contain only numbers that occur in the
+provided context, and contain no acceptance or override wording. Tested with
+a mock adapter only (14 tests); the round trip to a real endpoint is an
+opt-in test that has NOT been run.
+
+## 2026-11-25 — Deployment readiness (prompt 14)
+
+NOT DEPLOYED: no Posit Connect server was available. What was tested
+locally instead:
+
+| Check | Result |
+|---|---|
+| app behind a path-stripping proxy that sets `RStudio-Connect-App-Base-URL` (with and without trailing slash, with and without the header) | every page, asset and API call stays inside the content path (API tests and a browser walkthrough) |
+| bundled files | no absolute or external URLs |
+| two worker processes, one shared data directory | a session created by one is served by the other; job state is in the session store |
+| sessions and Connect users | a session is bound to the user who created it |
+| `scripts/smoke_test.py` | 11 steps pass against a sub-path; fails against a dead address |
+| `rsconnect write-manifest fastapi` (rsconnect-python 1.34.1) in a scratch copy | manifest with 94 files; `manifest.json` is generated at release, not committed |
+
+`docs/POSIT_CONNECT.md` lists what remains NOT RUN: publishing, the iPhone
+camera and torch through the Connect address, process scaling and timeouts
+on a real server.
+
+## 2026-11-25 — Entering and revising operation records (prompt 08)
+
+The library was readable and had revisions; it could not be edited from the
+app. Added: a record editor on the Identify screen
+(`lumen/static/js/views/operation_editor.js`), `/api/operations/validate`,
+`/supersede`, `/delete`, a change log, and a gate.
+
+| Rule | How it is kept |
+|---|---|
+| nothing is invented | an empty field is sent as "not stated"; the server lists it as missing and the measurement stays a research preview |
+| units | each length keeps the unit it was entered in; the editor shows the millimetre values the measurement will use (9.5 in → 241.30 mm in the test); a unit the form does not offer (cm, ft, rad) is kept, not replaced |
+| revisions | a draft can be edited or deleted; a released revision is fixed; a correction is a new revision; the old one is marked superseded, its values unchanged |
+| unreviewed values | new gate `operation_record_released`: a draft or superseded record cannot reach guidance status |
+| codes | a scanned or typed code means the released revision; drafts and superseded revisions of the same operation no longer make it ambiguous; the same code on two operations still asks the operator |
+| who and when | every save, supersede and delete is logged with the Connect user and the content hash |
+| sessions | a session keeps its own copy of the record it started with (checked: editing the draft afterwards does not change the session) |
+| several worker processes | saves are made under a file lock and other processes re-read the file when it changes (4 writers × 6 records: none lost) |
+
+Local records are stored in `LUMEN_OPERATIONS_DIR`, or next to the sessions
+when that is not set. The second case is temporary storage; the screen says
+so and offers export. `LUMEN_OPERATIONS_READONLY=true` turns entry off.
+
+What did not work at first:
+
+* The check-while-typing answered a new record (empty ID) with a raw schema
+  error. It now answers with the place and reason of each unreadable entry
+  and still lists what is missing in the rest.
+* Unit errors lost their place in the record (the unit check raised its own
+  error type); they are now reported as `placards.0.position.x.unit: Unknown
+  length unit 'cubits'`.
+* Typing a barcode text into the search field selected the right record and
+  filtered the list down to nothing; the filter is cleared on an exact match.
+* After superseding revision A, the panel code matched A and B and was
+  "ambiguous". Fixed as in the table.
+* The form squeezed three fields into one row on a phone. Two per row now.
+
+Not done: no CSV import, no approval workflow (anyone with access to the app
+can release a record; the log shows who did), no OCR of printed identifiers.
+
+Test count at this point: 440 unit and integration tests (439 pass, 1 opt-in
+test of a real assistant endpoint skipped) and 33 browser tests, all passing.
+In the full browser run one test of the new record editor failed: the editor
+learned from a delayed browser event that a section had been opened, and
+rebuilt the form before the event arrived. The editor now reads the state of
+its sections from the page before rebuilding; that test then passed four
+times in a row on its own.
