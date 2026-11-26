@@ -253,6 +253,9 @@ export function createPlacement({ viewer, split, onRecorded = () => {} }) {
     const U = p ? (p.expanded_mm !== null && p.expanded_mm !== undefined ? p.expanded_mm : p.target_expanded_mm) : null;
     if (U !== null && U !== undefined) meta.append(chip(`uncertainty ±${fmt(U, 2)} mm`, ''));
     if (p && p.tolerance_mm !== null && p.tolerance_mm !== undefined) meta.append(chip(`tolerance ±${fmt(p.tolerance_mm, 1)} mm`, ''));
+    // the phone stands still: the tags are not measured again, only checked (and some may be under an arm)
+    const held = last && last.tracking && last.tracking.held;
+    if (held) meta.append(chip(held.tags_covered && held.tags_covered.length ? `phone steady · ${held.tags_covered.length} tag${held.tags_covered.length === 1 ? '' : 's'} covered` : 'phone steady', 'ok'));
     if (last && last.simulated) meta.append(chip('simulated demo data', 'info'));
     clear(flags);
     ((p && p.flags) || []).filter((f) => f !== 'registration_preview_only').slice(0, 3).forEach((f) => flags.append(h('li', { class: 'todo', 'data-flag': f }, icon('alert'), h('span', null, flagText(f)))));

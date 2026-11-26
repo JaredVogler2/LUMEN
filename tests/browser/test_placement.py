@@ -80,7 +80,7 @@ def session(page):
     return page.evaluate("async () => (await import('./static/js/store.js')).state.session")
 
 
-PLACEMENT = "() => { const p = window.__lumenPlacement; return p ? { phase: p.phase, stats: p.stats, log: p.sound.log.map((e) => e.kind), last: p.last && p.last.placement } : null; }"
+PLACEMENT = "() => { const p = window.__lumenPlacement; return p ? { phase: p.phase, stats: p.stats, log: p.sound.log.map((e) => e.kind), last: p.last && p.last.placement, held: p.last && p.last.tracking && p.last.tracking.held, timing: p.last && p.last.timing_ms } : null; }"
 
 
 def test_a_placard_is_followed_to_its_target_turns_green_and_is_recorded(approach, live_server):
@@ -141,6 +141,9 @@ def test_far_from_the_target_it_says_which_way_and_records_only_when_asked(far_a
     # 22 mm right of the target and 12 mm above it, turned 3 degrees clockwise as seen from the front
     assert p["dx_mm"] == pytest.approx(22.0, abs=0.3) and p["dz_mm"] == pytest.approx(12.0, abs=0.3) and p["rotation_deg"] == pytest.approx(-3.0, abs=0.15)
     assert p["method"] == "followed" and not p["in_position"]
+    # the camera of this film stands still: the tags are measured once and from then on only checked
+    assert st["held"] and sorted(st["held"]["tags_seen"]) == [3, 7, 11] and st["held"]["shift_px"] < 0.05, st["held"]
+    assert st["timing"]["tags"] == 0 and "phone steady" in page.inner_text('[data-region="placement-meta"]').lower()
     # the arrow beside the dial points, on the screen, from the placard to its target
     want = px(CAM, 240.0, 300.0) - px(CAM, 262.0, 312.0)
     want_deg = float(np.degrees(np.arctan2(want[1], want[0])))

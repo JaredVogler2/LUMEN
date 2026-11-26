@@ -196,6 +196,12 @@ did not use):
 | A jump of 5.5 mm between two frames | the follower misses one side, which is in plain view | that side is measured from where the outline now is; it is not drawn as covered |
 | The whole loop in a browser | a film in a fake camera: the placard arrives and rests (`tests/browser/test_placement.py`) | told to move with the distance, green in position, the record taken by itself from a full-size frame and found within tolerance, the camera released; the tones commanded in this order: beeps, the chime of reaching it, the steady tone, the chime of the record |
 | A reading that is no longer current | answers stop arriving while in position | the tone ends within 1.3 s and the reading is withdrawn |
+| A phone that stands still (`tests/integration/test_hold_flow.py`) | the next frames from the same camera | no tag is measured; the reading is that of the same picture measured afresh, within 0.05 mm |
+| An arm over one tag, then over two of the three in view | boxes over the tags | the registration made with all three is kept; measured afresh, the same picture has one tag and cannot say "in position" |
+| The phone is moved 2 mm (3 px) | another camera position | measured afresh, right reading; held again from there |
+| A stand that gives 0.2 mm (0.3 px) | another camera position | the three tags agree on the shift and the registration is moved along; the reading stays within 0.08 mm (unmoved it would be 0.2 mm off) |
+| A tag knocked 4 mm aside while the phone stands | another scene | that tag is not asked; the reading is unchanged |
+| The patch comparison itself (`tests/unit/test_steady.py`) | known shifts of 0.05 to 0.5 px, changes of light, a hand, another tag | shifts within 0.03 px; light changes nothing; anything else is "not the same picture" |
 
 What these tests are not: a hand, a placard with a real surface, a phone's
 video stream with its exposure and focus changes, a real network, or anybody

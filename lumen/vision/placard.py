@@ -890,6 +890,8 @@ def measure_placard(
                 sides.append(sd)
             Cn, _ = _corners_from_sides(sides)
             if it == 0 and np.all(np.isfinite(Cn)):
+                if seed is not None and float(np.max(np.linalg.norm(Cn - cur, axis=1))) < 0.5:
+                    break  # followed from a frame ago and it has not moved: the sides were measured where they are
                 cur, centre = Cn, Cn.mean(axis=0)
             else:
                 break
