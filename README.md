@@ -163,7 +163,7 @@ tags.
 Hands are skin-coloured boxes in rendered pictures here, and the tones were
 checked as commands in a browser without a loudspeaker.
 
-Tests on this code: 555 unit and integration tests and 45 browser tests pass;
+Tests on this code: 593 unit and integration tests and 48 browser tests pass;
 one test that calls a real language-model endpoint is opt-in and skipped.
 
 None of this is physical accuracy: no phone, print or panel was involved.
@@ -189,11 +189,16 @@ all six steps on simulated photos. To use a phone's camera the page
 must be served over HTTPS; deploying to Posit Connect provides that
 (`docs/POSIT_CONNECT.md`).
 
-LUMEN keeps a session with the process that serves it, and live placement
-asks that process several times a second. It needs a host on which one
-process keeps running. It does not work on function platforms (Vercel, AWS
-Lambda and the like), where each request may meet a new, empty instance; on
-such a host the first screen says so (`docs/POSIT_CONNECT.md`, section 5).
+Nothing is stored for long and there is no database: a job (its photos and
+what was measured in them) exists for the minutes it takes and is deleted
+when the session ends. Who holds it meanwhile depends on the host:
+
+| Host | Who keeps the job while it is open |
+|---|---|
+| Posit Connect, a container, a virtual machine: a process that keeps running | the server. This is what LUMEN is made for, and the fastest: live placement asks that process several times a second |
+| a function platform (Vercel, AWS Lambda and the like), where a request may meet a copy of the program that has never seen the job | the phone. It sends the job's state and the photos a step needs with every request; the server computes and keeps nothing. For trying the app on a phone: photos are reduced to 1600 px, there is no video, and readings are slower whenever the platform answers with a new copy (`docs/FUNCTION_HOSTS.md`) |
+
+LUMEN chooses by itself which of the two applies.
 
 Tests, benchmark and smoke test:
 
@@ -220,6 +225,7 @@ Tests, benchmark and smoke test:
 | `docs/OPERATOR_QUICKSTART.md` | using the app, step by step |
 | `docs/TROUBLESHOOTING.md` | messages and what to do about them |
 | `docs/POSIT_CONNECT.md` | publishing on Posit Connect, settings, storage, smoke tests |
+| `docs/FUNCTION_HOSTS.md` | trying it on Vercel or another function platform: the phone carries the job; what that costs |
 | `docs/DEVELOPER_HANDOFF.md` | architecture diagram, module map, rules, what is not done |
 | `docs/CONVENTIONS.md` | units, pixels, frames, labels, status words |
 | `docs/VALIDATION.md` | what was tested, how, and what the results do and do not show |

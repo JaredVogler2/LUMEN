@@ -28,8 +28,9 @@ export function mount(root, ctx) {
 
   const host = (state.config && state.config.hosting) || null;
   root.append(
-    host && host.keeps_sessions === false
-      ? banner('danger', 'This copy of LUMEN cannot keep a session', host.message)
+    // a server that is set to keep jobs on a host that forgets them between requests: nothing would work, so it is said
+    host && host.keeps_sessions === false && host.message
+      ? banner('danger', 'This copy of LUMEN is set up in a way that cannot work here', host.message)
       : null,
     h('h1', { class: 'view-title' }, 'Choose the job'),
     h('p', { class: 'view-lead' }, 'Pick the operation and the placard to place, or scan its code.'),

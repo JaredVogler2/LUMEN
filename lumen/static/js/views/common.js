@@ -222,12 +222,16 @@ export function flagText(flag) {
   return T[code] || flag.replace(/_/g, ' ');
 }
 
-// A small picture from the server.  When it cannot be loaded the tile says so, in place of the
+// A small picture of the job.  `src` is an address, or a promise of one (api.js pictureSrc: where the browser
+// carries the job the picture is its own copy).  When it cannot be loaded the tile says so, in place of the
 // browser's broken-image mark and an alternative text printed over the tile's badges.
 export function thumb(src, alt) {
-  const img = h('img', { src, alt, loading: 'lazy' });
-  img.addEventListener('error', () => {
+  const later = src && typeof src.then === 'function';
+  const img = h('img', { src: later ? null : src, alt, loading: later ? null : 'lazy' });
+  const missing = () => {
     img.replaceWith(h('div', { class: 'thumb-missing', role: 'img', 'aria-label': `${alt}: the picture could not be loaded`, 'data-region': 'thumb-missing' }, icon('alert'), h('span', null, 'Picture not available')));
-  }, { once: true });
+  };
+  img.addEventListener('error', missing, { once: true });
+  if (later) src.then((u) => { img.src = u; }, missing);
   return img;
 }

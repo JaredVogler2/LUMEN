@@ -758,7 +758,8 @@ def get_library() -> OperationLibrary:
             s = get_settings()
             # Local records go to the configured directory; otherwise next to the
             # sessions, which is temporary storage unless LUMEN_DATA_DIR says otherwise.
-            if s.operations_readonly:
+            if s.operations_readonly or (s.storage == "client" and not s.operations_dir):
+                # no local records; on a host where the browser carries the job there is no disk that would keep them
                 overlay = None
             elif s.operations_dir:
                 overlay = Path(s.operations_dir)

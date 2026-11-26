@@ -1,5 +1,5 @@
 // Step 3 — capture photos (camera, uploads, video) and review them.
-import { api, upload, url } from '../api.js';
+import { api, upload, pictureSrc } from '../api.js';
 import { h, clear, icon, chip, banner, toast, showError, busy, sheet } from '../dom.js';
 import { state, setSession, refreshSession, registrationFrames, acceptedTags } from '../store.js';
 import { Viewer } from '../viewer.js';
@@ -45,17 +45,24 @@ export function mount(root, ctx) {
   const pickCamera = h('input', { type: 'file', accept: 'image/*', capture: 'environment', hidden: true, 'data-input': 'native-camera', onchange: (ev) => { handleFiles([...ev.target.files], 'camera_still'); ev.target.value = ''; } });
   const pickVideo = h('input', { type: 'file', accept: 'video/*', hidden: true, 'data-input': 'video', onchange: (ev) => { handleVideo(ev.target.files[0]); ev.target.value = ''; } });
 
+  // who keeps the job while it is open (config.sessions): where it is the phone, photos are reduced and there is no video
+  const sessionsCfg = (state.config && state.config.sessions) || {};
+  const carriedJob = sessionsCfg.kept_by === 'client' ? sessionsCfg : null;
+  const videoOk = sessionsCfg.video !== false;
   const drop = h('div', { class: 'dropzone',
     ondragover: (ev) => { ev.preventDefault(); drop.classList.add('over'); },
     ondragleave: () => drop.classList.remove('over'),
     ondrop: (ev) => { ev.preventDefault(); drop.classList.remove('over'); handleFiles([...ev.dataTransfer.files].filter((f) => f.type.startsWith('image/') || /\.(heic|heif)$/i.test(f.name)), 'photo_upload'); },
   },
     h('button', { class: 'btn primary lg block', type: 'button', 'data-action': 'live-camera', onclick: () => openCamera({ onChange: render, onFallback: () => pickCamera.click() }) }, icon('camera'), 'Open camera'),
-    h('div', { class: 'tiles3' },
-      h('button', { class: 'btn tile', type: 'button', 'data-action': 'native-photo', onclick: () => pickCamera.click() }, icon('camera'), h('span', null, 'Full-res photo')),
+    h('div', { class: `tiles3${videoOk ? '' : ' two'}` },
+      h('button', { class: 'btn tile', type: 'button', 'data-action': 'native-photo', onclick: () => pickCamera.click() }, icon('camera'), h('span', null, carriedJob ? 'Phone camera' : 'Full-res photo')),
       h('button', { class: 'btn tile', type: 'button', 'data-action': 'choose-photos', onclick: () => pickMany.click() }, icon('upload'), h('span', null, 'Choose photos')),
-      h('button', { class: 'btn tile', type: 'button', 'data-action': 'choose-video', onclick: () => pickVideo.click() }, icon('video'), h('span', null, 'Use a video'))),
-    h('div', { class: 'hint' }, 'Full-resolution photos from the phone camera give the best accuracy. The in-app camera is quicker and coaches the sweep.'),
+      // a video is worked on after its upload has ended: only a server that keeps the job can do that
+      videoOk ? h('button', { class: 'btn tile', type: 'button', 'data-action': 'choose-video', onclick: () => pickVideo.click() }, icon('video'), h('span', null, 'Use a video')) : null),
+    carriedJob
+      ? h('div', { class: 'hint', 'data-region': 'photos-reduced' }, `On this server the phone carries the job, so every photo is reduced to ${carriedJob.photo_max_edge} px before it is sent. That is enough to place a placard; full-size photos, on a server that keeps the job, measure more finely.`)
+      : h('div', { class: 'hint' }, 'Full-resolution photos from the phone camera give the best accuracy. The in-app camera is quicker and coaches the sweep.'),
     pickMany, pickCamera, pickVideo);
 
   root.append(
@@ -195,7 +202,7 @@ export function mount(root, ctx) {
       const cls = acc === 0 ? ' bad' : (f.markers.some((m) => !m.accepted) || f.quality.sharpness < 40) ? ' issue' : '';
       grid.append(h('div', { class: `frame-tile${cls}${f.selected ? '' : ' excluded'}`, role: 'listitem', 'data-frame': f.id },
         h('button', { type: 'button', style: { all: 'unset', cursor: 'pointer', display: 'block', width: '100%' }, 'aria-label': `Inspect photo ${f.index}`, onclick: () => inspect(f) },
-          thumb(url(`api/sessions/${sess.id}/frames/${f.id}/image?max=360`), `Photo ${f.index}`)),
+          thumb(pictureSrc(`api/sessions/${sess.id}/frames/${f.id}/image?max=360`), `Photo ${f.index}`)),
         h('span', { class: 'idx' }, `#${f.index}`),
         h('button', { class: 'x', type: 'button', 'aria-label': `Remove photo ${f.index}`, onclick: () => removeFrame(f.id) }, icon('trash')),
         h('div', { class: 'meta' }, h('div', { class: 'badges' }, frameQualityChips(f),

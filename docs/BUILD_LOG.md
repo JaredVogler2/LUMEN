@@ -1491,3 +1491,123 @@ Not run: any of it on a phone. Whether the wake lock is granted there, how
 the white theme reads in a hangar's light and with gloves, and whether six
 steps are as short as they look to someone who has not built them, are
 questions for the people who will use it.
+
+## 2026-11-26 — A host that keeps nothing: the phone carries the job (prompts 01, 14)
+
+The first screen on the Vercel test deployment said "This copy of LUMEN
+cannot keep a session … photos and sessions are lost between requests". The
+answer to that was: nothing is to be retained at all, no pictures, no video,
+no database; it only has to work in the moment.
+
+Both are right, and the sentence on the screen was the fault. It read as if
+LUMEN wanted to store something. What it needs is shorter-lived: placing one
+placard takes several requests in a row, and the request that measures a live
+frame has to find what the request before it worked out. On a function
+platform it may be served by a copy of the program that has never heard of
+the job.
+
+Where the job is to run at work is Posit Connect, and nothing changes there.
+The platform at hand for trying it on a phone is the function platform. So
+the job now has two places it can live.
+
+### The phone carries it
+
+| | a server that keeps running | a function platform |
+|---|---|---|
+| who holds the job while it is open | the server (as before) | the browser |
+| what the server holds between two requests | the job | nothing |
+
+Where the browser holds the job, every request that belongs to it goes to
+one address, `api/carry`, in an envelope: the request that is meant, the
+job's state, and the photos that step looks at. The server unpacks it, serves
+the request through the ordinary routes with a store that holds exactly what
+came (`storage/carried.py`), and sends the answer back with the state as the
+request left it and any picture that was made on the server. The browser
+keeps both in memory and in its own database, so that a reload does not lose
+the photos, and removes them when the session ends (`static/js/carry.js`).
+
+That it could be done this way is owed to two things that were already
+there: sessions were behind one small storage interface, and pictures were
+read in one place. The routes, the services and all measurement code are
+untouched; 22 existing tests of live placement, of the held registration and
+of lens calibration run through the carrier without a changed line.
+
+Measured:
+
+| | |
+|---|---|
+| a job's state | 58 kB with five photos, 73 kB after the lines, 90 kB with a record; 20 to 30 kB compressed |
+| the whole demo job, first request to export | 11 requests; largest request 1.1 MB, largest answer 1.0 MB (the five demo photos coming back) |
+| steps on one core | photos with tags measured 2.5 s; registration 0.8 s; lines 12 to 16 s; a record 1.1 s |
+| photos sent again by the browser | five, once, for the search for the lines; one each for the straight-on view and for a record |
+
+### What it costs
+
+The phone carrying the job does not make anything faster: the measuring is
+on the server either way.
+
+| one live reading, one core, no network | |
+|---|---|
+| the server keeps the job | 30 ms |
+| the job is carried, the same application answers | 36 ms |
+| the job is carried, every frame meets a new application | 1.3 s |
+
+The last line is the price of an instance that knows nothing: it solves the
+registration again (0.75 s), evaluates the uncertainty afresh (0.4 s) and
+measures the tags, because the picture it would compare them with is not
+there. What an instance remembers is still used when it is there, and every
+such memory is now keyed by content (a decoded picture was keyed by the
+session's name and the frame's number, which is not enough when another
+process may have seen a job of that name in another state).
+
+Other costs, each said on the screen where it applies:
+
+* Photos are reduced by the browser to 1600 px and at most 0.41 MB each. All
+  photos of a capture travel in one request when the lines are searched, and
+  the platform takes 4.5 MB. Five photos of 2880 × 2160 from files (8.3 MB
+  together) arrive as 1600 × 1200 with all four tags measured in each.
+* No video: a video is worked on after its upload has ended.
+* No records entered in the app: there is no disk that would keep them.
+* A lens profile has to be made on the same host, from photos reduced the
+  same way.
+
+### What a state from a browser is trusted with
+
+It is an input. It is read by the models that read a stored session and
+refused when it does not fit them; a photo is taken only with the checksum
+its frame records; the carrier addresses the routes of a job and nothing
+else. With `LUMEN_STATE_SECRET` the server signs every state and takes back
+only what it signed. Without it, somebody who writes a state by hand can
+make the server compute on it; for a private trial that is their own
+business, and the document says so.
+
+### What went wrong on the way
+
+* The message that started this. It now appears only where a server is told
+  to keep jobs on a host that cannot, and says that nothing has to be stored
+  and how to change the setting.
+* My first answer to "is this faster?" would have been easy to give wrong by
+  leaving the wording alone: "the phone carries the job" sounds like the
+  phone doing the work. It holds data. The numbers above are the answer.
+* Probes that waited for a condition with an asynchronous test returned at
+  once (a promise is truthy) and twice made a working step look broken: a
+  job "not restored" after a reload, and one "still on the phone" after its
+  end. Both were the probe. The tests poll the value instead.
+
+### Tests
+
+| Suite | Result |
+|---|---|
+| unit and integration | 594 tests: 593 pass, 1 skipped (the opt-in call to a real language-model endpoint); 20.0 min |
+| browser | 48 tests: 48 pass; 10.3 min |
+
+New: 6 unit tests of the store and the envelope; 10 integration tests against
+a server made anew for every request; 22 existing tests through the carrier;
+3 browser tests (the demo with a reload in the middle and nothing left at
+the end, phone-sized photos, live placement to the automatic record).
+
+Not run: Vercel. Whether the platform takes the envelope as the stand-in
+does, how long its one shared core needs for the lines, and how often a live
+frame meets an instance that knows the job, will be seen on the first try
+there. Menu → Diagnostics → "Where the job is kept" shows each request's size
+and time for that purpose.

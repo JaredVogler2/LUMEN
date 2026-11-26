@@ -1,5 +1,5 @@
 // LUMEN application shell: header (brand, job, result mode), step navigation, view host.
-import { api, url } from './api.js';
+import { api, url, useCarrier, jobIsCarried } from './api.js';
 import { h, clear, icon, logo, toast, showError, sheet, banner } from './dom.js';
 import {
   state, setState, subscribe, STEPS, prefs, applyTheme, applyBrand, brandInfo, resultMode, setSession, rememberedSession,
@@ -55,6 +55,8 @@ async function init() {
   const [config, ops] = await Promise.all([api('GET', 'api/config'), api('GET', 'api/operations')]);
   state.config = config;
   state.operations = ops;
+  // where the server keeps nothing between requests, this browser carries the job (carry.js)
+  useCarrier(config.sessions);
   applyBrand();
   const sid = rememberedSession();
   if (sid) {
@@ -213,7 +215,9 @@ async function exportSession() {
 function confirmEnd() {
   let ref = null;
   const content = h('div', { class: 'stack' },
-    h('p', null, 'This deletes the session and every photo it holds from the server. This cannot be undone.'),
+    h('p', null, jobIsCarried()
+      ? 'This removes the job and every photo of it from this phone. The server has kept nothing of it. This cannot be undone.'
+      : 'This deletes the session and every photo it holds from the server. This cannot be undone.'),
     h('div', { class: 'row' },
       h('button', { class: 'btn grow', type: 'button', onclick: () => ref.close() }, 'Keep session'),
       h('button', { class: 'btn danger grow', type: 'button', 'data-action': 'confirm-delete', onclick: async () => { ref.close(); await endSession(); go('identify', true); toast({ title: 'Session deleted', kind: 'ok' }); } }, icon('trash'), 'Delete')));

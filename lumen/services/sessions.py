@@ -66,6 +66,8 @@ import cv2
 import json
 import os
 
+from pydantic import ValidationError
+
 
 class SessionService:
     def __init__(self, store: SessionStore, settings: Settings, library: OperationLibrary) -> None:
@@ -120,7 +122,11 @@ class SessionService:
         d = self.store.load(sid)
         if d.get("kind") == "calibration":  # a calibration workspace shares the store but is not a session
             raise NotFoundError("session_not_found", "Unknown or expired session.")
-        return Session.model_validate(d)
+        try:
+            return Session.model_validate(d)
+        except ValidationError as exc:
+            # a state that no version of this server wrote (where the browser carries the job, it is an input)
+            raise LumenValidationError("invalid_state", "The job's state could not be read.", suggestions=["Start the job again."]) from exc
 
     def _save(self, s: Session) -> None:
         s.updated = utcnow()
@@ -268,10 +274,18 @@ class SessionService:
 
     # ----------------------------------------------------------------- frames
     def _image(self, sid: str, frame: Frame) -> DecodedImage:
-        key = (sid, frame.id)
+        # keyed by the picture's content: where the browser carries the job, another process may have seen a job
+        # of this name with other pictures
+        key = (sid, frame.id, frame.sha256[:16])
         img = self._images.get(key)
         if img is None:
             img = decode_for_session(self.store.get_blob(sid, frame.blob), self.settings)
+            if frame.sha256 and img.meta.sha256 != frame.sha256:
+                # everything measured in this frame was measured in another picture
+                raise LumenValidationError(
+                    "picture_mismatch", f"The picture sent for frame {frame.id} is not the one that was measured.",
+                    suggestions=["Take the photos again."], http_status=409,
+                )
             self._images.put(key, img)
         return img
 
@@ -319,7 +333,7 @@ class SessionService:
             s.frames.append(frame)
             if role_e == FrameRole.REGISTRATION:
                 self._invalidate(s, registration=True, datums=False)
-            self._images.put((sid, fid), img)
+            self._images.put((sid, fid, frame.sha256[:16]), img)
             return frame
 
         return self._mutate(sid, fn, "frame_added", {"role": role, "source": source, "bytes": len(data), "sha256": img.meta.sha256[:16]})

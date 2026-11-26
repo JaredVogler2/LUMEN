@@ -219,10 +219,11 @@ def test_committed_manifest_matches_the_files_that_are_deployed():
     assert not any(f.startswith(("tests/", "docs/", "prompt_series/", "scripts/", ".venv")) for f in m["files"])
 
 
-def test_a_host_that_keeps_no_sessions_is_named_instead_of_failing_photo_by_photo(monkeypatch, library):
+def test_a_server_told_to_keep_jobs_on_a_host_that_forgets_them_says_so(monkeypatch, library):
     """Seen on a test deployment on a function platform: every request ran in a new instance with an empty disk,
-    photos would not load and each step answered "Unknown or expired session".  The application cannot work
-    there; it has to say so."""
+    photos would not load and each step answered "Unknown or expired session".  A server that is to keep the job
+    cannot work there, and it has to say so.  (Left to itself it does not try: on such a host the client carries
+    the job, ``tests/integration/test_carried_flow.py``.  Here the server is told to keep jobs all the same.)"""
     for var in ("VERCEL", "AWS_LAMBDA_FUNCTION_NAME", "FUNCTIONS_WORKER_RUNTIME", "NETLIFY", "CONNECT_SERVER", "RSTUDIO_PRODUCT", "POSIT_PRODUCT"):
         monkeypatch.delenv(var, raising=False)
     svc = service()
@@ -241,9 +242,11 @@ def test_a_host_that_keeps_no_sessions_is_named_instead_of_failing_photo_by_phot
     with TestClient(create_app(svc.settings, svc)) as c:
         host = c.get("/api/config").json()["hosting"]
         assert host["kind"] == "vercel" and host["keeps_sessions"] is False
-        assert "lost between requests" in host["message"] and "Posit Connect" in host["message"]
+        # what is wrong, that nothing needs storing for long, and the two ways out
+        assert "forgets everything between two requests" in host["message"] and "remove LUMEN_STORAGE" in host["message"] and "Posit Connect" in host["message"]
+        assert c.get("/api/config").json()["sessions"] == {"kept_by": "server", "works": False, "video": True}
         h = c.get("/api/health")
-        assert h.status_code == 503 and h.json()["status"] == "degraded" and h.json()["checks"]["host_keeps_sessions"] is False
+        assert h.status_code == 503 and h.json()["status"] == "degraded" and h.json()["checks"]["host_keeps_sessions"] is False and h.json()["checks"]["jobs_can_be_kept"] is False
         # a session that is gone is explained by what the host is, not as an expired session
         e = c.get("/api/sessions/AAAAAAAAAAAAAAAAAAAAAAAA").json()["error"]
-        assert e["code"] == "session_not_found" and "lost between requests" in e["suggestions"][0] and e["details"]["hosting"] == "vercel"
+        assert e["code"] == "session_not_found" and "forgets everything between two requests" in e["suggestions"][0] and e["details"]["hosting"] == "vercel"

@@ -95,8 +95,8 @@ def create_app(settings: Settings | None = None, service: SessionService | None 
     async def _lumen_error(_: Request, exc: LumenError) -> JSONResponse:
         body = exc.to_dict()
         host = settings.hosting
-        if exc.code == "session_not_found" and not host["keeps_sessions"]:
-            # on a host that keeps no sessions this is not an expired session: say what it is
+        if exc.code == "session_not_found" and host["message"]:
+            # a server set to keep jobs on a host that keeps nothing: this is not an expired session, say what it is
             body["suggestions"] = [str(host["message"]), *body.get("suggestions", [])]
             body["details"] = {**body.get("details", {}), "hosting": host["kind"]}
         return JSONResponse({"error": body}, status_code=exc.http_status)
@@ -139,6 +139,12 @@ def create_app(settings: Settings | None = None, service: SessionService | None 
             response.headers["Cache-Control"] = "no-store"
         return response
 
+    # The carrier (api/carry.py): where the browser carries the job, a request arrives together with it.  Added last,
+    # it is the outermost of these: what it unpacks passes the guards above like any other request.
+    from .carry import CarryMiddleware
+
+    app.add_middleware(CarryMiddleware, store=app.state.service.store, settings=settings)
+
     # -------------------------------------------------------------- index
     index_template = (STATIC_DIR / "index.html").read_text(encoding="utf-8") if (STATIC_DIR / "index.html").exists() else "<!doctype html><title>LUMEN</title><p>UI assets missing."
 
@@ -178,6 +184,7 @@ def create_app(settings: Settings | None = None, service: SessionService | None 
             # the header is drawn before the first API answer: what it shows is known here
             "brand": settings.brand,
             "validated_domain": bool(settings.validated_domain_file),
+            "sessions": settings.sessions["kept_by"],
         }
         html = (
             html.replace("<!--LUMEN_BASE-->", head)

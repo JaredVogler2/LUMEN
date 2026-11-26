@@ -205,7 +205,7 @@ did not use):
 
 What these tests are not: a hand, a placard with a real surface, a phone's
 video stream with its exposure and focus changes, a real network, or anybody
-hearing a tone. See section 8.
+hearing a tone. See section 9.
 
 ## 7. The interface and an installation's brand
 
@@ -224,7 +224,30 @@ on a phone-sized window, not judged by anyone who will use it:
 What these tests are not: an operator with gloves in a hangar, the light
 there, or the judgement of the organisation whose logo it will carry.
 
-## 8. What has not been tested at all
+## 8. A host that keeps nothing between two requests
+
+On a function platform the browser carries the job (`docs/FUNCTION_HOSTS.md`).
+The stand-in for such a platform in the tests is harsher than any real one:
+every request is served by an application made for that request, and a
+request or an answer above 4.5 MB is refused.
+
+| Question | Test | Result |
+|---|---|---|
+| Does a job give the same numbers when the browser carries it? | the demo job on a server that keeps it and on the stand-in (`tests/integration/test_carried_flow.py`) | the same registration, lines, target on the photo, status and record, to the last digit that is compared (1e-6); 11 requests, the largest 1.1 MB |
+| Do the existing tests hold with a carried job? | the tests of live placement (13), of the held registration (5) and of lens calibration (4), unchanged, through the carrier (`test_carried_placement.py`, `test_carried_hold.py`, `test_carried_calibration.py`) | all pass |
+| Live frames against a job that every request brings anew | three frames of a placard arriving, each served by an application that has seen nothing | the right numbers, in position at the end; no photo travels with a live frame |
+| A step that needs photos which were not sent | the search for the lines without them | names the photo it misses (428); nothing is changed by the failed request; sent photo by photo it gets there, and a client that knows the step sends them at once |
+| A photo that is not the one that was measured | another photo under the frame's name | refused: "not the one that was measured" |
+| A state that this server did not write | with a secret: one character changed, no signature, another server's secret; without: not a job, another job's, a form no job has | refused each time, as an error of that request |
+| What does not fit | a request and an answer above the host's limit | refused in words that say what to do |
+| In a browser (`tests/browser/test_carried.py`) | the demo; five photos of 2880 × 2160 from files; a reload in the middle; the straight-on view; live placement from a film to the automatic record | photos shown from the browser's own copies; each photo arrives at 1600 × 1200 and under 0.41 MB with all four tags measured; the job is back after the reload; five photos were sent once, for the search for the lines, and no step had to ask; after "End session" nothing of the job is in the browser |
+| What it costs in time | live readings on one core, no network | 30 ms with the server keeping the job; 36 ms with the job carried and the same application answering; 1.3 s when every frame meets a new application |
+
+What these tests are not: Vercel, or any other real function platform, with
+its own way of starting, reusing and stopping instances; a phone; a mobile
+network. See section 9.
+
+## 9. What has not been tested at all
 
 | Item | Status |
 |---|---|
@@ -237,3 +260,4 @@ there, or the judgement of the organisation whose logo it will carry.
 | More than one operator | NOT RUN |
 | The optional assistant against a real endpoint | NOT RUN |
 | The interface with the people who will use it: whether six steps and these words are as plain as intended; the screen wake lock on a phone | NOT RUN |
+| A real function platform (Vercel): whether the phone-carried job works there as it does against the stand-in, and how often a live frame meets an instance that knows the job | NOT RUN |
