@@ -196,7 +196,7 @@ when the session ends. Who holds it meanwhile depends on the host:
 | Host | Who keeps the job while it is open |
 |---|---|
 | Posit Connect, a container, a virtual machine: a process that keeps running | the server. This is what LUMEN is made for, and the fastest: live placement asks that process several times a second |
-| a function platform (Vercel, AWS Lambda and the like), where a request may meet a copy of the program that has never seen the job | the phone. It sends the job's state and the photos a step needs with every request; the server computes and keeps nothing. For trying the app on a phone: photos are reduced to 1600 px, there is no video, and readings are slower whenever the platform answers with a new copy (`docs/FUNCTION_HOSTS.md`) |
+| a function platform (Vercel, AWS Lambda and the like), where a request may meet a copy of the program that has never seen the job | the phone. It sends the job's state and the photos a step needs with every request; the server computes and keeps nothing. For trying the app on a phone: photos are reduced to 1600 px, there is no video, and readings are slower whenever the platform answers with a new copy. Tried once on a Vercel preview from a data centre: a live reading every 0.15 s (`docs/FUNCTION_HOSTS.md`) |
 
 LUMEN chooses by itself which of the two applies.
 

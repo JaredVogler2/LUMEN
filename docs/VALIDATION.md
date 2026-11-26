@@ -243,9 +243,15 @@ request or an answer above 4.5 MB is refused.
 | In a browser (`tests/browser/test_carried.py`) | the demo; five photos of 2880 × 2160 from files; a reload in the middle; the straight-on view; live placement from a film to the automatic record | photos shown from the browser's own copies; each photo arrives at 1600 × 1200 and under 0.41 MB with all four tags measured; the job is back after the reload; five photos were sent once, for the search for the lines, and no step had to ask; after "End session" nothing of the job is in the browser |
 | What it costs in time | live readings on one core, no network | 30 ms with the server keeping the job; 36 ms with the job carried and the same application answering; 1.3 s when every frame meets a new application |
 
-What these tests are not: Vercel, or any other real function platform, with
-its own way of starting, reusing and stopping instances; a phone; a mobile
-network. See section 9.
+Beyond the tests, the same client and Chromium with a fake camera were run
+once against a preview deployment on Vercel (Hobby plan, from a data centre):
+the demo job with the same numbers, a live reading every 0.15 s with 23 of 24
+answered from a held registration, live placement from the film to the
+automatic record in 9.6 s (`docs/FUNCTION_HOSTS.md` has the table). That is
+one deployment on one day.
+
+What none of this is: a phone; a mobile network; another function platform.
+See section 9.
 
 ## 9. What has not been tested at all
 
@@ -260,4 +266,4 @@ network. See section 9.
 | More than one operator | NOT RUN |
 | The optional assistant against a real endpoint | NOT RUN |
 | The interface with the people who will use it: whether six steps and these words are as plain as intended; the screen wake lock on a phone | NOT RUN |
-| A real function platform (Vercel): whether the phone-carried job works there as it does against the stand-in, and how often a live frame meets an instance that knows the job | NOT RUN |
+| A function platform from a phone: Vercel was tried once from a data centre with a test client and with Chromium (section 8); a phone on a mobile network, and any other platform | NOT RUN |
