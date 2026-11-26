@@ -1,22 +1,27 @@
 // Pieces shared by several screens.
 import { api, fetchBlob, loadImage } from '../api.js';
 import { h, icon, chip, fmt } from '../dom.js';
-import { state, lengthOut } from '../store.js';
+import { state, lengthOut, resultMode } from '../store.js';
 
+// The four outcomes of the checks, in the words the operator reads.  What kind of installation produced them
+// (demo, evaluation, validated) is said once, by the mode chip in the header and on the picture.
 export const STATUS_TEXT = {
-  blocked: { title: 'No guidance', icon: 'block', sub: 'Required geometry is missing, ambiguous or unsupported.' },
-  research_preview: { title: 'Research preview', icon: 'alert', sub: 'Shown for inspection only — qualification gates are not met.' },
-  prototype_guidance: { title: 'Prototype guidance', icon: 'check', sub: 'All computed gates pass. Not physically validated; not acceptance.' },
-  validated: { title: 'Within validated domain', icon: 'check', sub: 'Measurement evidence, not product acceptance.' },
+  blocked: { title: 'Cannot measure yet', icon: 'block', sub: 'Something is missing or does not fit. What to do is listed below.' },
+  research_preview: { title: 'Check needed', icon: 'alert', sub: 'A target is shown, but at least one check is open.' },
+  prototype_guidance: { title: 'Ready', icon: 'check', sub: 'All checks passed.' },
+  validated: { title: 'Ready · validated', icon: 'check', sub: 'All checks passed, inside the validated range.' },
 };
 
 export function statusHero(report) {
   const st = STATUS_TEXT[report.status] || STATUS_TEXT.blocked;
+  const mode = resultMode();
+  // what kind of result this is stands beside the claim itself, not only in the header
+  const tail = mode.kind === 'demo' ? ' Simulated demo data.' : mode.kind === 'evaluation' && report.status !== 'blocked' ? ' Evaluation only: not validated.' : '';
   return h('div', { class: `status-hero ${report.status}`, role: 'status', 'data-status': report.status },
     icon(st.icon),
     h('div', { class: 'grow' },
       h('div', { class: 'big' }, st.title),
-      h('div', { class: 'small' }, report.notice || st.sub)));
+      h('div', { class: 'small' }, `${st.sub}${tail}`)));
 }
 
 export function gateList(report, { onlyFailed = false } = {}) {
@@ -54,7 +59,8 @@ export function budgetTable(u) {
 }
 
 export function cell(k, v, u) {
-  return h('div', { class: 'cell' }, h('div', { class: 'k' }, k), h('div', null, h('span', { class: 'v' }, v), u ? h('span', { class: 'u' }, u) : null));
+  // a long value ("120×60") is set a little smaller, so that it and its unit stay inside the tile on a phone
+  return h('div', { class: 'cell' }, h('div', { class: 'k' }, k), h('div', null, h('span', { class: `v${String(v).length + String(u || '').length > 7 ? ' long' : ''}` }, v), u ? h('span', { class: 'u' }, u) : null));
 }
 
 export function provenanceChip(p) {
@@ -111,7 +117,10 @@ export function viewerShell({ label }) {
   const wrap = h('div', { class: 'viewer-wrap' });
   const hud = h('div', { class: 'viewer-hud' });
   const tools = h('div', { class: 'viewer-tools' });
-  const mark = h('div', { class: 'viewer-watermark', 'aria-hidden': 'true' }, 'Research only · not acceptance');
+  // What kind of result the picture shows stays on the picture itself (the header is not always on screen), and in
+  // every mode it says that a picture with a target on it is not an acceptance.
+  const mode = resultMode();
+  const mark = h('div', { class: 'viewer-watermark', 'aria-hidden': 'true', 'data-results': mode.kind }, mode.watermark);
   wrap.append(hud, tools, mark);
   return { wrap, hud, tools, label };
 }

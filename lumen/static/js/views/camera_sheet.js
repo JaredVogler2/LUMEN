@@ -271,7 +271,7 @@ export function openCamera({ onChange = () => {}, onFallback = null, role = 'reg
         h('button', { type: 'button', 'aria-pressed': cam.quality === 'high' ? 'true' : 'false', 'data-action': 'cam-quality-high', onclick: () => { clear(message); cam.start({ quality: 'high' }); } }, 'Highest resolution'),
         h('button', { type: 'button', 'aria-pressed': cam.quality === 'standard' ? 'true' : 'false', 'data-action': 'cam-quality-standard', onclick: () => { clear(message); cam.start({ quality: 'standard' }); } }, '1080p (faster)')),
       cams.length > 1 ? h('div', { class: 'stack' }, cams.map((d) => h('button', { class: 'btn sm block toggle', type: 'button', 'aria-pressed': d.deviceId === cur ? 'true' : 'false', onclick: () => { clear(message); cam.start({ deviceId: d.deviceId }); } }, d.label))) : null,
-      h('p', { class: 'hint' }, cam.torch.supported ? `Light: ${cam.torchEvidence()}.` : 'This browser does not offer control of the phone light. Photos taken with a light from elsewhere can be marked on the Capture screen.'),
+      h('p', { class: 'hint' }, cam.torch.supported ? `Light: ${cam.torchEvidence()}.` : 'This browser does not offer control of the phone light. Photos taken with a light from elsewhere can be marked on the Photos screen.'),
       h('button', { class: 'btn', type: 'button', onclick: () => clear(message) }, 'Close options'));
     clear(message).append(box);
   }

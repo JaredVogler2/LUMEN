@@ -31,8 +31,8 @@ export function mount(root, ctx) {
     host && host.keeps_sessions === false
       ? banner('danger', 'This copy of LUMEN cannot keep a session', host.message)
       : null,
-    h('h1', { class: 'view-title' }, 'Identify the operation'),
-    h('p', { class: 'view-lead' }, 'Pick the panel operation and the placard to position. LUMEN uses only what the record defines: datums, signs, offsets and tolerances are never guessed.'),
+    h('h1', { class: 'view-title' }, 'Choose the job'),
+    h('p', { class: 'view-lead' }, 'Pick the operation and the placard to place, or scan its code.'),
     h('div', { class: 'row' },
       h('div', { class: 'grow' }, search),
       h('button', { class: 'btn', type: 'button', 'aria-label': 'Scan a barcode or QR code', 'data-action': 'scan', onclick: () => openScanner(resolveCode) }, icon('scan'), 'Scan')),
@@ -79,11 +79,11 @@ export function mount(root, ctx) {
   if (state.config && state.config.features.demo && !(s && s.frames.length)) {
     root.append(h('div', { class: 'card' },
       h('div', { class: 'eyebrow' }, 'No panel at hand?'),
-      h('h3', null, 'Open the simulated demo session'),
-      h('p', { class: 'hint' }, 'Loads computer-generated photos of an invented panel and runs the real measurement pipeline on them. Clearly marked as simulated throughout.'),
+      h('h3', null, 'Try it with a simulated demo'),
+      h('p', { class: 'hint' }, 'Computer-generated photos of an invented panel, measured for real. Marked as simulated throughout.'),
       h('div', { class: 'row wrap' },
-        h('button', { class: 'btn grow', type: 'button', 'data-action': 'demo', onclick: () => loadDemo('flat') }, icon('play'), 'Load demo session'),
-        h('button', { class: 'btn grow', type: 'button', 'data-action': 'demo-curve', onclick: () => loadDemo('curve') }, icon('play'), 'Demo with a rounded edge'))));
+        h('button', { class: 'btn grow', type: 'button', 'data-action': 'demo', onclick: () => loadDemo('flat') }, icon('play'), 'Open the demo'),
+        h('button', { class: 'btn grow', type: 'button', 'data-action': 'demo-curve', onclick: () => loadDemo('curve') }, icon('play'), 'Rounded edge'))));
   }
 
   function renderList() {
@@ -149,7 +149,7 @@ export function mount(root, ctx) {
     detail.append(
       h('h2', { class: 'view-title', style: { fontSize: '18px' } }, op.title || op.operation_id),
       Object.keys(issues).length
-        ? banner('warn', 'This record is incomplete.', 'It can be inspected as a research preview but cannot reach guidance status.',
+        ? banner('warn', 'This record is incomplete.', 'It can be looked at, but it cannot reach “Ready”.',
           Object.entries(issues).map(([scope, lst]) => `${scope}: ${lst.map(issueText).join(', ')}`))
         : null,
       h('div', { class: 'stack' },
@@ -231,7 +231,7 @@ export function mount(root, ctx) {
 
   function updateActions() {
     ctx.setActions([
-      { id: 'continue', label: 'Use this operation', kind: 'primary lg', icon: 'arrow', disabled: !(sel.operationId && sel.placardId), onClick: confirm },
+      { id: 'continue', label: 'Continue', kind: 'primary lg', icon: 'arrow', disabled: !(sel.operationId && sel.placardId), onClick: confirm },
     ]);
   }
 

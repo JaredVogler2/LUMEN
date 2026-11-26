@@ -175,6 +175,9 @@ def create_app(settings: Settings | None = None, service: SessionService | None 
             "notice": RESEARCH_NOTICE,
             "demo": settings.demo_enabled,
             "assistant": bool(settings.llm_enabled),
+            # the header is drawn before the first API answer: what it shows is known here
+            "brand": settings.brand,
+            "validated_domain": bool(settings.validated_domain_file),
         }
         html = (
             html.replace("<!--LUMEN_BASE-->", head)
@@ -193,6 +196,24 @@ def create_app(settings: Settings | None = None, service: SessionService | None 
     @app.get("/index.html", include_in_schema=False)
     def index_html(request: Request) -> HTMLResponse:
         return render_index(request)
+
+    @app.get("/brand/logo", include_in_schema=False)
+    def brand_logo() -> Response:
+        """The logo file of this installation (``LUMEN_BRAND_LOGO``, or ``brand/logo.*`` beside the application); 404 when there is none."""
+        from ..config import BRAND_LOGO_TYPES
+
+        if not settings.brand["logo"]:
+            raise StarletteHTTPException(status_code=404, detail="No logo is configured.")
+        p = Path(settings.brand_logo)
+        return Response(
+            content=p.read_bytes(), media_type=BRAND_LOGO_TYPES[p.suffix.lower()],
+            headers={
+                "Cache-Control": "public, max-age=3600",
+                # opened by itself an SVG is a document: it gets no scripts, no network and no embedding
+                "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; sandbox",
+                "X-Content-Type-Options": "nosniff",
+            },
+        )
 
     from .routes import router
 

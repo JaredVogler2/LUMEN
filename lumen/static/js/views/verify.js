@@ -12,7 +12,7 @@ import { openCamera } from './camera_sheet.js';
 const OBS = {
   within_tolerance_observed: { title: 'Observed within tolerance', cls: 'prototype_guidance', ic: 'check', sub: 'The measured deviation plus its uncertainty is inside the tolerance of the record.' },
   outside_tolerance_observed: { title: 'Observed outside tolerance', cls: 'blocked', ic: 'block', sub: 'The measured deviation exceeds the tolerance by more than its uncertainty.' },
-  indeterminate: { title: 'Indeterminate', cls: 'research_preview', ic: 'alert', sub: 'The measurement cannot say whether the placard is inside the tolerance.' },
+  indeterminate: { title: 'Cannot tell from this photo', cls: 'research_preview', ic: 'alert', sub: 'The measurement cannot say whether the placard is inside the tolerance.' },
   partial: { title: 'Partial outline only', cls: 'research_preview', ic: 'alert', sub: 'Only part of the placard outline could be measured; the centre is not reported.' },
   no_evidence: { title: 'No measurement', cls: 'blocked', ic: 'block', sub: 'This photo gives no evidence of the placard position.' },
 };
@@ -115,10 +115,10 @@ export function mount(root, ctx) {
 
   function captureButtons() {
     return h('div', { class: 'stack' },
-      s().mode === 'demo' ? h('button', { class: 'btn primary lg block', type: 'button', 'data-action': 'verify-demo', onclick: useDemoPhoto }, icon('play'), 'Use the simulated photo of the installed placard') : null,
+      s().mode === 'demo' ? h('button', { class: 'btn primary lg block', type: 'button', 'data-action': 'verify-demo', onclick: useDemoPhoto }, icon('play'), 'Use the demo photo') : null,
       h('button', { class: `btn ${s().mode === 'demo' ? '' : 'primary'} lg block`, type: 'button', 'data-action': 'verify-camera', onclick: () => openCamera({ role: 'verification', single: true, onFallback: () => pickNative.click(), onCaptured: (f) => measure(f.id) }) }, icon('camera'), 'Open camera'),
       h('div', { class: 'row' },
-        h('button', { class: 'btn grow', type: 'button', 'data-action': 'verify-native', onclick: () => pickNative.click() }, icon('camera'), 'Full-res photo'),
+        h('button', { class: 'btn grow', type: 'button', 'data-action': 'verify-native', onclick: () => pickNative.click() }, icon('camera'), 'Phone camera'),
         h('button', { class: 'btn grow', type: 'button', 'data-action': 'verify-choose', onclick: () => pick.click() }, icon('upload'), 'Choose photo')));
   }
 
@@ -128,14 +128,14 @@ export function mount(root, ctx) {
     pill.textContent = 'No verification photo yet';
     const p = activePlacard(s());
     panel.append(
-      h('h1', { class: 'view-title' }, 'Verify the placement'),
-      h('p', { class: 'view-lead' }, `After installing ${p ? p.placard_id : 'the placard'}, take one new photo of it. The tags must still be exactly where they were during capture.`),
+      h('h1', { class: 'view-title' }, 'Check a placement from a photo'),
+      h('p', { class: 'view-lead' }, `With ${p ? p.placard_id : 'the placard'} in place, take one new photo of it. The tags must not have moved.`),
       h('ul', { class: 'checklist' },
         h('li', null, icon('eye'), h('span', null, 'The whole placard and the tags are in the picture.')),
         h('li', null, icon('eye'), h('span', null, 'No finger, tape or glare on the placard’s edges.')),
         h('li', null, icon('eye'), h('span', null, 'Roughly face the panel; fill the frame as far as the tags allow.'))),
       captureButtons(),
-      banner('info', 'What you will get', 'Signed deviations of the installed placard from the target, with their uncertainty. This is measurement evidence for research — not an acceptance decision.'));
+      banner('info', 'What you get', 'How far the placard is from its target, with the uncertainty. Measurement evidence — not an acceptance decision.'));
     ctx.setActions([{ label: 'Back', back: true, onClick: () => ctx.go('place') }]);
   }
 
@@ -222,7 +222,7 @@ export function mount(root, ctx) {
       { label: 'Back', back: true, onClick: () => ctx.go('place') },
       v && v.confirmed
         ? { id: 'unconfirm', label: 'Confirmed — undo', kind: 'lg', icon: 'check', onClick: () => confirm(false) }
-        : { id: 'confirm', label: 'Confirm measured outline', kind: 'primary lg', icon: 'check', disabled: !canConfirm, onClick: () => confirm(true) },
+        : { id: 'confirm', label: 'Confirm outline', kind: 'primary lg', icon: 'check', disabled: !canConfirm, onClick: () => confirm(true) },
     ]);
   }
 

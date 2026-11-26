@@ -331,7 +331,7 @@ def capture_advice(svc: "SessionService", s: Session) -> dict[str, Any]:
         if len(small) > len(obs) / 2:
             add("tags_low_resolution", "warn", f"The tags are small in the photos (smallest {smallest:.0f} px): move closer, or use Full-res photo. Small tags make the result less certain.", "closer")
     if usable and s.calibration is None:
-        add("no_lens_profile", "info", "No lens profile is attached: results stay a research preview. Make one once per phone under Settings.")
+        add("no_lens_profile", "info", "No lens profile is attached: results stay at 'Check needed'. Make one once per phone under Settings (menu).")
 
     # ---- constraints that only the datum step can report
     props = s.research.get("datum_proposals") if reg else None
@@ -350,7 +350,7 @@ def capture_advice(svc: "SessionService", s: Session) -> dict[str, Any]:
             else:
                 add("side_missing", "todo", "The side edge is not in any photo: take one that includes it.", where if where in ("left", "right") else None)
         if props.get("ambiguous_side") or props.get("ambiguous_floor"):
-            add("ambiguous_datum", "warn", "Two similar lines were found for a datum. More photos cannot decide between identical features: choose the intended one on the Datums step.")
+            add("ambiguous_datum", "warn", "Two similar lines were found for a datum. More photos cannot decide between identical features: choose the intended one on the Lines step.")
     pairs = flash_pairs(s)
     for p in pairs:
         if not p["usable"] and p.get("reasons"):

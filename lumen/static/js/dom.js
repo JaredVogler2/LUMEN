@@ -112,10 +112,11 @@ export function logo() {
   svg.setAttribute('viewBox', '0 0 32 32');
   svg.setAttribute('aria-hidden', 'true');
   const mk = (tag, a) => { const e = document.createElementNS(SVG_NS, tag); for (const k in a) e.setAttribute(k, a[k]); return e; };
-  svg.appendChild(mk('rect', { x: 1.5, y: 1.5, width: 29, height: 29, rx: 7, fill: '#ffc83d' }));
-  svg.appendChild(mk('path', { d: 'M9 8v16h14', fill: 'none', stroke: '#191200', 'stroke-width': 3.2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }));
-  svg.appendChild(mk('rect', { x: 15, y: 9, width: 8, height: 8, fill: 'none', stroke: '#191200', 'stroke-width': 2 }));
-  svg.appendChild(mk('rect', { x: 17.5, y: 11.5, width: 3, height: 3, fill: '#191200' }));
+  // LUMEN's own mark (a corner with a target square), in the installation's brand colour
+  svg.appendChild(mk('rect', { x: 1.5, y: 1.5, width: 29, height: 29, rx: 7, style: 'fill: var(--brand)' }));
+  svg.appendChild(mk('path', { d: 'M9 8v16h14', fill: 'none', style: 'stroke: var(--brand-ink)', 'stroke-width': 3.2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }));
+  svg.appendChild(mk('rect', { x: 15, y: 9, width: 8, height: 8, fill: 'none', style: 'stroke: var(--brand-ink)', 'stroke-width': 2 }));
+  svg.appendChild(mk('rect', { x: 17.5, y: 11.5, width: 3, height: 3, style: 'fill: var(--brand-ink)' }));
   return svg;
 }
 
@@ -184,7 +185,8 @@ export function busy(label = 'Working…') {
 
 export function fmt(v, digits = 1) {
   if (v === null || v === undefined || Number.isNaN(v)) return '—';
-  return Number(v).toFixed(digits);
+  const t = Number(v).toFixed(digits);
+  return Number(t) === 0 ? t.replace('-', '') : t;   // never "-0.0"
 }
 
 export function banner(kind, title, detail, list) {

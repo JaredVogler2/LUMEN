@@ -57,7 +57,23 @@ export async function startLive({ viewer, shell, modePill, onStopped = () => {},
       else if (st === 'error') { toast({ title: (info && info.title) || 'The camera could not be opened', detail: (info && info.detail) || '', kind: 'error', timeout: 9000 }); stop(); }
     },
   });
-  window.__lumenLive = { camera: cam, updates: 0, lastResult: null };
+  window.__lumenLive = { camera: cam, updates: 0, lastResult: null, get awake() { return !!wake; } };
+
+  // The phone stands by itself while the placard is positioned, and nobody touches its screen: it must not switch
+  // itself off, because the camera stops with it.  Not every browser offers this, and a phone may refuse it (low
+  // battery): then nothing else changes.  The lock ends by itself when the page is hidden, and is asked for again.
+  let wake = null;
+  async function keepAwake() {
+    if (!running || wake || !navigator.wakeLock || document.visibilityState !== 'visible') return;
+    try {
+      const lock = await navigator.wakeLock.request('screen');
+      if (!running) { lock.release().catch(() => {}); return; }
+      wake = lock;
+      lock.addEventListener('release', () => { if (wake === lock) wake = null; });
+    } catch (_) { wake = null; }
+  }
+  const onVisible = () => { keepAwake(); };
+  document.addEventListener('visibilitychange', onVisible);
 
   function hideOverlay() {
     viewer.setOverlay({ primitives: [] });
@@ -120,6 +136,8 @@ export async function startLive({ viewer, shell, modePill, onStopped = () => {},
     if (!running) return;
     running = false;
     clearInterval(staleTimer);
+    document.removeEventListener('visibilitychange', onVisible);
+    if (wake) { const lock = wake; wake = null; lock.release().catch(() => {}); }
     cam.destroy();
     coach.remove(); freezeBtn.remove();
     window.__lumenLive = null;
@@ -165,6 +183,7 @@ export async function startLive({ viewer, shell, modePill, onStopped = () => {},
   const ok = await cam.start({ quality: 'standard' });
   if (!ok) { stop(); return null; }
   hideOverlay();
+  keepAwake();
   loop();
   return { stop, toggleFreeze, hold, get frozen() { return frozen; }, get camera() { return cam; }, lastTrackedAt: () => lastTracked };
 }

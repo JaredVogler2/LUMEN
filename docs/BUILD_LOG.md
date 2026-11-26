@@ -1328,3 +1328,166 @@ camera is recognised as such.
 
 Not run: a phone on a real stand. How still a clamped phone is, in pixels,
 while somebody presses on the panel beside it, decides how often this applies.
+
+## 2026-11-26 — The look of a product, and a shorter way through (prompt 09)
+
+The request: the colours and the logo of the organisation that will use it,
+"a production application", extremely simple to use. Until now LUMEN looked
+like what it started as, an engineering prototype: dark, with a striped
+research banner on every screen, seven steps named after what the software
+does (Identify, Markers, Capture, Datums, Rectified, Place, Verify) and a
+screen of registration statistics between the operator and the placard.
+
+Nothing of the measurement changed. The server's results, status values,
+check codes and notices are what they were; `ALGORITHM_VERSION` stays
+`lumen-algo-2026.11.3`. What changed is what the operator sees and reads.
+
+### The look
+
+* Light by default: white surfaces, cool greys, one colour for everything
+  that is pressed, a rule in that colour under the header. Dark remains a
+  choice in the menu and is remembered. The colour is a deep blue,
+  `#0033a0`, a screen approximation of Pantone 286 C. (A search summary had
+  offered `#0038a9` as an "official" value with a source; read, the source was
+  artwork with a Pantone 286 C swatch and no hex value in it. The default is
+  what follows from the swatch, and an installation sets the value of its own
+  brand guide.)
+* One main button at the bottom of every screen, filled in that colour: the
+  next thing to do.
+* Measured in a browser: body text against its background 7:1 or better in
+  both themes; the text of the main button against the button 7:1 or better
+  in light, 4.5:1 or better in dark.
+
+### Whose installation it is
+
+Three settings of a deployment, none of them part of the repository:
+
+| Setting | Effect |
+|---|---|
+| `LUMEN_BRAND_LOGO`, or a file `brand/logo.<svg, png, webp, jpg>` beside the application | the logo at the top left of every screen |
+| `LUMEN_BRAND_NAME` | its alternative text; without a logo, the name beside LUMEN's mark |
+| `LUMEN_BRAND_COLOR` | the one colour, as `#rrggbb` |
+
+The logo is not in the repository, and that is a decision, not an omission.
+A logo is a trademark of the organisation it stands for. It cannot be redrawn
+from memory to the standard its owner requires, and this repository is
+public: artwork that somebody may use inside their organisation is not theirs
+(or this project's) to publish. So the application has a place for it and
+the installation fills it: one file copied into `brand/`, which git ignores
+except for its note. `tests/integration/test_branding.py` checks that
+nothing but that note is committed there.
+
+The file is served from `brand/logo` inside the content address, as a
+picture, with a policy under which it can run nothing and fetch nothing if it
+is opened by itself (an SVG is a document). Only a file that exists, is one
+of four image kinds and has at most 512 KB is taken; a colour only if it is a
+plain `#rrggbb`; anything else is left out and LUMEN's own mark and blue are
+used. A light colour (tried: `#ffd200`) is used as it is for the rule and the
+mark, with dark strokes on it, and darkened for text and buttons until it can
+be read on white (4.5:1).
+
+### The way through
+
+| Before | Now |
+|---|---|
+| 1 Identify | 1 Job |
+| 2 Markers | 2 Tags |
+| 3 Capture | 3 Photos |
+| 4 Datums | 4 Lines |
+| 5 Rectified | a tool of Lines: "Check the scale with a rule (optional)" |
+| 6 Place | 5 Place |
+| 7 Verify | 6 Records |
+
+* **Confirm lines** leads to the placement. Before, it led to the straight-on
+  view, a screen whose only action is the optional rule measurement.
+* On Lines the operator is asked one thing: orange on the floor line, purple
+  on the side line, then confirm. How the lines were found (registration,
+  rounded edge, local frame, the flashlight experiment, the legend) is under
+  **Details**. What stands in the way of a result is not folded away: tags
+  that contradict each other, an excluded tag, a frame that cannot be built
+  and "Is this the right line?" stay in view.
+* On Place, once a record exists, the main button opens it.
+
+### The words
+
+| Status value (unchanged) | Before | Now |
+|---|---|---|
+| `blocked` | No guidance | Cannot measure yet |
+| `research_preview` | Research preview | Check needed |
+| `prototype_guidance` | Prototype guidance | Ready |
+| `validated` | Within validated domain | Ready · validated |
+
+Messages that name a step name it as the screen does ("on the Lines step").
+Small things found by reading every screen top to bottom on a phone-sized
+window: labels that wrapped into three lines ("Choose detected line (1)",
+"Use the simulated photo of the installed placard"), a height of "-0.0 mm",
+a size tile whose unit ran out of its box, a legend swatch in white on white.
+
+### What "production" does not change
+
+A production look does not make a validated instrument. Nothing has been
+measured with a real phone, print or panel (`docs/PHYSICAL_TEST_PROTOCOL.md`,
+NOT RUN), and an application that hid this behind a green "Ready" would be
+claiming more than is known.
+
+The striped banner is gone, the statement is not. It is made once, in the
+same place on every screen: an indicator in the header.
+
+| Indicator | When | Also |
+|---|---|---|
+| Demo | computer-generated photos | "Demo · simulated data" on every picture; "Simulated demo data." beside the status |
+| Evaluation | real photos, no validated range supplied: every installation today | "Evaluation only · not acceptance" on every picture; "Evaluation only: not validated." beside "Ready" and "Check needed" |
+| Validated | an administrator supplied the validated range of a physical study | "Measurement evidence · not acceptance" on every picture |
+
+A tap on it says what it means, including that whether a part is accepted is
+decided by the quality process and not by this application. The way out of
+"Evaluation" is the one that existed before: `LUMEN_VALIDATED_DOMAIN_FILE`,
+after the physical study.
+
+### Live placement
+
+* The screen is kept on while live placement runs (a screen wake lock, where
+  the browser has one). The phone stands by itself and nobody touches it; a
+  screen that switches off takes the camera with it.
+* The box no longer shows the status of the live frame. It read "Check
+  needed" in every live frame, also on a capture that was "Ready": the stream
+  has no lens profile (`lens_characterised`) and its uncertainty is more than
+  half of a ±2 mm tolerance (`uncertainty_vs_tolerance`). "In position"
+  already counts that uncertainty, and the two words side by side said
+  nothing an operator could act on. Uncertainty and tolerance are still
+  shown; a view in which nothing can be measured is still said.
+
+### What went wrong on the way
+
+* The header did not fit a phone with a logo in it, and instead of being cut
+  off it widened the whole page: the grid's only column was implicit and grew
+  with its content. It is now one column of the screen's width.
+* The indicator first carried an attribute that the viewer's "frozen / live"
+  pill also carries, and a test that reads the pill read the indicator
+  instead. The existing tests found it.
+* A button was renamed ("Choose line") and the server's advice went on naming
+  it by its old label, in the one situation where the operator is asked to
+  press it. No test compares the two. It was seen in a screenshot made for
+  the documents, after the tests had passed; the texts of the server were
+  then read through for every label of the screen.
+
+### Tests
+
+| Suite | Result |
+|---|---|
+| unit and integration | 556 tests: 555 pass, 1 skipped (the opt-in call to a real language-model endpoint); 14.5 min |
+| browser | 45 tests: 45 pass; 8.8 min |
+
+New: 21 tests of the brand settings (what is served, what is refused, the
+folder beside the application, a content path, that the repository holds no
+artwork) and 3 in the browser (the default look and its contrast, an
+installation with a sample logo and its own colour, a name without a logo
+and a light colour). The browser tests of the workflow were changed where
+the screens changed on purpose: the way from Lines to Place, the indicator in
+place of the banner, the status words, the scale check as a tool, the
+contents under Details, and the wake lock.
+
+Not run: any of it on a phone. Whether the wake lock is granted there, how
+the white theme reads in a hangar's light and with gloves, and whether six
+steps are as short as they look to someone who has not built them, are
+questions for the people who will use it.

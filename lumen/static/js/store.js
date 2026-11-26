@@ -1,15 +1,18 @@
 // Application state.  One plain object, explicit updates, subscribers re-render.
 import { api } from './api.js';
 
+// The way through a job.  Five stops and the records; the scale check is a tool that is reached from "Lines" and is
+// not a stop of its own (nav: false), so that the usual way has nothing on it that can be skipped.
 export const STEPS = [
-  { id: 'identify', label: 'Identify', n: 1 },
-  { id: 'markers', label: 'Markers', n: 2 },
-  { id: 'capture', label: 'Capture', n: 3 },
-  { id: 'datums', label: 'Datums', n: 4 },
-  { id: 'rectified', label: 'Rectified', n: 5 },
-  { id: 'place', label: 'Place', n: 6 },
-  { id: 'verify', label: 'Verify', n: 7 },
+  { id: 'identify', label: 'Job' },
+  { id: 'markers', label: 'Tags' },
+  { id: 'capture', label: 'Photos' },
+  { id: 'datums', label: 'Lines' },
+  { id: 'rectified', label: 'Scale check', nav: false, parent: 'datums' },
+  { id: 'place', label: 'Place' },
+  { id: 'verify', label: 'Records' },
 ];
+STEPS.filter((st) => st.nav !== false).forEach((st, i) => { st.n = i + 1; });
 
 export const state = {
   config: null,
@@ -57,7 +60,54 @@ export function applyTheme(theme) {
   state.theme = theme;
   document.documentElement.dataset.theme = theme;
   const meta = document.querySelector('meta[name="theme-color"]');
-  if (meta) meta.setAttribute('content', theme === 'light' ? '#ffffff' : '#121722');
+  if (meta) meta.setAttribute('content', theme === 'light' ? '#ffffff' : '#0e1a2b');
+}
+
+// The installation's brand: its colour is applied to the page; name and logo are drawn by the header.
+export function brandInfo() {
+  return (state.config && state.config.brand) || (state.boot && state.boot.brand) || {};
+}
+// Relative luminance of an sRGB colour (channels 0..255) and the contrast of two luminances, as WCAG defines them.
+function luminance(rgb) {
+  const [r, g, b] = rgb.map((c) => { const x = c / 255; return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4; });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+const contrast = (a, b) => (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+const INK_DARK = [10, 26, 51];   // the page's text colour
+
+// The installation's colour, where it gave one.  It is used as it is where it is a surface (the rule under the header,
+// the mark); what is drawn on it takes whichever of white and the dark text colour reads better.  Text and buttons on
+// white need a colour that can be read there: one that is too light for that is darkened until it can.
+export function applyBrand() {
+  const b = brandInfo();
+  const root = document.documentElement;
+  ['--brand', '--brand-ink', '--brand-accent'].forEach((k) => root.style.removeProperty(k));
+  if (!(b.color && /^#[0-9a-f]{6}$/i.test(b.color))) return;
+  const rgb = [1, 3, 5].map((i) => parseInt(b.color.slice(i, i + 2), 16));
+  const lum = luminance(rgb);
+  root.style.setProperty('--brand', b.color);
+  root.style.setProperty('--brand-ink', contrast(lum, 1) >= contrast(lum, luminance(INK_DARK)) ? '#ffffff' : '#0a1a33');
+  let acc = rgb;
+  for (let i = 0; i < 40 && contrast(luminance(acc), 1) < 4.6; i += 1) acc = acc.map((c) => c * 0.93);
+  if (acc !== rgb) root.style.setProperty('--brand-accent', `rgb(${acc.map((c) => Math.round(c)).join(', ')})`);
+}
+
+// What kind of results this installation gives.  It is shown in one place on every screen.
+//   demo        computer-generated photos: everything is simulated
+//   evaluation  real photos, but the installation has not been validated against reference measurements
+//   validated   an administrator supplied a validated range; results inside it are marked as such
+export function resultMode(s = state.session) {
+  if (s && s.mode === 'demo') {
+    return { kind: 'demo', label: 'Demo', icon: 'play', watermark: 'Demo · simulated data', title: 'Demo data',
+      text: 'This session runs on computer-generated photos of an invented panel. Everything it shows is simulated and says nothing about a real part.' };
+  }
+  const dom = (state.config && state.config.validated_domain) || null;
+  if (dom || (!state.config && state.boot && state.boot.validated_domain)) {
+    return { kind: 'validated', label: 'Validated', icon: 'check', watermark: 'Measurement evidence · not acceptance', title: 'Validated range',
+      text: `Results inside the validated range${dom && dom.id ? ` (${dom.id})` : ''} are marked as validated. A result outside it is marked "check needed" and says why.${dom && dom.evidence ? ` Evidence: ${dom.evidence}.` : ''} A measurement is evidence for your quality process; it is not the acceptance decision.` };
+  }
+  return { kind: 'evaluation', label: 'Evaluation', icon: 'info', watermark: 'Evaluation only · not acceptance', title: 'Evaluation: not validated',
+    text: 'This installation has not been checked against reference measurements, so its accuracy on real parts is not established. Use its results as measurement evidence within your evaluation. Whether a part is accepted is decided by your quality process, not by this app. Before operational use it needs an independent metrology validation, and the placard’s surface and adhesive need their own approval. The indicator changes to “Validated” when an administrator supplies the range that such a study has validated.' };
 }
 
 // ------------------------------------------------------------- session
@@ -120,12 +170,12 @@ export function stepAvailability(s = state.session) {
   const frameOk = !!(s && s.local_frame && s.local_frame.valid);
   return {
     identify: { ok: true },
-    markers: { ok: hasOp, why: 'Choose an operation first.' },
-    capture: { ok: hasOp, why: 'Choose an operation first.' },
-    datums: { ok: hasTags || reg, why: 'Capture at least one photo with an accepted tag.' },
-    rectified: { ok: reg, why: 'Run the analysis on the Capture step first.' },
-    place: { ok: reg, why: 'Run the analysis on the Capture step first.' },
-    verify: { ok: reg && frameOk, why: 'Define and confirm the datums first.' },
+    markers: { ok: hasOp, why: 'Choose the job first.' },
+    capture: { ok: hasOp, why: 'Choose the job first.' },
+    datums: { ok: hasTags || reg, why: 'Take a photo that shows the tags first.' },
+    rectified: { ok: reg, why: 'Analyse the photos first (Photos step).' },
+    place: { ok: reg, why: 'Analyse the photos first (Photos step).' },
+    verify: { ok: reg && frameOk, why: 'Confirm the lines first (Lines step).' },
   };
 }
 
@@ -136,6 +186,7 @@ export function stepDone(id, s = state.session) {
     case 'markers': return !!s.operation && Object.keys((s.tag_sizes || {}).measured_mm || {}).length > 0;
     case 'capture': return !!s.registration;
     case 'datums': return !!(s.local_frame && s.local_frame.valid && s.datums.floor && s.datums.side && s.datums.floor.confirmed && s.datums.side.confirmed);
+    case 'place': return (s.verifications || []).some((v) => v.placard_id === s.active_placard_id && v.observation === 'within_tolerance_observed');
     case 'verify': return (s.verifications || []).some((v) => v.confirmed);
     default: return false;
   }

@@ -1,9 +1,17 @@
 # Operator quick start
 
 LUMEN shows where a placard goes on a panel, from photos taken with a phone,
-and afterwards measures where it actually is. It is a **research prototype**:
-what it shows is measurement evidence, not an acceptance decision. Nothing in
-it has been validated on real hardware (`docs/PHYSICAL_TEST_PROTOCOL.md`).
+guides it into place while you position it, and records where it ended up.
+What it shows is measurement evidence, not an acceptance decision.
+
+The indicator at the top of every screen says what kind of results you are
+looking at. Tap it for the explanation.
+
+| Indicator | Meaning |
+|---|---|
+| **Demo** | computer-generated photos of an invented panel; everything is simulated |
+| **Evaluation** | real photos, on an installation that has not been checked against reference measurements. This is the state of every installation today: nothing in LUMEN has been validated on real hardware (`docs/PHYSICAL_TEST_PROTOCOL.md`) |
+| **Validated** | an administrator has supplied the range that a physical study validated; results inside it are marked as validated |
 
 ## What you need
 
@@ -17,30 +25,31 @@ it has been validated on real hardware (`docs/PHYSICAL_TEST_PROTOCOL.md`).
 
 ## Try it without a panel
 
-On the first screen choose **Load demo session** (a flat panel with a seam) or
-**Demo with a rounded edge**. Each loads computer-generated photos of an
-invented panel and runs the real measurement on them. Every screen says
-"simulated" while a demo is open.
+On the first screen choose **Open the demo** (a flat panel with a seam) or
+**Rounded edge**. Each loads computer-generated photos of an invented panel
+and runs the real measurement on them. The indicator at the top reads "Demo",
+and every picture and result says "simulated", while a demo is open.
 
-## The seven steps
+## The six steps
 
-The row of numbered steps at the top shows where you are. A step opens when
-the ones before it have what it needs. The pictures below are screenshots of
-the automated browser tests on a phone-sized window; everything in them is
-computer-generated.
+The row of numbered steps at the top shows where you are: **Job, Tags,
+Photos, Lines, Place, Records**. A step opens when the ones before it have
+what it needs, and each screen has one main button at the bottom: the next
+thing to do. The pictures below are screenshots of the automated browser
+tests on a phone-sized window; everything in them is computer-generated.
 
-### 1. Identify
+### 1. Job
 
 Pick the operation and the placard, or press **Scan** and point the camera at
 the bar code or QR code of the work order, panel or placard. LUMEN selects a
 record only when the code matches exactly one. Read the datum descriptions on
-this screen: they tell you which line is the floor datum and which is the side
-datum. If the record is marked *incomplete* or *draft* you can look at a
-preview but not get guidance.
+this screen: they tell you which line is the floor line and which is the side
+line. If the record is marked *incomplete* or *draft* you can look at it, but
+it cannot reach "Ready".
 
-<img src="screenshots/identify.png" width="250" alt="Identify step: operation list and scan button">
+<img src="screenshots/identify.png" width="250" alt="Job step: operation list and scan button">
 
-### 2. Markers
+### 2. Tags
 
 Stick the tags flat on the flat face of the panel:
 
@@ -51,11 +60,11 @@ Stick the tags flat on the flat face of the panel:
 Measure the **black square** of each tag with the caliper (the picture on the
 screen shows which edge) and enter the value next to its ID. Do not enter the
 size of the sticker or the number on the packaging. Tags without a measured
-size keep the result at "research preview".
+size keep the result at "Check needed".
 
-<img src="screenshots/markers.png" width="250" alt="Markers step: measured edge of each tag">
+<img src="screenshots/markers.png" width="250" alt="Tags step: measured edge of each tag">
 
-### 3. Capture
+### 3. Photos
 
 Press **Open camera**. Hold the phone 50 to 90 cm from the panel.
 
@@ -73,65 +82,73 @@ moved, start the capture again.
 
 <img src="screenshots/camera_live.png" width="250" alt="Camera with the coach line">
 
-### 4. Datums
+### 4. Lines
 
-LUMEN proposes the floor line and the side line and shows how sure it is.
-Zoom in and check that each line lies on the feature the record names. If a
-line is wrong, choose its drawing tool and drag along the correct edge; with
-"snap" on, the line is fitted to the edge under it. Press **Confirm datums**.
+LUMEN finds the two lines the job is measured from and draws them on the
+picture: orange on the floor line, purple on the side line. Zoom in and check
+that each lies on the feature the record names. If a line is wrong, press
+**Draw by hand** on its card and drag along the correct edge; with "snap" on,
+the line is fitted to the edge under it. Press **Confirm lines**: the next
+screen is the placement.
+
+How the lines were found (the registration of the tags, the rounded edge, the
+local frame) is under **Details**.
 
 If two similar edges are close together LUMEN asks instead of choosing. It
 also asks ("Is this the right line?") when a raised or recessed edge runs
 along the line it found, as at the top of a kick strip: the line may then be
 the edge of that part and not the feature the record means. Tap **Choose
-detected line** and select the right one yourself; until then the result
-stays a preview.
+line** and select the right one yourself; until then the result stays at
+"Check needed".
 
-<img src="screenshots/datums_trim_photo.png" width="250" alt="Datums step: the two lines on the photo"> <img src="screenshots/datums_trim_question.png" width="250" alt="Datums step: the question about a raised edge beside the floor line">
+<img src="screenshots/datums_trim_photo.png" width="250" alt="Lines step: the two lines on the photo"> <img src="screenshots/datums_trim_question.png" width="250" alt="Lines step: the question about a raised edge beside the floor line">
 
 A seam or joint is measured at its centre line, in small photos and in
 full-resolution ones where both of its edges can be seen; the datum card then
 says how wide the seam is.
 
-Each datum shows what is known about it lying on the panel face:
+Each line shows what is known about it lying on the panel face:
 "verified on the face in 3-D" (the photos show it), "declared on the face
 (not verified)" (the record says so and these photos cannot tell, which is
 normal for a floor line photographed from one height), or "NOT on the face"
 (the photos show it is not; it cannot be used).
 
-For a rounded side edge the screen also shows the fitted radius. The card
-"Flashlight experiment" is research only: it compares a second, experimental
-estimate with the first and never changes a datum.
+For a rounded side edge the fitted radius is under **Details**. The card
+"Flashlight experiment" there is research only: it compares a second,
+experimental estimate with the first and never changes a line.
 
-### 5. Rectified
+#### Scale check (optional, recommended)
 
-The panel face as seen straight on, with a millimetre grid from the datums.
-Things that are not on the face (floor, trim, the curved edge) look displaced
-here; that is expected.
+Every length LUMEN reports comes from the tag sizes you entered. If all of
+them are wrong in the same way, no photo can show it. **Check the scale with
+a rule** opens the panel face as seen straight on, with a millimetre grid.
+Press *Show the two corners*, measure that distance on the panel with a steel
+rule, type it in and press **Check**. If it contradicts the tags, no target
+is drawn until the sizes are corrected. (Things that are not on the face, such
+as the floor, a trim or a curved edge, look displaced in this view; that is
+expected.)
 
-**Independent scale check (recommended):** every length LUMEN reports comes
-from the tag sizes you entered. If all of them are wrong in the same way, no
-photo can show it. Press *Show the two corners*, measure that distance on the
-panel with a steel rule, type it in and press **Check**. If it contradicts the
-tags, no target is drawn until the sizes are corrected.
+<img src="screenshots/rectified_scale_check.png" width="250" alt="Straight-on view with the independent scale check">
 
-<img src="screenshots/rectified_scale_check.png" width="250" alt="Rectified view with the independent scale check">
+### 5. Place
 
-### 6. Place
+First a photo with the outline of the placard and its distances from the two
+lines. The coloured box says where you stand:
 
-First a photo with the outline of the placard and its distances from the
-datums. The coloured banner says what you are looking at:
-
-| Banner | Meaning | What to do |
+| Status | Meaning | What to do |
 |---|---|---|
-| No guidance | something required is missing or contradictory; no outline | read the reason and the suggestion under it |
-| Research preview | an outline, dashed; at least one check is not met | open the list of checks; usually: measure the tags, add a lens profile, take more photos, move closer |
-| Prototype guidance | every check passed | use it as guidance within this study |
+| Cannot measure yet | something required is missing or contradictory; no outline | read the reason and the suggestion under it |
+| Check needed | an outline, dashed; at least one check is not met | open the list of checks; usually: measure the tags, add a lens profile, take more photos, move closer |
+| Ready | every check passed | place the placard |
+| Ready · validated | every check passed, and the capture is inside the range a physical study validated | place the placard |
+
+On an installation that has not been validated, "Ready" is followed by
+"Evaluation only: not validated".
 
 The stated uncertainty (± mm) is a property of this capture. It is compared
 with the tolerance in the record; LUMEN never supplies a tolerance of its own.
 
-The list of checks shows what stands behind the banner. A tick passed, a
+The list of checks shows what stands behind the status. A tick passed, a
 warning or stop sign did not, and an "i" passed but tells you what was not
 checked (for instance: no rule measurement was made, so the scale rests on
 the tag sizes you entered).
@@ -168,7 +185,7 @@ still; the panel then shows "phone steady"):
 
 Press the placard on and take your hands away. As soon as nothing has covered
 it for about a second, LUMEN takes a full-size photo by itself, measures it
-as in the Verify step, and announces the result with a rising chime. The
+as in the Records step, and announces the result with a rising chime. The
 camera stops and the step shows what was recorded.
 
 <img src="screenshots/placement_guiding.png" width="250" alt="Live placement: the placard is 39 mm from its target"> <img src="screenshots/placement_in_position.png" width="250" alt="Live placement: in position"> <img src="screenshots/placement_recorded.png" width="250" alt="Place step after the placement was recorded">
@@ -213,36 +230,37 @@ the volume.
 Several placards on the same panel: after a record, **Next: …** selects the
 next one. The photos and datums stay valid.
 
-### 7. Verify
+### 6. Records
 
 The record of a live placement is already here: the stored photo with the
 target outline, the measured outline and the numbers.
 
 A placard that was installed without live placement, or one you want to check
-again, is measured from one more photo (same tags, not moved). LUMEN finds
+again, is measured from one more photo (same tags, not moved): **Photo
+check** on the Place step, or this step directly. LUMEN finds
 the placard's outline and reports how far it is from the target, in
 millimetres along x and z and in degrees, with an uncertainty:
 
 * **within**: inside the tolerance even allowing for the uncertainty;
 * **outside**: outside it even allowing for the uncertainty;
-* **indeterminate**: too close to call, or the outline had a problem (hidden
+* **cannot tell**: too close to call, or the outline had a problem (hidden
   corner, glare, curled edge). Take a better photo.
 
-Check the drawn outline against the picture, then press **Confirm measured
+Check the drawn outline against the picture, then press **Confirm
 outline** and **Export summary**. The summary is a JSON file with the
 measurements, the checks and the software version. Photos are not in it.
 
-<img src="screenshots/verify_result.png" width="250" alt="Verify step: measured deviations">
+<img src="screenshots/verify_result.png" width="250" alt="Records step: measured deviations">
 
 ## Lens profile (once per phone)
 
 Menu → **Settings & camera calibration**. Download the board, print it,
 mount it flat, measure its squares, and take 10 to 15 photos of it as the
 screen describes. Save the profile; it stays on this phone. Attach it to a
-session from the same screen. Without a profile results stay at "research
-preview", and in live placement the uncertainty takes most of a tight
+session from the same screen. Without a profile results stay at "Check
+needed", and in live placement the uncertainty takes most of a tight
 tolerance. The profile that matters is the one for the photos of step 3: the
-datums are measured in them, out to the edges of the picture. The live
+two lines are measured in them, out to the edges of the picture. The live
 picture itself needs none.
 
 <img src="screenshots/settings_calibration_result.png" width="250" alt="Lens profile result">
@@ -259,8 +277,8 @@ automatically some hours after their last use.
 ## What LUMEN does not do
 
 * It does not decide whether a part is acceptable.
-* It does not know which way is down: directions come from the two datums in
-  the record.
+* It does not know which way is down: directions come from the two lines
+  (datums) in the record.
 * It does not measure on curved surfaces. A rounded edge can serve as a datum;
   the placard itself must be on the flat face.
 * It does not invent a missing datum, offset or tolerance.

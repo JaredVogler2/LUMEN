@@ -43,7 +43,7 @@ says otherwise.
   border). It is not the size of the sticker, the white margin or the number
   on the packaging. Declared sizes are "measured" (entered per tag, from a
   caliper) or "nominal" (one value for all, from the packaging); nominal sizes
-  cannot reach guidance status.
+  cannot reach the status `prototype_guidance` ("Ready").
 * Corner order: top-left, top-right, bottom-right, bottom-left in the tag's
   own upright orientation (indices 0 to 3).
 * A tag's frame: origin at its centre, `+x` to its right, `+y` to its top, in
@@ -108,12 +108,30 @@ interface shows it:
 
 ## Status of a result
 
-| Status | Meaning |
-|---|---|
-| `blocked` | A required condition is missing or contradicted. No target outline is drawn. |
-| `research_preview` | Geometry can be computed but a qualifying check is not met. The outline is drawn dashed and labelled. |
-| `prototype_guidance` | Every computed check passed. Still research output: the checks are backed by synthetic tests only. |
-| `validated` | As above and inside a physically validated domain supplied by an administrator. None ships with LUMEN, so this status cannot occur. |
+| Status (API, export) | On the screen | Meaning |
+|---|---|---|
+| `blocked` | Cannot measure yet | A required condition is missing or contradicted. No target outline is drawn. |
+| `research_preview` | Check needed | Geometry can be computed but a qualifying check is not met. The outline is drawn dashed and labelled. |
+| `prototype_guidance` | Ready | Every computed check passed. The checks are backed by synthetic tests only; on an installation without a validated domain the screen adds "Evaluation only: not validated". |
+| `validated` | Ready · validated | As above and inside a physically validated domain supplied by an administrator. None ships with LUMEN, so this status cannot occur. |
+
+The status values are the interface between server, export and tests and do
+not change with the wording of the screen.
+
+What kind of results an installation gives is shown by one indicator in the
+header of every screen, by the watermark on every picture with a result, and
+beside the status:
+
+| Indicator | When | Watermark |
+|---|---|---|
+| Demo | the session runs on computer-generated photos (`mode: demo`) | DEMO · SIMULATED DATA |
+| Evaluation | real photos, no validated domain supplied (every installation today) | EVALUATION ONLY · NOT ACCEPTANCE |
+| Validated | `LUMEN_VALIDATED_DOMAIN_FILE` names a validated domain | MEASUREMENT EVIDENCE · NOT ACCEPTANCE |
+
+Steps of the workflow and their names on the screen: `identify` Job,
+`markers` Tags, `capture` Photos, `datums` Lines, `place` Place, `verify`
+Records. `rectified` (the straight-on view with the scale check) is a tool
+opened from Lines and has no stop of its own.
 
 Each check in a report has a `severity`: `blocking` (failing it gives
 `blocked`), `warning` (failing it gives `research_preview`) or `info`. A

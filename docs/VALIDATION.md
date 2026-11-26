@@ -205,9 +205,26 @@ did not use):
 
 What these tests are not: a hand, a placard with a real surface, a phone's
 video stream with its exposure and focus changes, a real network, or anybody
-hearing a tone. See section 7.
+hearing a tone. See section 8.
 
-## 7. What has not been tested at all
+## 7. The interface and an installation's brand
+
+What an operator reads and how the application looks are tested in a browser
+on a phone-sized window, not judged by anyone who will use it:
+
+| Question | Test | Result |
+|---|---|---|
+| Is it said, on every screen, what kind of results these are? | the indicator in the header, its explanation, the watermark on the picture and the line beside the status (`tests/browser/test_workflow.py`, `test_camera.py`) | "Evaluation" with real photos, "Demo" with simulated ones; "Evaluation only: not validated" beside "Ready" and "Check needed"; nothing calls real photos simulated |
+| Can the text be read? | contrast of body text and of the main button in both themes (`tests/browser/test_branding.py`, `test_workflow.py`) | 7:1 or better for body text; 7:1 (light) and 4.5:1 (dark) or better on the main button; touch targets 40 px or more, the main buttons 56 px |
+| Does an installation's logo, name and colour appear, and nothing else? | a logo drawn by the test, a name, a dark and a light colour (`tests/browser/test_branding.py`, `tests/integration/test_branding.py`) | the logo loads from inside the content address and fits a phone's header; the colour is on the rule and the main button; a light colour is darkened for text and buttons to 4.5:1; a file of another kind, a missing or an oversized one and a colour that is not `#rrggbb` are ignored |
+| Can a supplied logo do anything but be shown? | the headers of `brand/logo` | served as a picture with a policy that allows no script and no request |
+| Is any organisation's artwork in the repository? | what git tracks under `brand/` and the application's own pictures | the note only; LUMEN's own mark only |
+| Does the phone's screen stay on during live placement? | a wake lock that records what is asked of it (`tests/browser/test_placement.py`) | asked for when live placement starts, given back when it stops |
+
+What these tests are not: an operator with gloves in a hangar, the light
+there, or the judgement of the organisation whose logo it will carry.
+
+## 8. What has not been tested at all
 
 | Item | Status |
 |---|---|
@@ -219,3 +236,4 @@ hearing a tone. See section 7.
 | Posit Connect deployment | NOT RUN |
 | More than one operator | NOT RUN |
 | The optional assistant against a real endpoint | NOT RUN |
+| The interface with the people who will use it: whether six steps and these words are as plain as intended; the screen wake lock on a phone | NOT RUN |

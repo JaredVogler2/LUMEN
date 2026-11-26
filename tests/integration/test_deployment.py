@@ -210,11 +210,13 @@ def test_committed_manifest_matches_the_files_that_are_deployed():
     expected = {"app.py", "requirements.txt"} | {
         str(f.relative_to(ROOT)).replace("\\", "/") for f in (ROOT / "lumen").rglob("*") if f.is_file() and "__pycache__" not in f.parts
     }
+    # an installation may add its organisation's logo (brand/logo.*, see brand/README.md); nothing else is deployed
+    listed -= {f for f in listed if re.fullmatch(r"brand/logo\.(svg|png|webp|jpe?g)", f) and (ROOT / f).is_file()}
     assert listed == expected, f"run scripts/write_manifest.sh (missing {sorted(expected - listed)[:5]}, extra {sorted(listed - expected)[:5]})"
     stale = [f for f, meta in m["files"].items() if hashlib.md5((ROOT / f).read_bytes()).hexdigest() != meta["checksum"]]
     assert not stale, f"run scripts/write_manifest.sh: {len(stale)} deployed file(s) changed since the manifest was written, e.g. {stale[:4]}"
     # nothing that must not be deployed
-    assert not any(f.startswith(("tests/", "docs/", "prompt_series/", "scripts/", ".venv")) for f in listed)
+    assert not any(f.startswith(("tests/", "docs/", "prompt_series/", "scripts/", ".venv")) for f in m["files"])
 
 
 def test_a_host_that_keeps_no_sessions_is_named_instead_of_failing_photo_by_photo(monkeypatch, library):

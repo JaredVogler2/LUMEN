@@ -59,8 +59,8 @@ export function mount(root, ctx) {
     pickMany, pickCamera, pickVideo);
 
   root.append(
-    h('h1', { class: 'view-title' }, 'Capture the panel'),
-    h('p', { class: 'view-lead' }, 'Take 3–9 overlapping photos from different positions. Every photo should show the tags; between them the photos should show the floor seam and the side edge that the datums refer to.'),
+    h('h1', { class: 'view-title' }, 'Photos of the panel'),
+    h('p', { class: 'view-lead' }, 'Take 3 to 9 photos from different positions. Each must show the tags; together they must show the floor line and the side line the job refers to.'),
     summary, coachBox, drop, progress,
     h('div', { class: 'card' }, h('h3', null, 'Before you analyse'), checklist),
     pairBox,
@@ -223,7 +223,7 @@ export function mount(root, ctx) {
     ctx.setActions([
       { label: 'Back', back: true, onClick: () => ctx.go('markers') },
       sess.registration
-        ? { id: 'continue', label: 'Review datums', kind: 'primary lg', icon: 'arrow', onClick: () => ctx.go('datums') }
+        ? { id: 'continue', label: 'Continue', kind: 'primary lg', icon: 'arrow', onClick: () => ctx.go('datums') }
         : { id: 'analyze', label: withTags.length ? `Analyse ${withTags.length} photo${withTags.length === 1 ? '' : 's'}` : 'Analyse', kind: 'primary lg', icon: 'target', disabled: withTags.length === 0, onClick: analyze },
     ]);
   }
@@ -234,7 +234,7 @@ export function mount(root, ctx) {
       const out = await api('POST', `api/sessions/${s().id}/register`, undefined, { timeout: 180000 });
       setSession(out.session);
       const reg = out.registration;
-      if (!reg.consistent) toast({ title: 'Tags contradict each other', detail: 'See the Datums step for details.', kind: 'error', timeout: 8000 });
+      if (!reg.consistent) toast({ title: 'Tags contradict each other', detail: 'See the Lines step for details.', kind: 'error', timeout: 8000 });
       ctx.go('datums');
     } catch (err) { showError(err, 'Analysis failed'); render(); } finally { b.done(); }
   }

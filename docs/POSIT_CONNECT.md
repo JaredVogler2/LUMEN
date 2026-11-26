@@ -61,9 +61,9 @@ rsconnect add --name myserver --server https://connect.example.org --api-key "$C
 ```
 
 ```bash
-rsconnect deploy fastapi --name myserver --entrypoint app:app --title "LUMEN (research prototype)" \
+rsconnect deploy fastapi --name myserver --entrypoint app:app --title "LUMEN (evaluation)" \
   -x "tests/**" -x "docs/**" -x "prompt_series/**" -x "scripts/**" \
-  -x "requirements-dev.txt" -x "pyproject.toml" -x "README.md" .
+  -x "requirements-dev.txt" -x "pyproject.toml" -x "README.md" -x "brand/README.md" .
 ```
 
 The option names were checked against `rsconnect-python` 1.34.1
@@ -168,7 +168,7 @@ repository on Vercel showed it: the platform ran requests that arrived
 together in separate, freshly started instances, each with an empty disk of
 its own (seen in its runtime logs: every instance first installed the
 dependencies). Photos uploaded through one request did not exist for the
-next; the thumbnails of the Capture step would not load and each further
+next; the thumbnails of the Photos step would not load and each further
 step answered "Unknown or expired session". Nothing in the application can
 repair that: a session has to be where the next request arrives. LUMEN now
 recognises such a platform from its environment (`VERCEL`,
@@ -214,7 +214,7 @@ has a default, and no value is returned by the API.
 | `LUMEN_MAX_CONCURRENT_JOBS` | `2` | heavy computations at once per process; others get "server busy" |
 | `LUMEN_REQUEST_TIMEOUT_SECONDS` | `30` | wait for a free computation slot |
 | `LUMEN_JOB_TIMEOUT_SECONDS` / `LUMEN_VIDEO_JOB_TIMEOUT_SECONDS` | `120` / `300` | budgets for analysis and for one video |
-| `LUMEN_OPERATIONS_DIR` | empty | directory for operation records entered in the app (`operations.json` with its change log). Empty = `<LUMEN_DATA_DIR>/library`, which is temporary storage unless `LUMEN_DATA_DIR` is set: the Identify screen then tells the operator that records can disappear and offers export |
+| `LUMEN_OPERATIONS_DIR` | empty | directory for operation records entered in the app (`operations.json` with its change log). Empty = `<LUMEN_DATA_DIR>/library`, which is temporary storage unless `LUMEN_DATA_DIR` is set: the first screen (Job) then tells the operator that records can disappear and offers export |
 | `LUMEN_OPERATIONS_READONLY` | `false` | `true` = the bundled sample records only; nothing can be entered |
 | `LUMEN_DEMO_ENABLED` | `true` | offer the simulated demo session |
 | `LUMEN_BASE_PATH` | empty | external path of the app, only for proxies that send no base header |
@@ -223,7 +223,41 @@ has a default, and no value is returned by the API.
 | `LUMEN_PHOTOMETRIC_ENABLED` | `true` | experimental flashlight diagnostics (never guidance) |
 | `LUMEN_LLM_ENABLED` | `false` | optional assistant; see `docs/ASSISTANT.md` before enabling |
 | `LUMEN_LLM_BASE_URL`, `LUMEN_LLM_MODEL`, `LUMEN_LLM_API_KEY_ENV`, `LUMEN_LLM_TIMEOUT_SECONDS` | empty / `LUMEN_LLM_API_KEY` / `20` | assistant endpoint (HTTPS only), model, name of the variable holding the key |
+| `LUMEN_BRAND_NAME` | empty | name of the organisation that runs this installation: the alternative text of its logo, or, without a logo, shown beside LUMEN's mark |
+| `LUMEN_BRAND_LOGO` | empty | path of an image file with the organisation's logo (`.svg`, `.png`, `.webp`, `.jpg`; at most 512 KB), shown at the top left of every screen. Empty = `brand/logo.*` in the application's folder if there is one (section 6a), else LUMEN's own mark |
+| `LUMEN_BRAND_COLOR` | `#0033a0` | the installation's colour as `#rrggbb`: the rule under the header, the mark and every primary button |
 | `LUMEN_LOG_LEVEL` | `INFO` | |
+
+### 6a. The organisation's logo and colour
+
+The look of LUMEN is white with one colour, a deep blue by default. An
+installation shows whose it is with three settings: a name, a logo and that
+colour.
+
+No organisation's artwork is part of the repository. The logo is a file that
+you supply, under the terms on which you may use it:
+
+1. Copy the official file to `brand/logo.svg` in the application's folder (or
+   `logo.png`, `logo.webp`, `logo.jpg`). A horizontal logo on a transparent
+   background reads best: it is shown 30 px high on white, and on a white
+   plate in dark mode.
+2. Run `scripts/write_manifest.sh` again and deploy. The manifest then lists
+   the logo and it is uploaded with the application.
+3. Set `LUMEN_BRAND_NAME`, and `LUMEN_BRAND_COLOR` if the default blue is not
+   your organisation's.
+
+`brand/` is ignored by git except for its note, so that a logo you may use
+but not publish is not committed to a public repository by accident. For
+git-backed publishing, commit it in a private repository
+(`git add -f brand/logo.svg`), or put the file on the server and name it in
+`LUMEN_BRAND_LOGO`.
+
+The file is served as a picture from `brand/logo` inside the content address,
+with headers under which it can run nothing and fetch nothing. A file of
+another kind, a larger one or a missing one is ignored and LUMEN's mark is
+shown; a colour that is not `#rrggbb` is ignored. A light colour is used for
+the rule and the mark as it is, and darkened for text and buttons so that
+they can be read.
 
 ## 7. Address handling behind the proxy
 
@@ -302,7 +336,7 @@ cert.pem` with a certificate the phone trusts).
    — all steps must pass. The `health` line reports the storage adapter and the
    OpenCV version actually installed on the server.
 3. Open the content address in a desktop browser while signed in; run the demo
-   session to the Verify step.
+   session to the Records step.
 4. Open the same session address as a different user: it must not open.
 5. With Max processes ≥ 2, repeat step 2 several times in parallel
    (`for i in 1 2 3 4; do python scripts/smoke_test.py ... & done; wait`): all
@@ -316,8 +350,8 @@ Record the iOS version, the browser and the phone model with each result.
 
 | # | Check | Expected |
 |---|---|---|
-| 1 | Open the Connect address in Safari, sign in | LUMEN's Identify screen; yellow research banner |
-| 2 | Capture → Open camera | permission prompt; after "Allow" a live rear-camera picture, full frame visible |
+| 1 | Open the Connect address in Safari, sign in | LUMEN's first screen ("Choose the job"); your logo at the top left if one was supplied; the indicator "Evaluation" at the top |
+| 2 | Photos → Open camera | permission prompt; after "Allow" a live rear-camera picture, full frame visible |
 | 3 | Camera options | stream size shown; if several rear cameras are listed, a fixed-lens one can be chosen |
 | 4 | Light button | present only if Safari offers the torch; note whether it is, and whether photos record `on`, `off` or `unknown` |
 | 5 | Take 5 photos walking around a panel with tags | each uploads; coaching line changes; count increases |
@@ -326,12 +360,12 @@ Record the iOS version, the browser and the phone model with each result.
 | 8 | Use a video (recorded with the system camera, portrait and landscape) | frames upright; chosen frames show the tags |
 | 9 | Lock the phone / switch apps while the camera is open | camera stops; "Resume camera" works |
 | 10 | Rotate the phone | layout follows; a warning appears if the stream size changes mid-session |
-| 11 | Analyse → Datums → Place → Start live placement, phone on a stand | the dashed target is drawn only while the tags are in view; note the delay and the results per second shown in the red pill |
+| 11 | Analyse → Confirm lines → Start live placement, phone on a stand | the dashed target is drawn only while the tags are in view; note the delay and the results per second shown in the red pill |
 | 11a | Bring the placard to the outline | its outline is drawn and follows it; arrow, distance and beeps; note whether the beeps are heard with the ring switch in both positions |
 | 11b | Hold it with a hand over one end | the covered side is drawn dashed; the reading goes on |
 | 11c | Hold it a centimetre off the surface | "Not flat on the surface"; no green |
 | 11d | Place it, press it on, take the hands away | green and the steady tone, then the chime; the Place step shows what was recorded; the camera is off |
-| 12 | Verify | the record of 11d is there; a new photo can be measured as well; "not an acceptance decision" visible |
+| 12 | Records | the record of 11d is there; a new photo can be measured as well; "not an acceptance decision" visible |
 | 13 | Menu → End session | photos deleted; reopening the address starts fresh |
 
 ## 10. Troubleshooting

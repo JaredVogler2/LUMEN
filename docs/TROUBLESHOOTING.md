@@ -31,7 +31,7 @@ published browser behaviour and the messages the app shows.
 | edge disturbed | something crosses the tag's border (a seam, a shadow edge, a finger) | move the tag or the obstruction |
 | "Tags contradict each other" | sizes or positions do not fit one plane | check each entered size against the right ID; all tags must be flat on the same face; do not move tags between photos |
 | "A registered tag appears to have moved" | a tag is somewhere else than in the registration photos | start the capture again |
-| "A tag was excluded" on the Datums screen, "A tag was left out of the measurement" in the list of checks | one tag contradicts all the others (it moved between photos, is not on the same plane, or its entered size is wrong) and was set aside; the result rests on the remaining tags and the reason is given beside the ID | look at that tag: re-stick it flat, correct its size, or capture again without touching the tags. With fewer tags the uncertainty is larger |
+| "A tag was excluded" on the Lines screen, "A tag was left out of the measurement" in the list of checks | one tag contradicts all the others (it moved between photos, is not on the same plane, or its entered size is wrong) and was set aside; the result rests on the remaining tags and the reason is given beside the ID | look at that tag: re-stick it flat, correct its size, or capture again without touching the tags. With fewer tags the uncertainty is larger |
 | Two stickers with the same ID | the ID is ambiguous | remove one |
 
 ## Analysis and datums
@@ -45,7 +45,7 @@ published browser behaviour and the messages the app shows.
 | No floor line or side line is proposed | make sure the line is in at least one photo with the tags; draw it by hand with snap on |
 | "Only one straight line was found in the photos" (or "N straight lines were found … but no two of them fit together") | a floor line and a side line that meet at the record's angle are both needed, and one of them is too faint, hidden or outside the photos. From one line LUMEN cannot tell which. Retake with both clearly in view, or draw the lines by hand with snap on |
 | "A competing edge of similar strength nearby" | zoom in and draw the line on the edge the record names |
-| "Is this the right line?" on a datum (check: "A fixed edge about … mm in front of the panel face runs … the floor datum") | the line LUMEN found lies on the face, but a raised or recessed edge runs along it, as at the top of a kick strip or beside a moulding. The line may be the edge of that part and not the feature the record means, and LUMEN cannot know which. Look at the photo: if it is the right line, tap **Choose detected line** and select it yourself; if not, draw the datum on the right feature. Until then the result stays a preview |
+| "Is this the right line?" on a datum (check: "A fixed edge about … mm in front of the panel face runs … the floor datum") | the line LUMEN found lies on the face, but a raised or recessed edge runs along it, as at the top of a kick strip or beside a moulding. The line may be the edge of that part and not the feature the record means, and LUMEN cannot know which. Look at the photo: if it is the right line, tap **Choose line** and select it yourself; if not, draw the line on the right feature (**Draw by hand**). Until then the result stays at "Check needed" |
 | A datum is marked "declared on the face (not verified)" with the note "the photos do not settle whether this line lies on the panel face" | nothing is wrong: all photos saw that line from similar heights (or similar sides), so they cannot show whether it is on the face to a millimetre, and the record's statement is used. To have it verified, add photos from clearly different heights for a horizontal line, or from further left and right for a vertical one |
 | A datum is marked "NOT on the face" | the photos show the whole feature clear of the panel face (a proud trim, an edge behind the face): choose a feature on the face |
 | "Left out because it did not fit the other photos of the same tag" | one tag was mis-measured in one photo (glare on an edge, something in front of it); that observation is ignored and the tag is kept. If it happens for several tags, retake the photo |
@@ -54,7 +54,7 @@ published browser behaviour and the messages the app shows.
 | "Contradiction" in the scale check | the declared tag sizes and the rule measurement disagree: measure the black squares again, check the rule reading, correct the sizes |
 | The target is "outside this frame" | take a photo that shows both the tags and the place of the placard |
 
-## Status stays at "research preview"
+## Status stays at "Check needed"
 
 Open the list of checks on the Place screen; the failed ones are at the top,
 each with what to do. The usual ones:
@@ -64,8 +64,8 @@ each with what to do. The usual ones:
 | tag sizes not measured | enter the caliper value for each tag |
 | no lens profile | make one in Settings and attach it; use the same camera, zoom and orientation |
 | lens profile disagrees with the tags | the profile is from another camera or zoom: recalibrate or detach it |
-| datums not confirmed | review and confirm them |
-| uncertainty exceeds the share of the tolerance | move closer or use full-resolution photos (larger tags), put tags around the target, add photos; the list of budget terms shows which term dominates. Tags under about 52 px across cannot measure their own edge shift: the Capture screen warns ("The tags are small in the photos") |
+| lines not confirmed | review them on the Lines step and press **Confirm lines** |
+| uncertainty exceeds the share of the tolerance | move closer or use full-resolution photos (larger tags), put tags around the target, add photos; the list of budget terms shows which term dominates. Tags under about 52 px across cannot measure their own edge shift: the Photos screen warns ("The tags are small in the photos") |
 | target far from the tags | put a tag near the target |
 | tag observations still contradict the other photos | glare on a tag, or more than one tag was moved, or too few tags are left to tell which one is wrong: retake without glare and without touching the tags; with a third or fourth tag a faulty one can be identified and set aside |
 | "Is this the right line?" (a raised edge beside a datum) | see "Analysis and datums" above: choose the line yourself |
@@ -82,7 +82,7 @@ only. They do not lower the status; each says how to close the gap.
 |---|---|---|
 | No sound | the phone's media volume is down, the ring switch mutes web pages on this phone, or sound was switched off | turn the volume up; switch **Sound** off and on once (a web page may start sound only from a tap); the screen and the green frame work without sound |
 | "Bring the placard" although it is at the outline | too little contrast between placard and panel, glare, or the placard is more than about 45 mm from the target | change the light or the angle; bring it nearer to the dashed outline |
-| It stays at "Almost" | the placard is inside the tolerance, but not by more than the uncertainty of this view (the disc touches the ring) | move it towards the centre of the dial. If the line "It counts as in position only within ± … mm" is shown, the uncertainty takes most of the tolerance: follow the advice in that line (usually: a lens profile for the photos of the Capture step, or the phone closer and squarer) |
+| It stays at "Almost" | the placard is inside the tolerance, but not by more than the uncertainty of this view (the disc touches the ring) | move it towards the centre of the dial. If the line "It counts as in position only within ± … mm" is shown, the uncertainty takes most of the tolerance: follow the advice in that line (usually: a lens profile for the photos of the Photos step, or the phone closer and squarer) |
 | "Reading too coarse here" | the uncertainty of this view exceeds the tolerance | as above; an oblique view costs most, because a placard that is not pressed on yet may stand off the surface |
 | "Not flat on the surface" although it is pressed on | the part is larger than the record says, or an edge of something else is taken for a side | check the part against the record; take hands and tools away from the edges |
 | "The outline measures … mm smaller than the placard" | something with a straight edge covers a side, or it is another part | uncover the side; check the part |

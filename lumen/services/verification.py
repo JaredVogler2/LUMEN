@@ -135,7 +135,7 @@ def verify_frame(
     spec = PlacementSpec(**op.placard(pid).resolved())
     lf = svc._local_frame(s)
     if lf is None or not lf.valid or not svc._spec_complete(spec):
-        raise ConflictError("no_target", "There is no valid target to compare with: the datums or the placard definition are incomplete.", suggestions=["Complete and confirm the datums first."])
+        raise ConflictError("no_target", "There is no valid target to compare with: the datums or the placard definition are incomplete.", suggestions=["Confirm the two datum lines first (Lines step)."])
     try:
         H, loc, ext_view = svc._frame_mapping(s, sol, f)
     except GeometryError as exc:

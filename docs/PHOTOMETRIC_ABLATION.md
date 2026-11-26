@@ -19,7 +19,7 @@ tags, which is the variant called "plane through all tags" in group G below;
 the "tag pipeline" columns of the other groups were measured with the single
 gauge tag and are therefore slightly pessimistic about the application as it
 is now. The module is wired into the application as a research step
-(`lumen/services/photometric.py`, a card on the Datums screen); its result is
+(`lumen/services/photometric.py`, a card under Details on the Lines screen); its result is
 stored and displayed and is never used for a datum, a check or a target. On
 the test sweep through the application (four torch-on photos, true radius
 35 mm) it reported radius 35.01 ± 0.11 mm and a start of the bend 0.34 mm

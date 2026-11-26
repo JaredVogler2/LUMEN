@@ -162,11 +162,11 @@ _EXCLUDED_REASON = {
 
 _SUGGEST = {
     "more_tags": "Add a second measured AprilTag on the flat panel, on the far side of the target from the first, and retake the photo.",
-    "measure_tags": "Measure the black-square edge of each tag with a caliper and enter it (Markers step).",
+    "measure_tags": "Measure the black-square edge of each tag with a caliper and enter it (Tags step).",
     "calibrate": "Attach a lens calibration made at this resolution and orientation (Settings → Camera calibration).",
     "closer": "Move closer or use the photo mode so tags are larger in the image.",
     "retake_sharp": "Retake the photo: hold steady, avoid glare on the tags, keep all tags fully in view.",
-    "confirm_datums": "Review the two datum lines on the rectified view and confirm them.",
+    "confirm_datums": "Check the two datum lines on the Lines step and confirm them.",
     "tags_near_target": "Place the tags so that they surround the target location rather than sit to one side.",
 }
 
@@ -186,7 +186,7 @@ def evaluate_gates(inp: GateInputs, policy: GatePolicy | None = None, placard_id
     # ------------------------------------------------------------ blocking
     gate("operation_selected", inp.operation_selected and inp.placard_selected, B,
          "An operation and a placard are selected." if inp.operation_selected and inp.placard_selected else "No operation / placard is selected.",
-         suggestion="Choose the operation and placard on the Identify step.")
+         suggestion="Choose the operation and placard on the Job step.")
     gate("placard_geometry_defined", inp.spec_geometry_complete, B,
          "Placard offsets, size, rotation and reference point are defined." if inp.spec_geometry_complete
          else "The operation record does not define the placard geometry completely; LUMEN does not invent placement requirements.",
@@ -226,7 +226,7 @@ def evaluate_gates(inp: GateInputs, policy: GatePolicy | None = None, placard_id
         gate("scale_source", True, INFO,
              "Scale rests on the declared tag sizes alone: no independent length was measured. An error common to all sizes "
              "(the packaging size typed for every tag, a caliper read in the wrong unit) would not be noticed.",
-             suggestion="Measure one distance between two tags with a rule and enter it on the Rectified step.", caveat=True)
+             suggestion="Measure one distance between two tags with a rule and enter it in the scale check (Lines step).", caveat=True)
     if inp.registered and inp.multiview:
         gate("plane_assumption", not inp.plane_violated, B,
              "The tags define one plane." if not inp.plane_violated
@@ -235,7 +235,7 @@ def evaluate_gates(inp: GateInputs, policy: GatePolicy | None = None, placard_id
     gate("datums_defined", all(inp.datums_present), B,
          "Floor and side datum lines are defined." if all(inp.datums_present)
          else "Missing datum: " + ", ".join(n for n, p in zip(("floor", "side"), inp.datums_present) if not p) + ".",
-         suggestion="Define both datum lines on the Datums step.")
+         suggestion="Define both datum lines on the Lines step.")
     if all(inp.datums_present):
         reasons = ", ".join(inp.local_frame_reasons or [])
         gate("local_frame_valid", inp.local_frame_valid, B,
@@ -252,7 +252,7 @@ def evaluate_gates(inp: GateInputs, policy: GatePolicy | None = None, placard_id
     gate("operation_record_complete", spec_ok, W,
          "The operation record is complete (datum signs, axis policy, tolerances)." if spec_ok
          else "The operation record is incomplete: " + ", ".join(inp.spec_issues or []) + ".",
-         suggestion="Complete the record; a missing tolerance or datum definition prevents guidance status.")
+         suggestion="Complete the record; a missing tolerance or datum definition keeps the result from 'Ready'.")
     if inp.operation_selected:
         released = inp.record_status == "released"
         gate("operation_record_released", released, W,
@@ -340,7 +340,7 @@ def evaluate_gates(inp: GateInputs, policy: GatePolicy | None = None, placard_id
                      f"A fixed edge about {abs(hh):.0f} mm {'in front of' if hh > 0 else 'behind'} the panel face runs {where} the {name} datum. "
                      "The line that was found may be the edge of a trim, a moulding or a recess and not the feature the record means.",
                      value=abs(hh),
-                     suggestion="Look at the line on the photo. If it is the feature the record means, select it yourself with 'Choose detected line'; if not, draw the datum on the right feature.")
+                     suggestion="Look at the line on the photo. If it is the feature the record means, select it yourself with 'Choose line'; if not, draw the line on the right feature.")
             ev = inp.datum_plane_evidence[i]
             feat = inp.datum_feature[i]
             declared = inp.datum_declared_on_plane[i]

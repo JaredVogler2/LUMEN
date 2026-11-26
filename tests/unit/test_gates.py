@@ -164,7 +164,7 @@ def test_a_step_beside_an_automatic_datum_withholds_guidance_until_the_operator_
     rep = evaluate_gates(good(datum_depth_neighbour=(nb, None)))
     assert failed(rep) == {"datum_floor_no_step_beside"} and rep.status == "research_preview"
     g = next(g for g in rep.gates if g.code == "datum_floor_no_step_beside")
-    assert "8 mm in front of the panel face" in g.message and "right beside the floor datum" in g.message and "Choose detected line" in g.suggestion
+    assert "8 mm in front of the panel face" in g.message and "right beside the floor datum" in g.message and "Choose line" in g.suggestion
     # the trim's front face ending at the floor, 60 mm further out; and a recess instead of a raised part
     far = {**nb, "gap_mm": -60.2, "height_mm": -8.1, "relation": "beyond"}
     g = next(g for g in evaluate_gates(good(datum_depth_neighbour=(None, far))).gates if g.code == "datum_side_no_step_beside")

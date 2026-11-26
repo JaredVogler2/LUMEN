@@ -263,7 +263,7 @@ class SessionService:
 
     def _operation(self, s: Session) -> OperationDefinition:
         if not s.operation:
-            raise ConflictError("no_operation", "No operation is selected for this session.", suggestions=["Choose an operation on the Identify step."])
+            raise ConflictError("no_operation", "No operation is selected for this session.", suggestions=["Choose an operation on the Job step."])
         return OperationDefinition.model_validate(s.operation["operation"])
 
     # ----------------------------------------------------------------- frames
