@@ -137,6 +137,53 @@ No probability is attached to the expanded value. How often it contained the
 true error has been examined on synthetic data only
 (`docs/benchmark/RESULTS.md`).
 
+## A placard in a live frame
+
+What the live placement answers for one frame (`placement` in the answer of
+`POST …/track?placement=true`):
+
+**Deviation.** `dx_mm`, `dz_mm`, `rotation_deg`: measured placard minus
+target, in the local frame, with the same signs as a verification.
+`move.x_mm`, `move.z_mm` are their negatives. `move.px` is the vector from
+the placard's centre to the target's centre in the pixels of that frame
+(`u` right, `v` down), and `move.turn_screen_deg` is positive when the placard
+has to be turned clockwise as seen on the screen. The arrow, the dial and the
+level on the screen use these two, so that "left" on the screen is left in
+the picture whatever the orientation of the record's axes.
+
+**In position.** `in_position` is true when, for this frame, the distance
+from the target plus the expanded uncertainty is inside the position
+tolerance of the record, and the rotation plus its expanded uncertainty is
+inside the rotation tolerance. It is the same rule as "within" in a
+verification. Without a tolerance in the record nothing is judged.
+`room_mm` is tolerance minus expanded uncertainty: how far from its target
+the placard may measure and still be in position.
+
+**What is particular to a placard that is still being handled:**
+
+| Field or flag | Meaning |
+|---|---|
+| `not_flat_on_surface` | the outline measures larger (or smaller) than the record's size by more than its measurement allows. A placard held off the panel is nearer to the camera and looks larger. Nothing is judged |
+| budget term "placard not known to lie on the surface (live)" | a height too small to show in the size still displaces the outline when seen at an angle. Its bound: the largest height the size test would miss, times the tangent of the viewing angle (plus 5° when the stream has no lens profile) |
+| `sides` | per side (top, right, bottom, left): `measured`, `record_size` (hidden; placed from the opposite side and the record's size), `hidden` |
+| budget term "hidden side placed by the size in the record (live)" | a part may differ from the record's size; 1.0 mm is allowed for, of which half moves the centre. An assumption of the guidance only |
+| `size_not_seen` | no two opposite sides were measured, so nothing shows whether the placard lies on the surface. Not judged |
+| `hands` | part of the outline is covered (a partly hidden side, a corner not seen, a side placed by size) |
+| `clean` | all four sides measured, nothing covered, no doubt about the outline. Required for the automatic record |
+
+A side counts as measured in a live frame when at least 30 % of it lies on
+one straight edge (55 % in a verification photo). A side is placed by the
+record's size only where the picture shows something covering it; if the
+place where it would be looks like bare panel or bare placard, it is not
+placed, and three sides with a fourth that is nowhere point to another part.
+A straight edge that has something other than the panel outside it (a hand,
+a tool, or the placard's own surface, as at the ends of a block of print) is
+not taken for a side.
+
+**The record.** Nothing of the above is stored. The record of a placement is
+a verification: a stored photo at the camera's full size, measured with all
+four sides, without any of the assumptions above.
+
 ## Identifiers
 
 | Thing | Form |

@@ -13,7 +13,7 @@ import pytest
 from lumen.geometry.homography import apply_h, dlt_homography
 from lumen.synth import Box
 from lumen.synth.fixtures import demo_placard, flat_panel_scene, phone_camera
-from lumen.vision.placard import measure_placard, propose_rectangle
+from lumen.vision.placard import PlacardConfig, SideFit, _linear_planes, complete_from_size, edge_fraction, foreign_sides, measure_placard, plain_fraction, propose_rectangle
 from tests.conftest import px, render_cached
 
 CAM = phone_camera((330.0, -700.0, 440.0), width=1600, height=1200)
@@ -177,3 +177,146 @@ def test_proposal_reports_rivals_and_the_search_limit():
     assert abs(abs(prop["offset_mm"][1]) - 38.0) < 1.0
     m = measure_placard(img, None, H, EXPECTED)
     assert "ambiguous_proposal" in m.flags
+
+
+# ---------------------------------------------------------------------------------------------------------------
+# a placard in a hand (live placement): sides that are covered, and edges that are not the placard's
+# ---------------------------------------------------------------------------------------------------------------
+LIVE = PlacardConfig(min_side_support=0.3, wide_side_retry=False)
+SKIN = (0.55, 0.42, 0.36)
+
+
+def centre_error(m, pl):
+    got = apply_h(np.linalg.inv(H), m.corners_ideal)
+    return float(np.linalg.norm(got.mean(0) - np.array(pl.center)))
+
+
+def test_a_hidden_side_is_placed_by_the_known_size_where_something_covers_it():
+    pl = demo_placard(243.0, 298.5)
+    # something 40 mm thick over the whole right side; its straight edge runs parallel to the side, 12 mm inside
+    img = shoot(pl, boxes=(Box((291.0, -40.0, 253.0), (353.0, -0.5, 344.0), albedo=SKIN),))
+    m = measure_placard(img, None, H, EXPECTED, cfg=LIVE)
+    assert m.ok and not m.complete and [s.ok for s in m.sides] == [True, False, True, True], [(s.name, s.ok, s.reason) for s in m.sides]
+    # the sides that were measured are the placard's own, not the printed border 3 mm inside them
+    P = apply_h(np.linalg.inv(H), np.stack([m.sides[0].mid, m.sides[2].mid]))
+    assert abs(abs(P[0, 1] - P[1, 1]) - 60.0) < 0.3
+    placed = complete_from_size(m, H, 120.0, 60.0, image=img)
+    assert placed == [1] and m.complete and m.sides[1].method == "record_size"
+    assert "side_from_record_size:right" in m.flags and "corner_not_directly_seen:TR" in m.flags and "partial_perimeter" not in m.flags
+    assert m.proposal["placed_side_plain"]["right"] < 0.2
+    assert centre_error(m, pl) < 0.3
+    # the measured width is, by construction, the record's: it says nothing about the part
+    got = apply_h(np.linalg.inv(H), m.corners_ideal)
+    assert np.linalg.norm(got[1] - got[0]) == pytest.approx(120.0, abs=0.05)
+
+
+def test_a_side_is_not_called_hidden_where_nothing_covers_it():
+    # a part 20 mm narrower than the record, its left side where the record's is: the right side is not "hidden"
+    narrow = demo_placard(233.0, 298.5, width=100.0)
+    img = shoot(narrow)
+    m = measure_placard(img, None, H, EXPECTED, cfg=LIVE)
+    ok = [s.ok for s in m.sides]
+    assert sum(ok) == 3 and not m.complete, [(s.name, s.ok, s.reason) for s in m.sides]
+    missing = ok.index(False)
+    before = [s.ok for s in m.sides]
+    assert complete_from_size(m, H, 120.0, 60.0, image=img) == []
+    assert not m.complete and [s.ok for s in m.sides] == before
+    assert max(v for v in m.proposal["placed_side_plain"].values() if v is not None) > 0.8
+    # without the look at the picture the assumption would have gone through, 10 mm off
+    assert complete_from_size(m, H, 120.0, 60.0) == [missing] and centre_error(m, narrow) > 8.0
+
+
+def test_which_hidden_sides_can_be_placed():
+    pl = demo_placard(243.0, 298.5)
+    whole = measure_placard(shoot(pl), None, H, EXPECTED, cfg=LIVE)
+    assert whole.complete and complete_from_size(whole, H, 120.0, 60.0) == []
+
+    def without(*idx):
+        m = measure_placard(shoot(pl), None, H, EXPECTED, cfg=LIVE)
+        for k in idx:
+            m.sides[k].ok = False
+        return m
+
+    # one side: from the three others.  Two neighbours: only when asked (a placard seen whole a moment ago).
+    assert complete_from_size(without(3), H, 120.0, 60.0) == [3]
+    assert complete_from_size(without(1, 2), H, 120.0, 60.0) == []
+    m = without(1, 2)
+    assert complete_from_size(m, H, 120.0, 60.0, allow_two=True) == [1, 2] and centre_error(m, pl) < 0.3
+    # two opposite sides, or three: nothing says where the placard is
+    assert complete_from_size(without(1, 3), H, 120.0, 60.0, allow_two=True) == []
+    assert complete_from_size(without(0, 1, 2), H, 120.0, 60.0, allow_two=True) == []
+
+
+def test_a_placard_is_followed_from_where_it_was_with_the_sign_of_its_edges():
+    pl = demo_placard(243.0, 298.5, rotation_deg=1.0)
+    img = shoot(pl)
+    first = measure_placard(img, None, H, EXPECTED, cfg=LIVE)
+    sign = first.proposal["edge_polarity"]
+    for off in ((6.0, 0.0, 0.0), (-6.0, 0.0, 0.0), (0.0, 5.0, 0.0), (4.0, -3.0, 1.0)):
+        seed = apply_h(H, rect(243.0 + off[0], 298.5 + off[1], 120, 60, 1.0 + off[2]))
+        m = measure_placard(img, None, H, EXPECTED, cfg=LIVE, seed_corners_ideal=seed, seed_polarity=sign)
+        assert m.complete and centre_error(m, pl) < 0.05, (off, [(s.name, s.ok, s.reason) for s in m.sides])
+        # only the placard's own sign is tried: print inside it has the other
+        assert [t["polarity"] for t in m.proposal["polarities_tried"]] == [sign] and m.proposal.get("seeded")
+    # a seed far from the placard finds nothing, and nothing is taken from the seed
+    lost = measure_placard(img, None, H, EXPECTED, cfg=LIVE, seed_corners_ideal=apply_h(H, rect(283.0, 330.0, 120, 60)), seed_polarity=sign)
+    assert not lost.complete
+
+
+def canvas(block=None, shadow=None):
+    """A white placard (x 100..300, y 80..200) on a grey panel, optionally with a skin-coloured block and a shadow."""
+    img = np.full((300, 420, 3), 150, np.uint8)
+    img[80:200, 100:300] = (232, 232, 232)
+    if block is not None:
+        x0, x1, y0, y1 = block
+        img[y0:y1, x0:x1] = (95, 115, 175)
+    if shadow is not None:
+        x0, x1 = shadow
+        img[:, x0:x1] = (img[:, x0:x1].astype(np.float32) * 0.74).astype(np.uint8)  # about half the light
+    return cv2.GaussianBlur(img, (0, 0), 0.8)
+
+
+def side(index, mid, n, length):
+    return SideFit(index=index, ok=True, n=np.array(n, float), mid=np.array(mid, float), length_px=float(length), method="esf", support=1.0)
+
+
+def test_an_edge_of_what_covers_the_placard_is_not_one_of_its_sides():
+    top, bottom, left = side(0, (170, 80), (0, -1), 110), side(2, (170, 200), (0, 1), 110), side(3, (100, 140), (-1, 0), 90)
+    true_right = side(1, (300, 140), (1, 0), 90)
+    hand_edge = side(1, (240, 140), (1, 0), 90)  # the block's edge: placard inside, block outside
+    covered = canvas(block=(240, 380, 60, 220))
+    assert foreign_sides(canvas(), None, [top, true_right, bottom, left]) == []
+    assert foreign_sides(covered, None, [top, hand_edge, bottom, left]) == [1]
+    # shade does not make an edge foreign: the hue outside it is still the panel's (here the light is halved)
+    assert foreign_sides(canvas(shadow=(270, 420)), None, [top, true_right, bottom, left]) == []
+    # the ends of a block of print inside the placard: the placard's own colour on both sides, darker print inside
+    printed = canvas()
+    printed[100:180, 130:200] = (60, 60, 60)
+    print_edge = side(3, (130, 140), (-1, 0), 70)
+    assert foreign_sides(printed, None, [top, true_right, bottom, print_edge]) == [3]
+    # two sides that disagree, and no third to say which is the odd one: both
+    assert foreign_sides(covered, None, [hand_edge, left]) == [1, 3]
+    assert foreign_sides(canvas(), None, [true_right, left]) == []
+    # a side placed by the size has no surroundings of its own and is left out of the comparison
+    placed = SideFit(index=1, ok=True, n=np.array([1.0, 0.0]), mid=np.array([300.0, 140.0]), length_px=90.0, method="record_size")
+    assert foreign_sides(covered, None, [top, placed, bottom, left]) == []
+
+
+def test_how_much_of_a_placed_side_lies_in_plain_surroundings():
+    top, bottom, left = side(0, (170, 80), (0, -1), 110), side(2, (170, 200), (0, 1), 110), side(3, (100, 140), (-1, 0), 90)
+    measured = [top, bottom, left]
+
+    def placed_at(x):
+        return SideFit(index=1, ok=True, n=np.array([1.0, 0.0]), mid=np.array([float(x), 140.0]), length_px=100.0, method="record_size")
+
+    covered = _linear_planes(canvas(block=(240, 380, 60, 220)))
+    bare = _linear_planes(canvas())
+    assert plain_fraction(covered, None, placed_at(300), measured) < 0.1  # under the block: something covers it
+    assert plain_fraction(bare, None, placed_at(340), measured) > 0.9  # in bare panel: the placard does not reach that far
+    assert plain_fraction(bare, None, placed_at(200), measured) > 0.9  # in bare placard: the placard goes on beyond it
+    assert plain_fraction(bare, None, placed_at(300), measured) < 0.1  # on a visible edge: neither (it would have been measured)
+    assert plain_fraction(bare, None, placed_at(300), []) is None  # nothing to compare with
+    # and whether the placard's own edge is to be seen there: then the side is not hidden, only not found
+    assert edge_fraction(bare, None, placed_at(300), measured) > 0.9
+    assert edge_fraction(covered, None, placed_at(300), measured) < 0.1
+    assert edge_fraction(bare, None, placed_at(340), measured) < 0.1

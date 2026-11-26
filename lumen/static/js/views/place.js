@@ -1,10 +1,24 @@
-// Step 6 — placement guidance on the photo (and, when started, live video).
+// Step 6 — placing the placard.
+//
+// The target is first shown on a photo.  The work itself is done in live
+// placement: the camera watches while the placard is positioned, the screen and
+// the sound say which way to move it, and when it is in position a full-size
+// photo is stored and measured as the record (views/placement.js).
 import { api } from '../api.js';
-import { h, clear, icon, banner, showError, chip } from '../dom.js';
+import { h, clear, icon, banner, showError, chip, fmt } from '../dom.js';
 import { state, setSession, activeFrameId, activePlacard, setState } from '../store.js';
 import { Viewer } from '../viewer.js';
 import { showFrame, viewerShell, zoomButtons, maximizeButton, statusHero, gateList, budgetTable, targetReadout } from './common.js';
 import { startLive } from './live.js';
+import { createPlacement } from './placement.js';
+
+const OBSERVED = {
+  within_tolerance_observed: ['ok', 'observed within the tolerance'],
+  outside_tolerance_observed: ['danger', 'observed outside the tolerance'],
+  indeterminate: ['warn', 'cannot be told from the tolerance limit'],
+  partial: ['warn', 'only part of the outline was measured'],
+  no_evidence: ['danger', 'no measurement'],
+};
 
 // "Checks (1 open, 2 notes)": open = not met; notes = met, but saying what was not checked
 function checksTitle(rep) {
@@ -27,28 +41,53 @@ export function mount(root, ctx) {
   shell.hud.append(modePill, frameSel);
   let destroyed = false;
   let live = null;
+  let placement = null;
+  let starting = false;
   let last = null;
   let liveRes = null;
   let liveKey = '';
   let liveCentered = false;
+  let stopTimer = 0;
   const liveBox = h('div', { class: 'stack', 'data-region': 'live-status' });
+  const liveNote = h('div', { class: 'stack' });
 
-  // Status of the frame currently shown by live guidance (rewritten only when it changes).
+  // What goes with the placement view while live: why nothing is drawn, when nothing is (rewritten only when it changes).
   function renderLive() {
     const p = activePlacard(s());
     const t = liveRes && liveRes.tracking;
     const rep = liveRes && p ? liveRes.reports[p.placard_id] : null;
-    const key = !t ? 'none' : t.state !== 'tracking' ? `lost:${t.code}` : `${rep ? rep.status : 'none'}:${t.code}:${rep && rep.uncertainty ? rep.uncertainty.expanded_mm.toFixed(2) : ''}`;
+    const key = !t ? 'none' : t.state !== 'tracking' ? `lost:${t.code}` : `${rep ? rep.status : 'none'}:${t.code}`;
     if (key === liveKey) return;
     liveKey = key;
-    clear(liveBox);
-    if (!t) { liveBox.append(banner('info', 'Starting live guidance…', 'Aim the phone at the tags.')); return; }
-    if (t.state !== 'tracking') { liveBox.append(banner('warn', 'Tracking lost — nothing is drawn', t.message, t.suggestions)); return; }
-    if (rep) {
-      liveBox.append(statusHero(rep));
-      if (rep.status === 'blocked') liveBox.append(banner('danger', 'No target is drawn for this view.', t.code !== 'tracking' ? t.message : null, rep.suggestions));
-      else if (rep.uncertainty) liveBox.append(h('p', { class: 'hint' }, `Expanded uncertainty at the target in this view: ${rep.uncertainty.expanded_mm.toFixed(2)} mm (k=${rep.uncertainty.k}).`));
-    }
+    clear(liveNote);
+    if (!t) { liveNote.append(h('p', { class: 'hint' }, 'Starting the camera… Aim the phone at the tags.')); return; }
+    if (t.state !== 'tracking') { liveNote.append(banner('warn', 'Tracking lost — nothing is drawn', t.message, t.suggestions)); return; }
+    if (rep && rep.status === 'blocked') liveNote.append(banner('danger', 'No target is drawn for this view.', t.code !== 'tracking' ? t.message : null, rep.suggestions));
+  }
+
+  // The stored record of the active placard, if there is one (the latest).
+  function recordOf(pid) {
+    const vs = (s().verifications || []).filter((v) => v.placard_id === pid);
+    return vs.length ? vs[vs.length - 1] : null;
+  }
+  function nextPlacard() {
+    const ops = s().operation ? s().operation.placards_resolved : [];
+    const open = ops.filter((x) => x.placard_id !== s().active_placard_id && !(s().verifications || []).some((v) => v.placard_id === x.placard_id && v.observation === 'within_tolerance_observed'));
+    return open.length ? open[0].placard_id : null;
+  }
+  function recordCard(p) {
+    const v = p ? recordOf(p.placard_id) : null;
+    if (!v) return null;
+    const [kind, words] = OBSERVED[v.observation] || OBSERVED.indeterminate;
+    const U = v.uncertainty ? v.uncertainty.expanded_mm : null;
+    const nums = v.radial_mm === null || v.radial_mm === undefined ? '' : `${fmt(v.radial_mm, 2)} mm from the target, turned ${fmt(Math.abs(v.rotation_rad) * 180 / Math.PI, 2)}°${U === null ? '' : ` (uncertainty ±${fmt(U, 2)} mm)`}. `;
+    const nxt = nextPlacard();
+    return h('div', { class: `card tight record-card ${kind}`, 'data-region': 'placement-record', 'data-observation': v.observation },
+      h('h3', null, icon(kind === 'ok' ? 'check' : 'alert'), `${p.placard_id}: recorded, ${words}`),
+      h('p', { class: 'hint' }, `${nums}A stored photo measured as measurement evidence — not an acceptance decision.`),
+      h('div', { class: 'row wrap' },
+        nxt ? h('button', { class: 'btn sm grow primary', type: 'button', 'data-action': 'next-placard', onclick: () => choosePlacard(nxt) }, icon('arrow'), `Next: ${nxt}`) : null,
+        h('button', { class: 'btn sm grow', type: 'button', 'data-action': 'open-record', onclick: () => ctx.go('verify') }, icon('eye'), 'Open the record')));
   }
 
   async function load() {
@@ -72,6 +111,7 @@ export function mount(root, ctx) {
   async function choosePlacard(pid) {
     try {
       setSession(await api('PUT', `api/sessions/${s().id}/placard`, { placard_id: pid }));
+      if (live) { liveCentered = false; if (placement) placement.reset(); renderPanel(); return; }   // the next live frame is measured against the new target
       await load();
     } catch (err) { showError(err); }
   }
@@ -105,7 +145,8 @@ export function mount(root, ctx) {
     }
     const p = activePlacard(sess);
     const rep = last && p ? last.overlay.reports[p.placard_id] : null;
-    if (live) { liveKey = ''; panel.append(liveBox); renderLive(); }
+    const blocked = !!(rep && rep.status === 'blocked');
+    if (live && placement) { liveKey = ''; clear(liveBox); liveBox.append(placement.el, liveNote); panel.append(liveBox); renderLive(); }
     else if (rep) panel.append(statusHero(rep));
     if (live) {
       /* the checks below describe the frozen photo; the live frame's status is in the box above */
@@ -119,12 +160,22 @@ export function mount(root, ctx) {
       panel.append(h('div', { class: 'row wrap', role: 'radiogroup', 'aria-label': 'Placard' }, ops.map((x) =>
         h('button', { class: 'btn sm toggle', type: 'button', role: 'radio', 'aria-checked': x.placard_id === sess.active_placard_id ? 'true' : 'false', 'aria-pressed': x.placard_id === sess.active_placard_id ? 'true' : 'false', 'data-placard': x.placard_id, onclick: () => choosePlacard(x.placard_id) }, x.placard_id))));
     }
+    const rec = p ? recordOf(p.placard_id) : null;
+    const canVerify = !!(sess.local_frame && sess.local_frame.valid);
+    if (!live) panel.append(recordCard(p));
     panel.append(
-      h('div', { class: 'row' },
-        h('button', { class: 'btn sm grow', type: 'button', 'data-action': 'center-target', disabled: rep && rep.status === 'blocked' ? true : null, onclick: centerOnTarget }, icon('target'), 'Find target'),
-        h('button', { class: 'btn sm grow toggle', type: 'button', 'data-action': 'live', 'aria-pressed': live ? 'true' : 'false', disabled: rep && rep.status === 'blocked' ? true : null, onclick: toggleLive }, icon(live ? 'pause' : 'video'), live ? 'Stop live view' : 'Live guidance')),
-      h('div', { class: 'eyebrow' }, 'Target'), targetReadout(p));
-    if (rep) {
+      live
+        ? h('button', { class: 'btn sm block', type: 'button', 'data-action': 'center-target', onclick: centerOnTarget }, icon('target'), 'Find target')
+        : [
+          rec ? null : h('p', { class: 'hint', 'data-region': 'live-intro' }, 'Live placement: the camera watches while you position the placard. The screen and the sound say which way to move it, it turns green when it is in position, and the placement is recorded with a chime. Stand the phone where it sees the tags and the target, so that both hands are free.'),
+          h('div', { class: 'row wrap' },
+            h('button', { class: 'btn sm grow', type: 'button', 'data-action': 'center-target', disabled: blocked ? true : null, onclick: centerOnTarget }, icon('target'), 'Find target'),
+            rec
+              ? h('button', { class: 'btn sm grow', type: 'button', 'data-action': 'live', 'aria-pressed': 'false', disabled: blocked || starting ? true : null, onclick: toggleLive }, icon('video'), 'Place again, live')
+              : h('button', { class: 'btn sm grow', type: 'button', 'data-action': 'continue', disabled: canVerify ? null : true, onclick: () => ctx.go('verify') }, icon('camera'), 'Check from a photo')),
+        ],
+      live ? null : h('div', { class: 'eyebrow' }, 'Target'), live ? null : targetReadout(p));
+    if (rep && !live) {
       panel.append(
         h('details', { class: 'fold', open: rep.status !== 'prototype_guidance' ? true : null }, h('summary', null, checksTitle(rep)), h('div', { class: 'body' }, gateList(rep))),
         h('details', { class: 'fold' }, h('summary', null, 'Uncertainty budget'), h('div', { class: 'body' }, budgetTable(rep.uncertainty))));
@@ -133,30 +184,57 @@ export function mount(root, ctx) {
       h('div', { class: 'legend' },
         h('span', null, h('i', { style: { background: 'var(--ov-target)' } }), 'target outline'),
         h('span', null, h('i', { style: { background: 'var(--ov-target-preview)' } }), 'preview only'),
-        h('span', null, h('i', { style: { background: '#fff' } }), 'offsets from datums')),
+        live ? h('span', null, h('i', { style: { background: '#5cc8ff' } }), 'placard as measured') : h('span', null, h('i', { style: { background: '#fff' } }), 'offsets from datums')),
       h('p', { class: 'hint' }, live
-        ? 'Live guidance shows each camera frame together with the outline computed for that same frame, a moment after it was taken. Hold the phone still (a stand or a second person helps) and wait for the picture to update before trusting a position.'
-        : 'A phone stand or a second person holding the phone makes alignment much easier; neither is required. The outline is drawn on a photo that does not update — use Live guidance to see the panel as it is now.'),
+        ? 'Each picture is shown together with what was measured in that same picture, a moment after it was taken. On the dial, the ring is the tolerance of the record and the disc is the placard, as large as the uncertainty of this view: it is in position when the disc is inside the ring. The record is a stored photo, taken when nothing covers the placard.'
+        : 'The outline here is drawn on a photo that does not update. A placard that is already installed can also be checked from one new photo in the Verify step.'),
       sess.mode === 'demo' ? h('div', null, chip('simulated demo data', 'info')) : null);
+    // What comes next: placing it (live), or, once a record exists, the record.
     ctx.setActions([
       { label: 'Back', back: true, onClick: () => ctx.go('rectified') },
-      { id: 'continue', label: 'Verify placement', kind: 'primary lg', icon: 'arrow', disabled: !(sess.local_frame && sess.local_frame.valid), onClick: () => ctx.go('verify') },
+      live
+        ? { id: 'live', label: 'Stop live placement', kind: 'lg', icon: 'pause', onClick: toggleLive }
+        : rec
+          ? { id: 'continue', label: 'Verify placement', kind: 'primary lg', icon: 'arrow', disabled: !canVerify, onClick: () => ctx.go('verify') }
+          : { id: 'live', label: 'Start live placement', kind: 'primary lg', icon: 'video', disabled: blocked || starting, onClick: toggleLive },
     ]);
   }
 
   function backToPhoto() {
+    clearTimeout(stopTimer);
     live = null; liveRes = null; liveCentered = false;
-    split.classList.remove('live');
+    if (placement) { placement.destroy(); placement = null; }
+    viewer.setLayer('grid', true); viewer.setLayer('dims', true);
+    split.classList.remove('live', 'live-place');
     modePill.textContent = 'Frozen photo — not live'; modePill.className = 'pill frozen'; modePill.dataset.mode = 'frozen';
     viewer.userMoved = false;
-    if (!destroyed) load();
+    if (destroyed) return;
+    // at once: nothing of the live view stays on screen while the photo is fetched
+    viewer.setOverlay({ primitives: [] });
+    renderPanel();
+    load();
+  }
+
+  // The record was stored: the camera stops, and the Place step shows what was recorded.
+  function onRecorded(v) {
+    const ok = v.observation === 'within_tolerance_observed';
+    clearTimeout(stopTimer);
+    // leave the green and the chime a moment before the camera is released
+    stopTimer = setTimeout(() => { if (live) live.stop(); }, ok ? 1300 : 200);
   }
 
   async function toggleLive() {
     if (live) { live.stop(); return; }
+    if (starting) return;
+    starting = true;
     clear(frameSel);
     viewer.userMoved = false;
-    live = await startLive({ viewer, shell, modePill, onStopped: backToPhoto, onReport: (res) => {
+    const pl = createPlacement({ viewer, split, onRecorded });
+    pl.unlock();                         // sound may only be started from this tap
+    placement = pl;
+    // the picture is busy enough with the placard and its target: the grid and the dimension lines wait on the photo
+    viewer.setLayer('grid', false); viewer.setLayer('dims', false);
+    const lv = await startLive({ viewer, shell, modePill, placement: pl, onStopped: backToPhoto, onReport: (res) => {
       liveRes = res; renderLive();
       // open on the target the first time it is found; afterwards the operator's own zoom is kept
       if (!liveCentered && res.tracking && res.tracking.state === 'tracking' && (res.primitives || []).some((p) => p.kind.startsWith('target') && p.active !== false && p.corners)) {
@@ -164,7 +242,9 @@ export function mount(root, ctx) {
         requestAnimationFrame(centerOnTarget);
       }
     } });
-    if (live) split.classList.add('live');
+    starting = false;
+    if (destroyed) { if (lv) lv.stop(); return; }
+    if (lv) { live = lv; pl.attach(lv); split.classList.add('live', 'live-place'); }
     renderPanel();
   }
 
@@ -174,6 +254,6 @@ export function mount(root, ctx) {
     flush: true,
     redraw: () => viewer.draw(),
     pause() { if (live) live.stop(); },
-    destroy() { destroyed = true; if (live) live.stop(); viewer.destroy(); window.__lumenViewer = null; },
+    destroy() { destroyed = true; clearTimeout(stopTimer); if (live) live.stop(); else if (placement) { placement.destroy(); placement = null; } viewer.destroy(); window.__lumenViewer = null; },
   };
 }

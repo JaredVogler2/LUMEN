@@ -119,8 +119,8 @@ tags, no target is drawn until the sizes are corrected.
 
 ### 6. Place
 
-The outline of the placard on the photo, with its distances from the datums.
-The coloured banner says what you are looking at:
+First a photo with the outline of the placard and its distances from the
+datums. The coloured banner says what you are looking at:
 
 | Banner | Meaning | What to do |
 |---|---|---|
@@ -136,23 +136,85 @@ warning or stop sign did not, and an "i" passed but tells you what was not
 checked (for instance: no rule measurement was made, so the scale rests on
 the tag sizes you entered).
 
-<img src="screenshots/place_trim_checks.png" width="250" alt="List of checks with one open check and one note">
+<img src="screenshots/place_portrait.png" width="250" alt="Place step: target outline with distances and status"> <img src="screenshots/place_trim_checks.png" width="250" alt="List of checks with one open check and one note">
 
-**Live guidance** shows the outline on the moving camera picture. The outline
-is drawn only for a frame that was just measured; when tracking is lost it
-disappears and the screen says why. A still photo is always labelled
-"Frozen photo — not live".
+#### Live placement
 
-Several placards on the same panel: choose the next one with the placard
-buttons in this step. The photos and datums stay valid.
+This is how the placard is put on. The camera watches while you position it,
+and the placement is measured while it happens, not afterwards.
 
-<img src="screenshots/place_portrait.png" width="250" alt="Place step: target outline with distances and status"> <img src="screenshots/live_tracking.png" width="250" alt="Live guidance on the camera picture">
+1. Stand the phone where it sees the tags and the place of the placard: a
+   stand, a clamp, a second person. Both of your hands should be free, and the
+   phone should look at the panel as squarely as it can.
+2. Press **Start live placement** and allow the camera. Turn the sound up.
+3. Bring the placard to the dashed outline.
+
+What you get, a few times per second:
+
+* **On the picture**: the placard as it was just measured, and an arrow to
+  where it belongs.
+* **On the dial**: the ring is the tolerance of the record. The disc is the
+  placard, drawn as large as the uncertainty of this view. The placard is in
+  position when the whole disc is inside the ring. The bar under the dial is a
+  level for the rotation: the bubble belongs between the two marks.
+* **In numbers**: how far to move it (the arrow shows the direction as on the
+  screen) and how far to turn it.
+* **By ear**: beeps that come faster as the placard nears its place, a steady
+  tone while it is in position, a short falling pair when it leaves again. You
+  do not have to look at the phone.
+* **Green**: the screen flashes green and the picture gets a green frame when
+  the placard is in position.
+
+Press the placard on and take your hands away. As soon as nothing has covered
+it for about a second, LUMEN takes a full-size photo by itself, measures it
+as in the Verify step, and announces the result with a rising chime. The
+camera stops and the step shows what was recorded.
+
+<img src="screenshots/placement_guiding.png" width="250" alt="Live placement: the placard is 39 mm from its target"> <img src="screenshots/placement_in_position.png" width="250" alt="Live placement: in position"> <img src="screenshots/placement_recorded.png" width="250" alt="Place step after the placement was recorded">
+
+Things it says on the way:
+
+| It says | Meaning |
+|---|---|
+| Bring the placard | no placard is seen near the outline |
+| Move it | direction and distance are on the screen |
+| Almost | too close to the limit to call: the disc touches the ring |
+| In position. Let go to record. | in position, but a hand still covers part of it |
+| Not flat on the surface | the placard measures larger than the record says, so it is still held off the panel. A placard held off the surface looks displaced; nothing is judged until it lies flat |
+| The … sides are both covered | two opposite sides are under your hands: nothing shows where the placard is along them. Uncover one |
+| The … side is not where a placard of the recorded size has it | three sides were found and the fourth is somewhere else, with nothing over it: check that it is the right part |
+| Reading too coarse here | the uncertainty of this view is larger than the tolerance; the advice under it says what limits it |
+| "It counts as in position only within ± … mm" | the uncertainty takes most of the tolerance. Without a lens profile for the photos of step 3 this is the usual case for a ±2 mm tolerance |
+
+Your hands may cover part of the placard while you position it. A side that
+is partly covered is still measured. A side that is covered completely is
+placed from the opposite side and the placard's size in the record; it is
+drawn dashed, and the uncertainty is larger while that is so. The record is
+only ever taken from a picture in which all four sides are measured.
+
+The three switches under the dial: **Sound** on or off; **Records by itself**
+or **Record by hand**; **Record now** takes the record at once and stores what
+it finds, whatever that is.
+
+Each picture is analysed on the server and shown together with its result a
+fraction of a second after it was taken. Move slowly over the last
+millimetres and let the reading settle before you press the placard on. On an
+iPhone the sound depends on the media volume, and on some settings on the
+ring switch; if you hear nothing, switch **Sound** off and on once and check
+the volume.
+
+Several placards on the same panel: after a record, **Next: …** selects the
+next one. The photos and datums stay valid.
 
 ### 7. Verify
 
-After the placard is on the panel, take one more photo (same tags, not
-moved). LUMEN finds the placard's outline and reports how far it is from the
-target, in millimetres along x and z and in degrees, with an uncertainty:
+The record of a live placement is already here: the stored photo with the
+target outline, the measured outline and the numbers.
+
+A placard that was installed without live placement, or one you want to check
+again, is measured from one more photo (same tags, not moved). LUMEN finds
+the placard's outline and reports how far it is from the target, in
+millimetres along x and z and in degrees, with an uncertainty:
 
 * **within**: inside the tolerance even allowing for the uncertainty;
 * **outside**: outside it even allowing for the uncertainty;
@@ -171,7 +233,10 @@ Menu → **Settings & camera calibration**. Download the board, print it,
 mount it flat, measure its squares, and take 10 to 15 photos of it as the
 screen describes. Save the profile; it stays on this phone. Attach it to a
 session from the same screen. Without a profile results stay at "research
-preview".
+preview", and in live placement the uncertainty takes most of a tight
+tolerance. The profile that matters is the one for the photos of step 3: the
+datums are measured in them, out to the edges of the picture. The live
+picture itself needs none.
 
 <img src="screenshots/settings_calibration_result.png" width="250" alt="Lens profile result">
 

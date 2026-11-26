@@ -76,6 +76,24 @@ example that the scale rests on the entered tag sizes alone because no rule
 measurement was made, or that a datum is on the face by the record's word
 only. They do not lower the status; each says how to close the gap.
 
+## Live placement
+
+| What you see or hear | Likely cause | What to do |
+|---|---|---|
+| No sound | the phone's media volume is down, the ring switch mutes web pages on this phone, or sound was switched off | turn the volume up; switch **Sound** off and on once (a web page may start sound only from a tap); the screen and the green frame work without sound |
+| "Bring the placard" although it is at the outline | too little contrast between placard and panel, glare, or the placard is more than about 45 mm from the target | change the light or the angle; bring it nearer to the dashed outline |
+| It stays at "Almost" | the placard is inside the tolerance, but not by more than the uncertainty of this view (the disc touches the ring) | move it towards the centre of the dial. If the line "It counts as in position only within ± … mm" is shown, the uncertainty takes most of the tolerance: follow the advice in that line (usually: a lens profile for the photos of the Capture step, or the phone closer and squarer) |
+| "Reading too coarse here" | the uncertainty of this view exceeds the tolerance | as above; an oblique view costs most, because a placard that is not pressed on yet may stand off the surface |
+| "Not flat on the surface" although it is pressed on | the part is larger than the record says, or an edge of something else is taken for a side | check the part against the record; take hands and tools away from the edges |
+| "The outline measures … mm smaller than the placard" | something with a straight edge covers a side, or it is another part | uncover the side; check the part |
+| "The … side is not where a placard of the recorded size has it" | three sides were found, the fourth is elsewhere and nothing covers it | it is probably another part: compare its size with the record |
+| "The … and … sides are both covered" | both hands cover two opposite sides completely | let one of them show: a third of a side is enough |
+| A side of the outline is drawn dashed | that side is covered; it was placed by the placard's size from the opposite side | nothing, while positioning. The record waits until all four sides are seen |
+| Green and the steady tone, but no record | a hand still covers part of the placard ("Let go to record"), or **Record by hand** is set | take your hands away for a second, or press **Record now** |
+| "The record photo did not confirm it" | the full-size photo measured the placard just outside what the live picture said (it is at the limit) | nudge it towards the centre and wait; the photo that did not confirm it is not kept |
+| The picture updates slowly | every picture is analysed on the server: a slow connection or a busy server lowers the rate | the reading is always for the picture shown; move more slowly. Results stop being shown, and the tone stops, when no answer arrives |
+| "Tracking lost — nothing is drawn" | the tags left the picture or cannot be measured | aim the phone so that the tags and the target are both in view; fix the phone on a stand |
+
 ## Verification
 
 | What you see | What to do |
@@ -89,6 +107,8 @@ only. They do not lower the status; each says how to close the gap.
 | What you see | Cause |
 |---|---|
 | "Session not found" after a pause | sessions are deleted some hours after their last change (default 4 h), when the server is redeployed, or when another server node without shared storage answers |
+| "This copy of LUMEN cannot keep a session" on the first screen; photos that do not load; "Unknown or expired session" at every step | the application was put on a platform that runs each request in a new, empty instance (serverless functions). A session made by one request does not exist for the next | it cannot work there. Run it where one process keeps running: Posit Connect, a container, a virtual machine, or a computer on the same network (`docs/POSIT_CONNECT.md`, section 5) |
+| A photo tile says "Picture not available" | the picture could not be fetched (connection, or the session is gone) | reload; if the session is gone, start again |
 | Upload refused: too large | photo over the size limit (default 25 MB / 50 megapixels) or video over the limit (default 300 MB / 60 s analysed) |
 | "The server is busy with other measurements" | all computation slots are in use; try again in a few seconds |
 | A video stays at "processing" | the job has a time limit (default 5 min); a lost worker is reported after 45 s without progress: upload again |
@@ -98,7 +118,8 @@ only. They do not lower the status; each says how to close the gap.
 
 * `GET <base>/api/health` reports the software version and self-checks (tag
   detection on a generated tag, image codecs, storage, the operation
-  library). `degraded` names the failed check.
+  library, and whether the host can keep a session at all). `degraded` names
+  the failed check.
 * `python scripts/smoke_test.py <address>` walks through a simulated session
   on a running instance and prints each step.
 * Logs: an unexpected error is logged with its traceback and a short

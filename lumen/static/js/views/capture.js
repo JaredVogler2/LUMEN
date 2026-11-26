@@ -3,7 +3,7 @@ import { api, upload, url } from '../api.js';
 import { h, clear, icon, chip, banner, toast, showError, busy, sheet } from '../dom.js';
 import { state, setSession, refreshSession, registrationFrames, acceptedTags } from '../store.js';
 import { Viewer } from '../viewer.js';
-import { frameQualityChips, coachLine, coachList } from './common.js';
+import { frameQualityChips, coachLine, coachList, thumb } from './common.js';
 import { fetchBlob, loadImage } from '../api.js';
 import { openCamera } from './camera_sheet.js';
 
@@ -195,7 +195,7 @@ export function mount(root, ctx) {
       const cls = acc === 0 ? ' bad' : (f.markers.some((m) => !m.accepted) || f.quality.sharpness < 40) ? ' issue' : '';
       grid.append(h('div', { class: `frame-tile${cls}${f.selected ? '' : ' excluded'}`, role: 'listitem', 'data-frame': f.id },
         h('button', { type: 'button', style: { all: 'unset', cursor: 'pointer', display: 'block', width: '100%' }, 'aria-label': `Inspect photo ${f.index}`, onclick: () => inspect(f) },
-          h('img', { src: url(`api/sessions/${sess.id}/frames/${f.id}/image?max=360`), alt: `Photo ${f.index}`, loading: 'lazy' })),
+          thumb(url(`api/sessions/${sess.id}/frames/${f.id}/image?max=360`), `Photo ${f.index}`)),
         h('span', { class: 'idx' }, `#${f.index}`),
         h('button', { class: 'x', type: 'button', 'aria-label': `Remove photo ${f.index}`, onclick: () => removeFrame(f.id) }, icon('trash')),
         h('div', { class: 'meta' }, h('div', { class: 'badges' }, frameQualityChips(f),

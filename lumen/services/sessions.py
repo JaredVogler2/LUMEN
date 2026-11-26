@@ -330,11 +330,18 @@ class SessionService:
             s.frames = [x for x in s.frames if x.id != frame_id]
             self.store.delete_blob(sid, f.blob)
             self._images.drop_prefix(sid)
-            self._invalidate(s, registration=True, datums=False)
+            if f.role == FrameRole.REGISTRATION:
+                # the registration was computed with (or without, by choice) this photo: it has to be made again.
+                # A verification photo takes only its own result with it; the registration never used it.
+                self._invalidate(s, registration=True, datums=False)
             for k in [k for k, d in s.datums.items() if d.frame_id == frame_id]:
                 del s.datums[k]
                 s.local_frame = None
+            gone = {v.id for v in s.verifications if v.frame_id == frame_id}
             s.verifications = [v for v in s.verifications if v.frame_id != frame_id]
+            detail = s.research.get("verification_detail")
+            if gone and isinstance(detail, dict):
+                s.research["verification_detail"] = {k: d for k, d in detail.items() if k not in gone}
             return s
 
         return self._mutate(sid, fn, "frame_removed", {"frame_id": frame_id})
@@ -420,11 +427,14 @@ class SessionService:
 
         return delete_verification(self, sid, vid)
 
-    def track(self, sid: str, data: bytes, *, placard_ids: list[str] | None = None, meta: dict[str, Any] | None = None, force_full: bool = False) -> dict[str, Any]:
-        """Overlay for one live camera frame (never stored); see services/live.py."""
+    def track(
+        self, sid: str, data: bytes, *, placard_ids: list[str] | None = None, meta: dict[str, Any] | None = None, force_full: bool = False, placement: bool = False,
+    ) -> dict[str, Any]:
+        """Overlay for one live camera frame (never stored); see services/live.py.  With ``placement`` the placard
+        is measured in the frame as well (services/placement.py)."""
         from .live import track_frame
 
-        return track_frame(self, sid, data, placard_ids=placard_ids, meta=meta, force_full=force_full)
+        return track_frame(self, sid, data, placard_ids=placard_ids, meta=meta, force_full=force_full, placement=placement)
 
     def frame_image(self, sid: str, frame_id: str, max_edge: int | None = None) -> tuple[bytes, str]:
         s = self._load(sid)

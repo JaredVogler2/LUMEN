@@ -26,7 +26,11 @@ export function mount(root, ctx) {
     onkeydown: (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); resolveCode(sel.query); } },
   });
 
+  const host = (state.config && state.config.hosting) || null;
   root.append(
+    host && host.keeps_sessions === false
+      ? banner('danger', 'This copy of LUMEN cannot keep a session', host.message)
+      : null,
     h('h1', { class: 'view-title' }, 'Identify the operation'),
     h('p', { class: 'view-lead' }, 'Pick the panel operation and the placard to position. LUMEN uses only what the record defines: datums, signs, offsets and tolerances are never guessed.'),
     h('div', { class: 'row' },

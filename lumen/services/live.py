@@ -12,6 +12,15 @@ When a frame cannot be localised the response carries no geometry at all and
 says why (and, where possible, which way to move).  Frames are processed in
 memory and are never stored.
 
+Two things make a stream of frames cheaper than as many photos, and both are
+said in the answer.  The dark-side shift of the tag borders is a property of
+the stream (blur, tone processing), so it is measured on one frame and the
+client may hand it back with the next ones (``edge_shift`` in the frame's
+metadata): those frames skip that measurement, which is two thirds of the tag
+time, and their tags are treated like tags too small to measure it themselves.
+And with ``placement`` the placard is followed from where it was in the
+previous frame (``placement_hint``) before it is searched for.
+
 Uncertainty for a live frame costs about half a second, so it is evaluated
 for a frame and reused only for later frames that show the same tags from a
 nearly identical viewpoint (and never for longer than a few seconds); any
@@ -22,6 +31,7 @@ in view, tag size, target in view, residuals) are evaluated for every frame.
 from __future__ import annotations
 
 import time
+from dataclasses import replace
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -33,7 +43,7 @@ from ..schemas import FrameRole, FrameSource, PlacementSpec, SessionMode
 from ..vision.imaging import decode_image
 from ..vision.markers import detect_tags
 from ..vision.planar import PlanarView, localize_view
-from .frames import build_frame, camera_for_frame, sizes_from_state, tag_obs
+from .frames import EdgeShiftPool, build_frame, camera_for_frame, edge_shift_pool, sizes_from_state, tag_obs
 
 if TYPE_CHECKING:  # pragma: no cover
     from .sessions import SessionService
@@ -76,7 +86,25 @@ def _zoom(v: Any) -> float | None:
         return None
 
 
-def track_frame(svc: "SessionService", sid: str, data: bytes, *, placard_ids: list[str] | None = None, meta: dict[str, Any] | None = None, force_full: bool = False) -> dict[str, Any]:
+def _carried_pool(meta: dict[str, Any], width: int, height: int) -> EdgeShiftPool | None:
+    """The edge shift measured on an earlier frame of the same stream, handed back by the client."""
+    e = meta.get("edge_shift")
+    if not isinstance(e, dict):
+        return None
+    try:
+        delta, sigma, n = float(e["delta_px"]), float(e["sigma_px"]), int(e.get("n", 1))
+        size = [int(v) for v in e.get("for", [])]
+    except (KeyError, TypeError, ValueError):
+        return None
+    if size != [width, height] or not (np.isfinite(delta) and np.isfinite(sigma)) or abs(delta) > 2.0 or not (0.0 < sigma <= 1.0) or n < 1:
+        return None
+    return EdgeShiftPool(delta, sigma, n)
+
+
+def track_frame(
+    svc: "SessionService", sid: str, data: bytes, *, placard_ids: list[str] | None = None, meta: dict[str, Any] | None = None, force_full: bool = False,
+    placement: bool = False,
+) -> dict[str, Any]:
     t0 = time.perf_counter()
     meta = meta or {}
     lim = svc.settings.limits
@@ -89,8 +117,9 @@ def track_frame(svc: "SessionService", sid: str, data: bytes, *, placard_ids: li
     cam, note = camera_for_frame(s.calibration, img.width, img.height, nat_w, nat_h, scale, device=str(meta.get("camera_label") or ""), zoom=_zoom(meta.get("zoom")))
     sizes = sizes_from_state(s.tag_sizes)
     t1 = time.perf_counter()
+    carried = None if force_full else _carried_pool(meta, img.width, img.height)
     with svc.cpu.slot(lim.request_timeout_seconds):
-        dets = detect_tags(img.bgr, camera=cam, sizes=sizes, cfg=svc._marker_cfg)
+        dets = detect_tags(img.bgr, camera=cam, sizes=sizes, cfg=svc._marker_cfg if carried is None else replace(svc._marker_cfg, bias_correction=False))
     t2 = time.perf_counter()
     f = build_frame(
         frame_id="live", index=0, blob="", data_len=len(data), img=img, dets=dets, cal=s.calibration, cal_note=note, cam=cam,
@@ -110,7 +139,10 @@ def track_frame(svc: "SessionService", sid: str, data: bytes, *, placard_ids: li
         return _lost("tags_not_usable", "The tags cannot be measured in this frame: hold still and check focus and light.", tags=tag_list, frame=fr, simulated=simulated)
     if not any(m.tag_id in sol.layout.poses for m in accepted):
         return _lost("unknown_tags", "These tags are not part of this session's registration.", suggestions=["Aim at the tags that were on the panel during capture, or analyse again with the new tags."], tags=tag_list, frame=fr, simulated=simulated)
-    pool = svc._pool_for(s, f)  # small tags take the edge shift measured on larger ones (this frame, else the registration photos)
+    # small tags take the edge shift measured on larger ones: this frame's, else the stream's (handed back), else the registration photos'
+    own = edge_shift_pool(f.markers)
+    pool = own or carried or svc._pool_for(s, f)
+    shift = None if pool is None else {**pool.to_dict(), "for": [f.width, f.height], "source": "this_frame" if own is not None else ("stream" if carried is not None else "registration_photos")}
     view = PlanarView("live", [tag_obs(m, pool) for m in accepted], cam, "auto")
     try:
         with svc.cpu.slot(lim.request_timeout_seconds):
@@ -154,6 +186,12 @@ def track_frame(svc: "SessionService", sid: str, data: bytes, *, placard_ids: li
 
         svc._live.put(key, {"used": used, "bias": bias, "sig": sig, "t": time.time(), "unc": Uncertainty.model_validate(rep["uncertainty"])})
     t4 = time.perf_counter()
+    if placement:
+        from .placement import live_placement
+
+        with svc.cpu.slot(lim.request_timeout_seconds):
+            ov["placement"] = live_placement(svc, s, f, img.bgr, cam, loc, rep, pid, meta)
+    t5 = time.perf_counter()
 
     # ---- what the operator should do about this frame
     msg, code, arrow = "Tracking.", "tracking", None
@@ -195,11 +233,12 @@ def track_frame(svc: "SessionService", sid: str, data: bytes, *, placard_ids: li
                 "tags": tag_list, "used_tags": list(used), "rms_px": round(float(loc.rms_px), 4), "flags": list(loc.flags),
                 "uncertainty_reused": reuse is not None,
                 "H": np.asarray(loc.H, dtype=float).tolist(),
+                "edge_shift": shift,
             },
             "frame": fr,
             "timing_ms": {
                 "decode": round((t1 - t0) * 1e3, 1), "tags": round((t2 - t1) * 1e3, 1), "localise": round((t3 - t2) * 1e3, 1),
-                "overlay": round((t4 - t3) * 1e3, 1), "total": round((t4 - t0) * 1e3, 1),
+                "overlay": round((t4 - t3) * 1e3, 1), "placard": round((t5 - t4) * 1e3, 1), "total": round((t5 - t0) * 1e3, 1),
             },
         }
     )

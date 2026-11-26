@@ -154,7 +154,9 @@ def health(request: Request) -> JSONResponse:
     except Exception:
         storage_ok = False
         n_sessions = -1
-    ok = bool(st.get("apriltag_36h11") and st.get("jpeg_codec") and storage_ok and not svc.library.load_errors)
+    host = svc.settings.hosting
+    # a host that keeps no sessions cannot run this application, whatever else works
+    ok = bool(st.get("apriltag_36h11") and st.get("jpeg_codec") and storage_ok and not svc.library.load_errors and host["keeps_sessions"])
     body = {
         "status": "ok" if ok else "degraded",
         "version": __version__,
@@ -162,7 +164,8 @@ def health(request: Request) -> JSONResponse:
         "python": sys.version.split()[0],
         "platform": platform.platform(),
         "dependencies": {"opencv": cv2.__version__, "numpy": np.__version__, "scipy": scipy.__version__},
-        "checks": {**st, "storage": storage_ok, "operation_library": not svc.library.load_errors},
+        "checks": {**st, "storage": storage_ok, "operation_library": not svc.library.load_errors, "host_keeps_sessions": bool(host["keeps_sessions"])},
+        "hosting": {"kind": host["kind"], "name": host["name"], "message": host["message"]},
         "library": {"revision": svc.library.library_revision, "operations": len(svc.library.all()), "errors": svc.library.load_errors, "editable": svc.library.editable},
         "storage": {"adapter": type(svc.store).__name__, "sessions": n_sessions},
         "uptime_s": round(time.time() - request.app.state.started, 1),
@@ -199,6 +202,8 @@ def config(request: Request) -> dict[str, Any]:
         "validated_domain": None if svc._domain is None else {"id": svc._domain.get("id"), "evidence": svc._domain.get("evidence")},
         "user": _user(request),
         "capture_hints": {"min_views": 3, "max_views": 9},
+        # whether a session can survive on this host at all (a function platform keeps none)
+        "hosting": s.hosting,
     }
 
 
@@ -759,13 +764,16 @@ def delete_verification(request: Request, sid: str, vid: str) -> dict[str, Any]:
 
 
 @router.post("/sessions/{sid}/track")
-async def track(request: Request, sid: str, placards: str | None = None, full: bool = False) -> dict[str, Any]:
-    """Live guidance: overlay for the uploaded camera frame.  The frame is not stored."""
+async def track(request: Request, sid: str, placards: str | None = None, full: bool = False, placement: bool = False) -> dict[str, Any]:
+    """Live guidance: overlay for the uploaded camera frame.  The frame is not stored.
+
+    With ``placement`` the placard itself is measured in the frame: where it is against its target, which way
+    to move it, and whether it is in position."""
     _session(request, sid)
     svc = _svc(request)
     data = await _read_body(request, svc.settings.limits.max_image_bytes)
     pids = [p for p in placards.split(",") if p] if placards else None
-    return await run_in_threadpool(svc.track, sid, data, placard_ids=pids, meta=_meta(request), force_full=full)
+    return await run_in_threadpool(svc.track, sid, data, placard_ids=pids, meta=_meta(request), force_full=full, placement=placement)
 
 
 @router.get("/sessions/{sid}/report")

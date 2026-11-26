@@ -163,6 +163,26 @@ The processes then do not share a local directory. Use one of:
 `LUMEN_STORAGE=memory` keeps sessions inside one process and must not be used
 with more than one process.
 
+**Function platforms (serverless) cannot run LUMEN.** A test deployment of this
+repository on Vercel showed it: the platform ran requests that arrived
+together in separate, freshly started instances, each with an empty disk of
+its own (seen in its runtime logs: every instance first installed the
+dependencies). Photos uploaded through one request did not exist for the
+next; the thumbnails of the Capture step would not load and each further
+step answered "Unknown or expired session". Nothing in the application can
+repair that: a session has to be where the next request arrives. LUMEN now
+recognises such a platform from its environment (`VERCEL`,
+`AWS_LAMBDA_FUNCTION_NAME`, `FUNCTIONS_WORKER_RUNTIME`, `NETLIFY`), says so
+on its first screen and in the lost-session error, and reports `degraded`
+with `host_keeps_sessions: false` from `api/health`. Live placement in
+addition wants several answers per second from a process that already holds
+the registration; that, too, needs a process that keeps running.
+
+What does work, apart from Posit Connect: anything that keeps one process (or
+several on one disk) running and serves it over HTTPS, which the camera
+needs. For a trial on one phone, `uvicorn app:app` on a computer in the same
+network behind any HTTPS tunnel or reverse proxy is enough.
+
 **Operation records entered in the app** are written to one JSON file
 (`LUMEN_OPERATIONS_DIR`, see section 6) under a file lock, and every process
 re-reads it when it changes, so several processes on one host stay
@@ -306,8 +326,12 @@ Record the iOS version, the browser and the phone model with each result.
 | 8 | Use a video (recorded with the system camera, portrait and landscape) | frames upright; chosen frames show the tags |
 | 9 | Lock the phone / switch apps while the camera is open | camera stops; "Resume camera" works |
 | 10 | Rotate the phone | layout follows; a warning appears if the stream size changes mid-session |
-| 11 | Analyse → Datums → Place → Live guidance | outline appears only while tags are in view; disappears when they leave |
-| 12 | Verify with a new photo | deviations shown; "not an acceptance decision" visible |
+| 11 | Analyse → Datums → Place → Start live placement, phone on a stand | the dashed target is drawn only while the tags are in view; note the delay and the results per second shown in the red pill |
+| 11a | Bring the placard to the outline | its outline is drawn and follows it; arrow, distance and beeps; note whether the beeps are heard with the ring switch in both positions |
+| 11b | Hold it with a hand over one end | the covered side is drawn dashed; the reading goes on |
+| 11c | Hold it a centimetre off the surface | "Not flat on the surface"; no green |
+| 11d | Place it, press it on, take the hands away | green and the steady tone, then the chime; the Place step shows what was recorded; the camera is off |
+| 12 | Verify | the record of 11d is there; a new photo can be measured as well; "not an acceptance decision" visible |
 | 13 | Menu → End session | photos deleted; reopening the address starts fresh |
 
 ## 10. Troubleshooting
@@ -318,8 +342,10 @@ Record the iOS version, the browser and the phone model with each result.
 | "Camera access was refused" or no camera prompt | page not on HTTPS; or camera blocked for the site (Safari: "aA" → Website Settings); or an embedding page lacks camera permission |
 | `server_busy` (503) under load | raise Max processes, or `LUMEN_MAX_CONCURRENT_JOBS` if the host has spare cores |
 | Session "not found" after a while | time limit reached (`LUMEN_SESSION_TTL_SECONDS`), content redeployed, or a second node without a shared `LUMEN_DATA_DIR` |
+| "This copy of LUMEN cannot keep a session", photos that do not load, "Unknown or expired session" at every step | the host starts an empty instance per request (a function platform): see section 5 |
+| Live placement updates less than about twice a second | network delay, or the server is short of processor time: each frame is analysed on the server (about 0.2 s of one core on the development machine). Give the content more processor, keep Min processes at 1 so that nothing has to start |
 | Video "could not be decoded" | codec not supported by the bundled decoder; record in the phone's "Most compatible" format or upload photos |
-| Health check reports `degraded` | the response lists which self-check failed (tag detection, JPEG codec, storage, operation library) |
+| Health check reports `degraded` | the response lists which self-check failed (tag detection, JPEG codec, storage, operation library, a host that keeps no sessions) |
 | Import error for `cv2` on the server | the server built OpenCV from source instead of using the wheel; make sure pip may use binary wheels |
 
 ## 11. Not run
@@ -327,5 +353,6 @@ Record the iOS version, the browser and the phone model with each result.
 * Any deployment to a Posit Connect server (publishing, manifest publishing,
   Vars, process settings, access control, user header, sub-path on the real proxy).
 * Several Connect nodes; off-host execution.
-* Any real iPhone (camera, torch, recording format, orientation, HEIC upload).
+* Any real iPhone (camera, torch, recording format, orientation, HEIC upload,
+  live placement and its sound).
 * Load beyond a single operator.

@@ -108,6 +108,39 @@ class Settings:
     def on_posit_connect(self) -> bool:
         return bool(os.environ.get("CONNECT_SERVER") or os.environ.get("RSTUDIO_PRODUCT") == "CONNECT" or os.environ.get("POSIT_PRODUCT") == "CONNECT")
 
+    @property
+    def hosting(self) -> dict[str, object]:
+        """Where this process runs, as far as its environment says, and whether a session can survive there.
+
+        LUMEN keeps a session (its photos, the registration, the records) with the process that serves it: in
+        files under ``data_dir`` or in memory.  That needs requests of one session to reach a place that still has
+        them.  A function platform starts instances as it pleases, each with a disk of its own that is empty and
+        is thrown away; a session made by one request is unknown to the next.  The application cannot work
+        there, and it has to say so instead of failing photo by photo.
+
+        ``keeps_sessions`` is ``False`` where the platform is known not to keep them, ``True`` otherwise (which is
+        not a promise: it says only that nothing known speaks against it).
+        """
+        for kind, name, var in (
+            ("vercel", "Vercel (serverless functions)", "VERCEL"),
+            ("aws_lambda", "AWS Lambda", "AWS_LAMBDA_FUNCTION_NAME"),
+            ("azure_functions", "Azure Functions", "FUNCTIONS_WORKER_RUNTIME"),
+            ("netlify", "Netlify Functions", "NETLIFY"),
+        ):
+            if os.environ.get(var):
+                return {
+                    "kind": kind, "name": name, "keeps_sessions": False,
+                    "message": (
+                        f"This copy of LUMEN runs on {name}. Each request there may be served by a new instance with an empty disk, "
+                        "so photos and sessions are lost between requests and nothing after the first step can work. "
+                        "Run LUMEN where one process keeps running: Posit Connect (docs/POSIT_CONNECT.md), a container or a "
+                        "virtual machine, or a computer on the same network."
+                    ),
+                }
+        if self.on_posit_connect:
+            return {"kind": "posit_connect", "name": "Posit Connect", "keeps_sessions": True, "message": ""}
+        return {"kind": "process", "name": "", "keeps_sessions": True, "message": ""}
+
 
 def load_settings() -> Settings:
     lim = Limits(

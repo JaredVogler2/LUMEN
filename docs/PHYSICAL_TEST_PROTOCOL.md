@@ -177,6 +177,10 @@ outside this public repository if they contain anything that is not generic.
 
 | Test | Status |
 |---|---|
+| **Live placement, agreement with a reference.** Ten placements per operator and phone with live placement, phone on a stand: after each automatic record, measure the placard's position with the reference instrument. Report the difference between the record and the reference (bias, spread), the share of records whose stated uncertainty covers that difference, and any record announced as within tolerance that the reference puts outside it | NOT RUN |
+| **Live placement, hands.** With the placard held as an installer holds it (one end, both ends, from above, with a squeegee): how often a reading is shown, how often a side is drawn dashed, and every case in which the shown position is off by more than its stated uncertainty while a hand is on the placard (compare with the record taken after letting go). Gloves of the panel's colour are a required case | NOT RUN |
+| **Live placement, not flat.** The placard held 2, 5 and 10 mm off the surface over the target, square-on and from 30°: is it refused as not flat, or is the displacement inside the stated uncertainty? | NOT RUN |
+| **Live placement, timing and sound.** Results per second and delay on the deployed server over the site's network; time from letting go to the chime; whether the tones are heard in the workshop with the ring switch in both positions | NOT RUN |
 | Managed iPhone, Safari: camera permission, rear camera selection, photo, video, torch control, live guidance, through the deployed HTTPS address | NOT RUN |
 | Posit Connect: publish, start-up, sub-path addresses, session storage with more than one process, time limits, upload limits (see `docs/POSIT_CONNECT.md`, section 9) | NOT RUN |
 | Lens profile made with a real print and a real phone, checked on a second print | NOT RUN |

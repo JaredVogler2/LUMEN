@@ -59,6 +59,7 @@ for the front end.
 flowchart TB
   subgraph Phone["Phone browser (vanilla ES modules, no build step)"]
     UI["views/*: Identify, Markers, Capture, Datums, Rectified, Place, Verify"]
+    PLV["views/live.js + placement.js: live loop, dial, record; sound.js: tones"]
     CAM["camera.js: getUserMedia, torch, stills, recording"]
     VIEW["viewer.js: canvas, pan/zoom, overlay primitives"]
     LS[("localStorage: units, theme, tag sizes, lens profiles")]
@@ -66,7 +67,7 @@ flowchart TB
   subgraph Server["FastAPI application (app.py → lumen.api)"]
     API["api/routes.py: JSON API, uploads, limits, errors"]
     SVC["services/sessions.py: workflow and state changes"]
-    SUB["services/: frames, capture, live, verification, reference, calibration, photometric (research), export, jobs"]
+    SUB["services/: frames, capture, live, placement, verification, reference, calibration, photometric (research), export, jobs"]
     POL["policy/: uncertainty budget, gates"]
     LIB["operations/library.py: records, revisions, change log"]
     AST["assistant/ (off by default)"]
@@ -87,7 +88,9 @@ flowchart TB
   SYN["synth/: renderer for tests, demo and benchmark"]
 
   UI --> API
+  PLV --> API
   CAM --> UI
+  CAM --> PLV
   VIEW --> UI
   UI --- LS
   API --> SVC
@@ -121,6 +124,19 @@ Data flow of a measurement:
 5. `overlay/geometry.py` projects the target into the photo as drawing
    primitives; the browser only draws them. The browser never computes
    geometry.
+6. Live placement (`services/live.py`, `services/placement.py`): the browser
+   sends reduced camera frames one after another. Each is registered against
+   the tag layout, the placard is measured in it (`vision/placard.py`, the
+   same outline measurement as a verification, with the allowances of
+   `docs/CONVENTIONS.md`, "A placard in a live frame"), and the answer says
+   how far the placard is from its target and whether it is in position.
+   Two things carried from frame to frame make that fast, and the client
+   hands both back with the next frame: the stream's edge shift (so the tags
+   are measured without re-estimating it) and where the placard was (so it is
+   followed instead of searched for). Nothing of this is stored. When the
+   placard has been in position and uncovered for a second, the browser
+   uploads one full-size frame as a verification photo and the ordinary
+   verification is the record.
 
 State: a session is one JSON document plus photo blobs behind
 `storage.SessionStore` (file directory with a lock, or memory). Every change
@@ -135,7 +151,7 @@ the lens profile invalidates everything computed from them.
 |---|---|
 | `app.py` | entry point `app:app` |
 | `lumen/api/` | application factory (security headers, base-path handling), routes |
-| `lumen/services/` | workflow: sessions, frames, capture coaching, live guidance, verification, scale check, calibration workspaces, the research-only flashlight step, export, jobs |
+| `lumen/services/` | workflow: sessions, frames, capture coaching, live guidance and live placement, verification, scale check, calibration workspaces, the research-only flashlight step, export, jobs |
 | `lumen/vision/` | measurement algorithms (see the diagram) |
 | `lumen/geometry/` | camera model, homographies, lines, local frame, rigid transforms, a small Levenberg–Marquardt solver |
 | `lumen/policy/` | uncertainty budget and gates, with their thresholds in one dataclass each |
@@ -162,6 +178,17 @@ the lens profile invalidates everything computed from them.
 * **No gravity.** Directions come from the datums and the record.
 * **The picture and its overlay belong together.** An outline is drawn only
   on the frame it was computed for; live guidance shows the analysed frame.
+* **A reading that is no longer current is withdrawn.** When no answer
+  arrives, the overlay, the dial and the tone stop (`STALE_MS` in `live.js`
+  and `sound.js`).
+* **Green is guidance, the record is a photo.** "In position" in a live frame
+  uses the rule of a verification (deviation plus expanded uncertainty inside
+  the tolerance) but allows for hands; it stores nothing. The record is a
+  stored full-size photo with all four sides measured, and it is announced as
+  recorded only if that measurement is inside the tolerance too.
+* **A session lives with one process (or one shared directory).** On a host
+  that starts an empty instance per request the application says so
+  (`Settings.hosting`) instead of failing step by step.
 * **Labels.** Simulated data says so on every screen; manual, inferred and
   measured values are distinguished in the data and the interface.
 * **No raw HTML from data.** The front end builds the page with
@@ -206,6 +233,9 @@ Implemented and tested on synthetic data (see `docs/BUILD_LOG.md` and
 * automatic and manual datums, rounded-edge silhouette model;
 * uncertainty budget and gates; independent scale check;
 * target overlay on stills, rectified view, live guidance;
+* live placement: the placard measured in every live frame while it is
+  positioned, with hands on it, direction and distance on the screen and by
+  sound, and the record taken by itself;
 * verification of an installed placard; export; deletion;
 * operation library with manual entry, revisions and code scanning;
 * lens profiles from board photos;
@@ -224,6 +254,8 @@ Not done, or not possible here:
 | Any measurement on a real phone, real print or real panel | NOT RUN (`docs/PHYSICAL_TEST_PROTOCOL.md`) |
 | Deployment on a Posit Connect server | NOT RUN (`docs/POSIT_CONNECT.md`, section 9) |
 | iPhone Safari camera, torch and recording behaviour | NOT RUN; the code follows the published browser interfaces and was exercised in Chromium with a fake camera only |
+| Live placement with a real hand, a real placard and a real phone; sound on a phone | NOT RUN. Hands were boxes in rendered pictures; the tones were checked as commands in a browser without a loudspeaker |
+| Frame-rate tracking in the browser between server answers | not built; the picture and the reading update as fast as the server answers (about five times a second on the development machine, less over a network) |
 | Validated domain | none; the status `validated` cannot occur |
 | Curved target surfaces | refused by design |
 | Rolling shutter, focus breathing, optical stabilisation, local tone mapping | not modelled in the synthetic photos; covered only by generic bounds in the budget |
@@ -233,8 +265,31 @@ Not done, or not possible here:
 
 ## 7. Known weak points
 
-* Tag measurement takes about 0.3 s per 1600×1200 frame on one core, so live
-  guidance runs at one to three frames per second.
+* Every live frame makes a round trip to the server. With the stream's edge
+  shift and the placard's last place handed back by the client, a 1280×720
+  frame costs about 0.17 s of server time on the development machine (0.9 s
+  for the first frame, 0.3 s while no placard is in view, 0.4 to 0.7 s when a
+  covered placard has to be searched for again). On a network the rate is
+  lower. The picture shown is always the analysed one, so the display moves
+  in steps.
+* What tells a hand from a placard in a live frame is colour and brightness
+  beside the edges (`foreign_sides`, `plain_fraction` in `vision/placard.py`)
+  and the record's size. The thresholds were set on rendered pictures in
+  which a hand is a skin-coloured box, with and without the chroma
+  subsampling of a video stream. A glove or a tool of the panel's colour is
+  not told apart by colour; the size checks are then the only guard, and they
+  need two opposite sides. A reading with hands on the placard is never
+  recorded, but it is shown and sounded.
+* A live reading is checked for "lying on the surface" by its size only, and
+  the height that this cannot exclude is carried as an uncertainty that
+  grows with the viewing angle. A phone that looks at the panel obliquely
+  will therefore rarely show "in position" for a tight tolerance.
+* Without a lens profile for the registration photos the budget carries an
+  allowance for an uncharacterised lens that acts mostly through the datum
+  lines (1.4 mm in the test layout). Against a ±2 mm tolerance that leaves
+  0.2 mm of room for "in position". The live picture's own lens matters
+  little (0.16 mm in the same layout), because the placard sits among the
+  tags.
 * The stated uncertainty is dominated by generic bounds (residual edge shift,
   panel flatness, lens model). On synthetic photos the true error is several
   times smaller than the stated value; whether the bounds are right for a real

@@ -1054,3 +1054,176 @@ Tests on the final code:
 
 The code under test did not change between the start of these runs and the
 commit (checked by a hash of the difference to the last commit).
+
+## 2026-11-25 — Live placement: the placard is measured while it is being positioned (prompts 09, 10, 11)
+
+The workflow so far ended with "place it, then take a photo and see". That is
+measuring after the fact, and what it finds is rework. The requirement is the
+other way round: the camera watches while the placard is positioned, says
+which way to move it, turns green when it is right and announces it.
+
+It was not a redesign. Identify, Markers, Capture, Datums and Rectified are
+unchanged, and so are registration, datums, the uncertainty budget and the
+verification. What changed is the last third: the Place step now runs a loop,
+and the Verify step mostly shows a record that already exists.
+
+### What a live frame answers
+
+`POST …/track?placement=true` registers the frame against the tag layout as
+before and then measures the placard in the same frame with the outline
+measurement of the verification (`vision/placard.py`). The answer says where
+the placard is relative to its target, which way to move it on the screen,
+and whether it is in position. "In position" is the rule of a verification:
+deviation plus expanded uncertainty of this frame inside the tolerance of the
+record. Nothing is stored.
+
+Three things are particular to a placard that is still in a hand, and each
+was settled by asking what the picture can and cannot show:
+
+* **It may not lie on the surface.** A placard 8 mm off the panel, 640 mm
+  from the camera, is displaced in the picture by 8 mm times the tangent of
+  the viewing angle. Height shows as size: it measures 1.3 % too large. A
+  placard that does not measure its size is not judged, and the height that
+  the size test cannot exclude (2.6 mm at 1280×720 and this distance) enters
+  the uncertainty as a bound that grows with the viewing angle: 0.35 mm
+  square-on, 2.2 mm from 33° to the side, which alone is more than the
+  tolerance. From the side the answer is "too coarse here: hold the phone
+  square to the placard", not a green that a lifted corner could fake.
+* **Hands cover it.** See the next section.
+* **Green must not be the record.** The record is a stored photo at the
+  camera's full size, measured by the ordinary verification with all four
+  sides, taken by the browser once the placard has been in position with
+  nothing covering it for three answers in a row and at least one second. It
+  is announced as recorded only if that measurement is inside the tolerance
+  too; a photo that does not confirm it is deleted again.
+
+### Hands
+
+The first version stopped reading as soon as a side was covered, which is the
+normal state of a placard that is being positioned. Each of the following was
+found with a probe that puts skin-coloured boxes over the rendered placard,
+and each is now a test.
+
+| What happened | Why | Change |
+|---|---|---|
+| a hand over a whole side: no reading | three sides are not an outline | a hidden side is placed from the opposite, measured side and the record's size (`complete_from_size`). It costs uncertainty: 1.0 mm is allowed for the part's own size, and the size (lying flat) can then be checked in one direction only |
+| the hand's straight edge, 12 mm inside the placard, was measured as the side: 15 mm "too small", position 4 mm off | a side that is not found near the outline was looked for three times further away (meant for parts of another size) | not in live frames: there a side that is not where it should be is hidden |
+| a side placed where nothing covered it (part 20 mm narrower than the record) | placing by size assumed a hand | a side is placed only where the picture shows something over it. Where the place looks like bare panel or bare placard it is not placed, and three sides with a fourth that is nowhere give "is this the right part?" (`plain_fraction`) |
+| with a side hidden, the outline was the printed border 3 mm inside the edge | the border's inner edge has the other sign; with one true side missing it offered as many sides | among incomplete candidates the one whose opposite sides are the record's distance apart is the placard, before the number of sides counts |
+| the ends of the three text bars passed for the left side | a third of a side's length is enough in a live frame | an edge with the placard's own colour outside it is not a side; nor is one with something that is not the panel outside it (`foreign_sides`) |
+| a search with a hand in the picture found two places alike and was "not clear" | the search only reported rivals | every rival place is measured the same way; a place is the placard only if its outline is complete. Rivals that lock onto the same outline confirm it |
+| the follower lost the placard after 4 to 5 mm of movement, although it scans ±7 mm | the noise level was taken from the outer end of each profile, where the edge now was | the calmer of the two ends is taken; 6 mm is followed |
+| after a larger jump one side was not found, was placed by size and drawn as covered, though it was in plain view | placing by size did not look whether the side is to be seen | a placed side that shows the placard's own edge is measured from where the outline now is (`edge_fraction`) |
+| followed with the wrong sign after a side went under a hand | both signs were tried in every frame | a placard that is followed keeps the sign of its edges |
+| everything above worked in the tests and not in the browser | the browser's video path stores colour at half resolution; the first pixels inside an edge then carry the smeared colour of the border, differently on every side | the panel is sampled 3 to 6 px outside a side, the placard 6 to 10 px inside; hue is compared closely and brightness coarsely (a hand also shades what is next to it) |
+
+What still gives no reading, on purpose: both ends gripped completely
+("The right and left sides are both covered: uncover one of them"), and two
+neighbouring sides covered on a placard that was not seen whole a moment
+before. With two neighbouring sides placed by size the position is shown but
+not judged, because nothing then says whether it lies flat.
+
+### What it costs per frame
+
+A live frame used to cost a second. Two things are carried from frame to
+frame, and both are said in the answer: the edge shift of the tag borders is
+a property of the stream, so it is measured on one frame and handed back by
+the client with the next ones (refreshed every five seconds); and the placard
+is followed from where it was. Measured on the development machine (shared
+cores, one server process, frames 1280×720):
+
+| | server time |
+|---|---|
+| first frame (edge shift, uncertainty, search) | 0.9 s |
+| followed frame | 0.17 s |
+| no placard in view (searched every frame) | 0.27 s |
+| a covered placard that has to be searched for again (search plus rivals) | 0.42 s |
+| through headless Chromium on the same machine | about 5 results per second, each shown 0.2 s after its picture was taken |
+| from "in position, hands off" to the chime | about 2 s (one second of rest, then 0.7 s for the photo and its measurement) |
+
+Frames are sent at 1280 px in placement, not 1600: the budget of a live
+reading is not limited by pixel size (1.074 mm at 1280×720 against 1.052 mm
+at 1600×900 in the same view).
+
+### What limits "in position"
+
+Read from the budget of a live reading, same panel, ±2 mm tolerance:
+
+| Registration photos | Live reading | Room left for "in position" |
+|---|---|---|
+| with a lens profile, placard whole | ±1.07 mm (edge shift 0.44, tag size 0.35 and 0.20, lifting 0.35, flatness 0.33, live lens 0.16) | ±0.93 mm |
+| with a lens profile, one side under a hand | ±1.41 mm (lifting 0.70, because the size is then checked in one direction only; size of the part 0.50) | ±0.59 mm |
+| without a lens profile | ±1.84 mm (uncharacterised lens 1.36) | ±0.16 mm |
+
+The 1.36 mm is not the live picture's lens. It is the allowance of 1 %
+distortion acting on the datum lines of the registration photos, which run
+out to the picture's edges. The live frame's own share is 0.16 mm, because
+the placard sits among the tags. So the profile that matters is the one for
+the photos, and a phone without one will hang at "almost" on a ±2 mm
+tolerance. The answer now says so ("It counts as in position only within
+±0.2 mm …: uncharacterised lens distortion") instead of leaving the
+operator to guess. Estimating the distortion from the capture itself would
+remove the largest term for every uncalibrated phone; not done.
+
+### On the phone
+
+The live view shows each analysed frame with the placard's measured outline
+(a side placed by size is dashed) and an arrow to the target. Beside it: a
+dial on which the ring is the tolerance and the disc is the placard, as large
+as the uncertainty, so that "in position" is "the disc is inside the ring";
+a level for the rotation; the distance and the turn in large figures; one
+line that says what to do. The eyes are on the placard, so the state is also
+heard: beeps that speed up, a steady tone in position, a chime for the
+record. Every sound follows a reading and stops by itself 1.3 s after the
+last one, so a lost connection cannot leave "in position" sounding.
+
+### Found on the way
+
+* **Deleting a verification photo discarded the registration.**
+  `remove_frame` invalidated everything for any photo. On the Verify screen
+  "Delete this photo" therefore threw away the analysis and all other
+  verification results; the browser test only looked at the list of
+  verifications, which was empty either way. A verification photo now takes
+  only its own result with it.
+* **A state class named like an existing one.** The live panel in its
+  "guide" state took the absolute positioning of the capture screen's
+  `.guide` hint and lay over the picture. Seen in the first screenshot;
+  state classes now carry a prefix.
+* **The test deployment on a function platform.** The screenshots that came
+  with the request showed broken photo tiles and "Unknown or expired
+  session". The platform's logs showed why: requests arriving together were
+  served by separate, freshly started instances, each with an empty disk.
+  LUMEN keeps a session with its process; it cannot work there, and live
+  placement, which asks one process several times a second, even less. The
+  application now recognises such a host, says so on the first screen and in
+  the error, and reports it in the health check
+  (`docs/POSIT_CONNECT.md`, section 5). A photo that cannot be loaded is a
+  labelled tile instead of the browser's broken-image mark.
+
+### Tests
+
+`ALGORITHM_VERSION` is now `lumen-algo-2026.11.3`. The benchmark was not run
+again: it measures registration, datums and the target, and none of that code
+changed (the changes are in the placard outline, the live path and the
+deletion of photos). The outline measurement of the verification changed in
+two places that can alter a result (the noise level of a side profile, and
+which incomplete outline is preferred); its tests pass unchanged.
+
+| Suite | Result |
+|---|---|
+| unit and integration | 521 tests: 520 pass, 1 skipped (the opt-in call to a real language-model endpoint); 13.4 min |
+| browser (Chromium, phone-sized window, fake camera) | 42 tests: 42 pass; 9.0 min |
+
+New: 13 tests of the live placement through the API, 6 of the outline with
+hands, 4 browser tests with films of a placard (arriving and resting; far
+away; under a hand; absent), one of the deletion, and two of the host notice
+(API and browser).
+
+### Not run
+
+No phone, no hand, no placard, no loudspeaker. The hands are boxes, the
+placard is a rendered rectangle with a border and three bars of print, the
+video is a film in a fake camera. Whether real skin is told from a real side,
+whether the tones are heard in a workshop, how many answers per second a
+deployed server gives over a real network: `docs/PHYSICAL_TEST_PROTOCOL.md`,
+section 8.

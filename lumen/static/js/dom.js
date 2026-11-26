@@ -83,6 +83,8 @@ const ICONS = {
   // coaching arrows: where to move the phone
   go_left: 'M19 12H5M11 6l-6 6 6 6',
   go_right: 'M5 12h14M13 6l6 6-6 6',
+  sound: 'M4 9.5h3.5L12 6v12l-4.5-3.5H4v-5zM15.5 9a4.2 4.2 0 010 6M18 6.5a7.6 7.6 0 010 11',
+  sound_off: 'M4 9.5h3.5L12 6v12l-4.5-3.5H4v-5zM16 9.5l5 5M21 9.5l-5 5',
   go_up: 'M12 19V5M6 11l6-6 6 6',
   go_down: 'M12 5v14M6 13l6 6 6-6',
   go_closer: 'M4 4l5 5M9 5v4H5M20 4l-5 5M15 5v4h4M4 20l5-5M9 19v-4H5M20 20l-5-5M15 19v-4h4',
