@@ -26,16 +26,16 @@
       "checksum": "4a559da04f341c854ad374a3d0529f27"
     },
     "lumen/__init__.py": {
-      "checksum": "5c981f50ea96912238cf8ca12e378d64"
+      "checksum": "36efc735d6098ca108d82ff03f382a9f"
     },
     "lumen/api/__init__.py": {
       "checksum": "d41d8cd98f00b204e9800998ecf8427e"
     },
     "lumen/api/app.py": {
-      "checksum": "03bf1963f3e75d2a854d0ea9c3d20bad"
+      "checksum": "d4476ba528ce7358e9f1a2aefc6ea567"
     },
     "lumen/api/routes.py": {
-      "checksum": "b96a37da67f8d6590f051610c34c3dc4"
+      "checksum": "1851789f7694f80ae770a8b44efbb25f"
     },
     "lumen/assistant/__init__.py": {
       "checksum": "79e6958b61d339ee9af215636d0a89a1"
@@ -47,7 +47,7 @@
       "checksum": "ee1f6e49728c08a24ad0983a3a921f5e"
     },
     "lumen/config.py": {
-      "checksum": "138dfb6150db9b7aadb30c2327a9ffa6"
+      "checksum": "fd221dce421052e0cef34595479f5efb"
     },
     "lumen/demo_assets/curve/manifest.json": {
       "checksum": "792370daabde8adac6c1debfc58eef19"
@@ -170,22 +170,25 @@
       "checksum": "fdc1632a1782d12a8c6c6f0159e188b3"
     },
     "lumen/services/live.py": {
-      "checksum": "f5bc558117edb968cb1d8f7a6360d658"
+      "checksum": "e0ca3a8dbb6172a90edd9f93cdcabdeb"
     },
     "lumen/services/photometric.py": {
       "checksum": "0b541ab24c896a535583c646fcbebf7f"
+    },
+    "lumen/services/placement.py": {
+      "checksum": "a549ed0926aa3b542171ff50b1c89a43"
     },
     "lumen/services/reference.py": {
       "checksum": "ff9fe64b8ee1888d5f34b6847f5fd779"
     },
     "lumen/services/sessions.py": {
-      "checksum": "d26f70c77246ddea5012d58d5f00c382"
+      "checksum": "843a696e12de2f123a22193e8289d4f7"
     },
     "lumen/services/verification.py": {
-      "checksum": "13724c11c38e66f380c24f02a7017413"
+      "checksum": "039e846f4594067b58b863e21565a9f4"
     },
     "lumen/static/css/lumen.css": {
-      "checksum": "ae53760998d3b20769fbc57677d04b28"
+      "checksum": "7305b9630bb1491e050de3cc969ab04d"
     },
     "lumen/static/img/icon.svg": {
       "checksum": "697017c0200fdaccba1d27c70abd27da"
@@ -200,25 +203,28 @@
       "checksum": "77782d40ba0763190618bee8fa54c2c1"
     },
     "lumen/static/js/dom.js": {
-      "checksum": "88542c720490481458a51ccf31e5f482"
+      "checksum": "04152ab90174a289602875704cb79585"
     },
     "lumen/static/js/main.js": {
       "checksum": "45d58fcafdac129a3833ac57556b714d"
     },
+    "lumen/static/js/sound.js": {
+      "checksum": "41b38e6484606e4ccce8e36a9aae320e"
+    },
     "lumen/static/js/store.js": {
-      "checksum": "3c73ec7d13cf7fa49bfd64b667afd7c7"
+      "checksum": "a8c1240899efeb814fa21714a7b3062a"
     },
     "lumen/static/js/viewer.js": {
-      "checksum": "2353ec8e186d7af6de1c659777a8955f"
+      "checksum": "e8ce042fc24e303df22d9e4ac60c0ec1"
     },
     "lumen/static/js/views/camera_sheet.js": {
       "checksum": "995036327c71a9d4b0532eabe2a31ae8"
     },
     "lumen/static/js/views/capture.js": {
-      "checksum": "0d64cd7ef7324c459854871dc8a25534"
+      "checksum": "b48a4a1333fc2ab433182535dc881963"
     },
     "lumen/static/js/views/common.js": {
-      "checksum": "c2a409af05b5b5805e6a3d5495a34582"
+      "checksum": "56ee406702cd0c2e0760f68e48c51ec3"
     },
     "lumen/static/js/views/datums.js": {
       "checksum": "6e7fa3f6ed124b923fb1bf90f42fc670"
@@ -227,10 +233,10 @@
       "checksum": "30c91e2f9f415e1924c5dace35862420"
     },
     "lumen/static/js/views/identify.js": {
-      "checksum": "f21dd74499a22202c66717056d5b42c4"
+      "checksum": "eb1e6e1bdc73f200cb367623761316c9"
     },
     "lumen/static/js/views/live.js": {
-      "checksum": "4463d32316d6916c60eff25fd67d159f"
+      "checksum": "014ec4340cb089f0cd97655b3f2b94c1"
     },
     "lumen/static/js/views/markers.js": {
       "checksum": "4e033789eb3e4a52261cbb56c79851ef"
@@ -239,7 +245,10 @@
       "checksum": "89659e5532c7603f09c1e469a98a4511"
     },
     "lumen/static/js/views/place.js": {
-      "checksum": "f180607d4656dbf31264a17c95b44bb4"
+      "checksum": "075695eb214f890ac6a687b7c9c774cd"
+    },
+    "lumen/static/js/views/placement.js": {
+      "checksum": "b66e2528c952d613aeb93de5b2c126b2"
     },
     "lumen/static/js/views/rectified.js": {
       "checksum": "8507f10c6d32cb5c254064b945c0ee97"
@@ -248,10 +257,10 @@
       "checksum": "5b714b708ebcbb97ea47627440b936c1"
     },
     "lumen/static/js/views/settings.js": {
-      "checksum": "f4c5ad564e83aaa4ea2c5995fb078652"
+      "checksum": "44e6f03bcb1e7f5a339e4119656b30ce"
     },
     "lumen/static/js/views/verify.js": {
-      "checksum": "0257f7734e98ecb76521e2b50f21e44a"
+      "checksum": "34f1b4ad4cecc13d5682f4cb4cb3e522"
     },
     "lumen/storage/__init__.py": {
       "checksum": "d41d8cd98f00b204e9800998ecf8427e"
@@ -314,7 +323,7 @@
       "checksum": "ca9edbc64890af819bf4f71968513798"
     },
     "lumen/vision/placard.py": {
-      "checksum": "f223600eda64de074efe5fc96f16ac1b"
+      "checksum": "87915b4e4d3278edcac95e733f60c7d8"
     },
     "lumen/vision/planar.py": {
       "checksum": "3d996753b58be2b8155031e98fc04ee2"

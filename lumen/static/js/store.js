@@ -41,6 +41,10 @@ export const prefs = {
   set tagSizes(v) { LS.set('lumen.tagSizes', v); },
   get calibrations() { return LS.get('lumen.calibrations', []); },
   set calibrations(v) { LS.set('lumen.calibrations', v); },
+  get placeSound() { return LS.get('lumen.placeSound', true); },
+  set placeSound(v) { LS.set('lumen.placeSound', !!v); },
+  get placeAuto() { return LS.get('lumen.placeAuto', true); },
+  set placeAuto(v) { LS.set('lumen.placeAuto', !!v); },
 };
 export function rememberSession(id) {
   try { if (id) sessionStorage.setItem('lumen.sid', id); else sessionStorage.removeItem('lumen.sid'); } catch (_) { /* ignore */ }

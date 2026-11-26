@@ -6,7 +6,7 @@ import { api, upload } from '../api.js';
 import { h, clear, icon, banner, chip, toast, showError, busy, fmt } from '../dom.js';
 import { state, setSession, refreshSession, activePlacard, lengthOut } from '../store.js';
 import { Viewer } from '../viewer.js';
-import { showFrame, viewerShell, zoomButtons, maximizeButton, cell, budgetTable } from './common.js';
+import { showFrame, viewerShell, zoomButtons, maximizeButton, cell, budgetTable, flagText } from './common.js';
 import { openCamera } from './camera_sheet.js';
 
 const OBS = {
@@ -16,33 +16,6 @@ const OBS = {
   partial: { title: 'Partial outline only', cls: 'research_preview', ic: 'alert', sub: 'Only part of the placard outline could be measured; the centre is not reported.' },
   no_evidence: { title: 'No measurement', cls: 'blocked', ic: 'block', sub: 'This photo gives no evidence of the placard position.' },
 };
-
-const SIDE = { top: 'top edge', right: 'right edge', bottom: 'bottom edge', left: 'left edge' };
-const CORNER = { TL: 'top-left', TR: 'top-right', BR: 'bottom-right', BL: 'bottom-left' };
-export function flagText(flag) {
-  const [code, arg] = flag.split(':');
-  const where = SIDE[arg] || (CORNER[arg] ? `${CORNER[arg]} corner` : '');
-  const T = {
-    marker_moved: 'A registered tag has moved since capture: the photo cannot locate the placard.',
-    registration_blocked: 'The target could not be established in this photo.',
-    registration_preview_only: 'The registration does not meet every gate: treat the numbers as a preview.',
-    placard_not_found: 'No placard outline was found near the target.',
-    ambiguous_proposal: 'Two different outlines fit about equally well: check that the green outline is the placard.',
-    at_search_limit: 'The outline was found at the edge of the search area: check it.',
-    size_differs_from_record: 'The measured size differs from the record. Is this the right part?',
-    corner_lifted_or_hidden: `The ${where} is folded, lifted or covered.`,
-    corner_not_directly_seen: `The ${where} is not directly visible; it was located from the two sides.`,
-    corner_outside_image: `The ${where} is outside the photo.`,
-    edge_partly_hidden: `Part of the ${where} is hidden or unclear.`,
-    edge_not_straight: `The ${where} is not straight (curled sticker, or lens distortion).`,
-    glare_on_edge: `Glare on the ${where}.`,
-    edge_fit_fallback: `The ${where} was located less precisely.`,
-    side_not_measured: `The ${where} could not be measured.`,
-    partial_perimeter: 'Only three sides were measured.',
-    manual_side: `The ${where} is as marked by hand.`,
-  };
-  return T[code] || flag.replace(/_/g, ' ');
-}
 
 export function mount(root, ctx) {
   const s = () => state.session;

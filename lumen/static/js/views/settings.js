@@ -5,6 +5,7 @@
 // when the operator chooses.  The server keeps the calibration photos and
 // points only as long as a session.
 import { api, upload, url } from '../api.js';
+import { thumb } from './common.js';
 import { h, clear, append, icon, sheet, banner, chip, toast, showError, busy, fmt } from '../dom.js';
 import { state, setState, setSession, prefs } from '../store.js';
 import { openCamera } from './camera_sheet.js';
@@ -158,7 +159,7 @@ export function openSettings() {
       h('div', { class: 'row wrap' }, chip(`${usable} usable`, usable >= 10 ? 'ok' : usable >= 6 ? 'warn' : 'danger'), chip(`${ws.views.length - usable} refused`, ws.views.length - usable ? 'warn' : 'solid'), h('span', { class: 'hint' }, 'at least 6, better 10 or more')),
       coverageMap(ws.views),
       ws.views.length ? h('div', { class: 'frames' }, ws.views.map((v) => h('div', { class: `frame-tile${v.ok ? '' : ' bad'}`, 'data-view': v.view_id },
-        h('img', { src: url(`api/calibration/${ws.id}/photos/${v.view_id}/image?max=320`), alt: `Board photo ${v.view_id}`, loading: 'lazy' }),
+        thumb(url(`api/calibration/${ws.id}/photos/${v.view_id}/image?max=320`), `Board photo ${v.view_id}`),
         h('button', { class: 'x', type: 'button', 'aria-label': `Remove board photo ${v.view_id}`, onclick: async () => { try { ws = await api('DELETE', `api/calibration/${ws.id}/photos/${v.view_id}`); render(); } catch (err) { showError(err); } } }, icon('trash')),
         h('div', { class: 'meta' }, h('div', { class: 'badges' }, v.ok ? chip(`${v.n_points} corners`, 'ok') : chip(v.reasons.map(why).join(', ') || 'refused', 'danger'),
           v.ok && v.quality.tilt_deg !== null && v.quality.tilt_deg !== undefined ? chip(`tilt ${Math.round(v.quality.tilt_deg)}°`, 'solid') : null))))) : null,

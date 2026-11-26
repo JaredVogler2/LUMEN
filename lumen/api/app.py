@@ -93,7 +93,13 @@ def create_app(settings: Settings | None = None, service: SessionService | None 
     # ------------------------------------------------------------ errors
     @app.exception_handler(LumenError)
     async def _lumen_error(_: Request, exc: LumenError) -> JSONResponse:
-        return JSONResponse({"error": exc.to_dict()}, status_code=exc.http_status)
+        body = exc.to_dict()
+        host = settings.hosting
+        if exc.code == "session_not_found" and not host["keeps_sessions"]:
+            # on a host that keeps no sessions this is not an expired session: say what it is
+            body["suggestions"] = [str(host["message"]), *body.get("suggestions", [])]
+            body["details"] = {**body.get("details", {}), "hosting": host["kind"]}
+        return JSONResponse({"error": body}, status_code=exc.http_status)
 
     @app.exception_handler(StarletteHTTPException)
     async def _http_error(_: Request, exc: StarletteHTTPException) -> JSONResponse:

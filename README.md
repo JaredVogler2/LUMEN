@@ -2,9 +2,9 @@
 
 Browser-based optical measurement and placard positioning. A phone's rear
 camera, a few commercially available AprilTag stickers of measured size, and
-two datum features on the panel are enough to show where a placard goes and,
-afterwards, to measure where it is. No CAD model, no native app, no LiDAR, no
-NFC, no extra optical hardware.
+two datum features on the panel are enough to show where a placard goes, to
+measure it while it is being put there, and to record where it ended up. No
+CAD model, no native app, no LiDAR, no NFC, no extra optical hardware.
 
 > **Research prototype.** Everything LUMEN shows is measurement evidence, not
 > product acceptance. All accuracy figures in this repository come from
@@ -22,8 +22,8 @@ NFC, no extra optical hardware.
 | Capture | photos, or a video from which sharp, well-spread frames are selected; coaching on distance, angle, glare, coverage |
 | Datums | floor line and side line are found and fitted to sub-pixel edges; a rounded side edge is modelled from its outline in several photos; the operator confirms |
 | Rectified | metric straight-on view with a grid from the datums; optional rule measurement that catches a wrong tag size |
-| Place | the target outline on the photo and on live video, with distances, uncertainty and a status that says what was and was not checked |
-| Verify | the installed placard's outline is measured and compared with the target: signed deviations with uncertainty; export; delete |
+| Place | the target outline on the photo with distances, uncertainty and a status that says what was and was not checked. **Live placement**: the camera watches while the placard is positioned; every frame says how far it is from its target and which way to move it, on the screen and by sound; it turns green in position and the placement is recorded by itself |
+| Verify | the record of the placement, or a new photo of an installed placard: the outline is measured and compared with the target, signed deviations with uncertainty; export; delete |
 
 How it stays honest:
 
@@ -41,6 +41,11 @@ How it stays honest:
 * where the photos cannot decide, the operator is asked: two similar seams,
   or a raised edge running along the line that was found (the top of a kick
   strip looks like a floor line);
+* "in position" in a live frame is the rule of the verification (deviation
+  plus uncertainty inside the record's tolerance) and records nothing; a
+  placard held off the surface, or covered so far that this cannot be told,
+  is not judged; the record is a stored photo in which all four sides are
+  measured;
 * a flashlight (photometric) analysis of rounded edges and an optional
   language-model assistant exist as clearly separated experiments that never
   feed the guidance.
@@ -48,6 +53,11 @@ How it stays honest:
 ## Screens
 
 <img src="docs/screenshots/camera_live.png" width="190" alt="Camera with the coach line"> <img src="docs/screenshots/datums_trim_photo.png" width="190" alt="Datum lines found on the photo"> <img src="docs/screenshots/place_portrait.png" width="190" alt="Target outline with distances and status"> <img src="docs/screenshots/verify_result.png" width="190" alt="Measured deviation of an installed placard">
+
+Live placement: on the way, in position, and with a hand over one side (the
+covered side is drawn dashed):
+
+<img src="docs/screenshots/placement_guiding.png" width="190" alt="Live placement: move it 39 mm"> <img src="docs/screenshots/placement_in_position.png" width="190" alt="Live placement: in position"> <img src="docs/screenshots/placement_hand.png" width="190" alt="Live placement: in position with a hand over one side"> <img src="docs/screenshots/placement_recorded.png" width="190" alt="The placement was recorded">
 
 Screenshots from the automated browser tests (phone-sized window,
 computer-generated photos). More in `docs/OPERATOR_QUICKSTART.md`.
@@ -100,7 +110,26 @@ Two findings on the way to these numbers (`docs/BUILD_LOG.md`):
   at that size, and one of them had been taken for the datum. A seam is now
   measured at its centre at any photo size.
 
-Tests on this code: 499 unit and integration tests and 37 browser tests pass;
+### Live placement
+
+Tests against the renderer's truth (`docs/VALIDATION.md`, section 6), live
+frames of 1280×720 from 640 mm, target tolerance ±2 mm and ±1°:
+
+| | |
+|---|---|
+| deviation of a placard at known places on its way to the target | within 0.12 mm and 0.08° |
+| stated uncertainty of a live reading (lens profile for the registration photos) | ±1.07 mm; ±1.4 mm while a hand covers a whole side |
+| the same without a lens profile | ±1.84 mm: only ±0.16 mm of the tolerance is left, and the screen says so |
+| a hand over a corner, a side, the lower half, the middle of both ends | position within 0.3 mm; never recorded while covered |
+| both ends gripped completely; a part of another size; a placard held 8 mm off the surface | no judgement, with the reason |
+| server time per followed frame / first frame / no placard in view | 0.17 s / 0.9 s / 0.27 s |
+| results per second in a browser on the same machine | about 5 results per second, each shown 0.2 s after its picture was taken |
+| from "in position, hands off" to the chime of the record | about 2 s (one second of rest, then 0.7 s for the photo and its measurement) |
+
+Hands are skin-coloured boxes in rendered pictures here, and the tones were
+checked as commands in a browser without a loudspeaker.
+
+Tests on this code: 520 unit and integration tests and 42 browser tests pass;
 one test that calls a real language-model endpoint is opt-in and skipped.
 
 None of this is physical accuracy: no phone, print or panel was involved.
@@ -125,6 +154,12 @@ Open <http://127.0.0.1:8000/> and choose **Load demo session** to walk
 through all seven steps on simulated photos. To use a phone's camera the page
 must be served over HTTPS; deploying to Posit Connect provides that
 (`docs/POSIT_CONNECT.md`).
+
+LUMEN keeps a session with the process that serves it, and live placement
+asks that process several times a second. It needs a host on which one
+process keeps running. It does not work on function platforms (Vercel, AWS
+Lambda and the like), where each request may meet a new, empty instance; on
+such a host the first screen says so (`docs/POSIT_CONNECT.md`, section 5).
 
 Tests, benchmark and smoke test:
 

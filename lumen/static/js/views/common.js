@@ -180,3 +180,45 @@ export function coachList(advice) {
     i.arrow && ARROW_ICON[i.arrow] ? icon(ARROW_ICON[i.arrow]) : icon(i.level === 'info' ? 'info' : 'alert'), h('span', null, i.text)));
   return rows.length ? h('ul', { class: 'checklist' }, rows) : null;
 }
+
+// What a quality flag of a measured placard outline means, in words.
+const SIDE = { top: 'top edge', right: 'right edge', bottom: 'bottom edge', left: 'left edge' };
+const CORNER = { TL: 'top-left', TR: 'top-right', BR: 'bottom-right', BL: 'bottom-left' };
+export function flagText(flag) {
+  const [code, arg] = flag.split(':');
+  const where = SIDE[arg] || (CORNER[arg] ? `${CORNER[arg]} corner` : '');
+  const T = {
+    marker_moved: 'A registered tag has moved since capture: the photo cannot locate the placard.',
+    registration_blocked: 'The target could not be established in this photo.',
+    registration_preview_only: 'The registration does not meet every gate: treat the numbers as a preview.',
+    placard_not_found: 'No placard outline was found near the target.',
+    ambiguous_proposal: 'Two different outlines fit about equally well: check that the green outline is the placard.',
+    at_search_limit: 'The outline was found at the edge of the search area: check it.',
+    size_differs_from_record: 'The measured size differs from the record. Is this the right part?',
+    corner_lifted_or_hidden: `The ${where} is folded, lifted or covered.`,
+    corner_not_directly_seen: `The ${where} is not directly visible; it was located from the two sides.`,
+    corner_outside_image: `The ${where} is outside the photo.`,
+    edge_partly_hidden: `Part of the ${where} is hidden or unclear.`,
+    edge_not_straight: `The ${where} is not straight (curled sticker, or lens distortion).`,
+    glare_on_edge: `Glare on the ${where}.`,
+    edge_fit_fallback: `The ${where} was located less precisely.`,
+    side_not_measured: `The ${where} could not be measured.`,
+    partial_perimeter: 'Only three sides were measured.',
+    manual_side: `The ${where} is as marked by hand.`,
+    not_flat_on_surface: 'The placard does not measure its size: it is not lying flat on the surface.',
+    side_from_record_size: `The ${where} is hidden: it was placed by the placard’s size in the record.`,
+    size_not_seen: 'Too much of the placard is covered to tell whether it lies flat.',
+    not_the_recorded_size: `The ${where} is not where a placard of the recorded size has it. Is this the right part?`,
+  };
+  return T[code] || flag.replace(/_/g, ' ');
+}
+
+// A small picture from the server.  When it cannot be loaded the tile says so, in place of the
+// browser's broken-image mark and an alternative text printed over the tile's badges.
+export function thumb(src, alt) {
+  const img = h('img', { src, alt, loading: 'lazy' });
+  img.addEventListener('error', () => {
+    img.replaceWith(h('div', { class: 'thumb-missing', role: 'img', 'aria-label': `${alt}: the picture could not be loaded`, 'data-region': 'thumb-missing' }, icon('alert'), h('span', null, 'Picture not available')));
+  }, { once: true });
+  return img;
+}

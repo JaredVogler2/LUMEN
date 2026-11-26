@@ -170,3 +170,37 @@ def test_ruler_measurement_on_the_rectified_screen_blocks_a_wrong_scale(page):
     page.wait_for_selector('[data-region="scale-check"] .banner.ok', timeout=30_000)
     page.wait_for_selector('.status-hero[data-status="prototype_guidance"]', timeout=30_000)
     assert not page._lumen_errors
+
+
+def test_a_host_without_sessions_says_so_and_a_missing_photo_is_a_labelled_tile(browser, live_server, monkeypatch):
+    """What a test deployment on a function platform looked like: broken-image marks and "Unknown or expired
+    session".  The first screen now says what is wrong with the host, and a photo that cannot be loaded is a
+    labelled tile."""
+    from tests.browser.conftest import PHONE
+
+    monkeypatch.setenv("VERCEL", "1")           # the server of these tests runs in this process and reads it per request
+    ctx = browser.new_context(**PHONE)
+    page = ctx.new_page()
+    page.goto(live_server.url)
+    page.wait_for_selector('[data-step="identify"]')
+    b = page.inner_text(".banner.danger").lower()
+    assert "cannot keep a session" in b and "lost between requests" in b and "posit connect" in b
+    shot(page, "host_without_sessions")
+    ctx.close()
+    monkeypatch.delenv("VERCEL")
+    # ---- a healthy host: no such banner; a photo whose picture cannot be fetched shows a labelled tile
+    ctx = browser.new_context(**PHONE)
+    page = ctx.new_page()
+    page.route("**/frames/*/image*", lambda route: route.abort())
+    page.goto(live_server.url)
+    page.wait_for_selector('[data-step="identify"]')
+    assert page.locator(".banner.danger").count() == 0
+    page.click('[data-action="demo"]')
+    page.wait_for_selector('[data-action="analyze"]', timeout=180_000)
+    page.wait_for_selector('[data-region="thumb-missing"]', timeout=30_000)
+    tiles = page.locator(".frame-tile")
+    assert tiles.count() >= 3 and page.locator('[data-region="thumb-missing"]').count() == tiles.count()
+    assert page.locator(".frame-tile img").count() == 0
+    assert "picture not available" in tiles.first.inner_text().lower() and "#1" in tiles.first.inner_text()
+    shot(page, "photo_not_available")
+    ctx.close()

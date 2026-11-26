@@ -253,7 +253,7 @@ export class Viewer {
     ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(this.bitmap, this.t.tx, this.t.ty, this.W * this.t.s, this.H * this.t.s);
     const prims = [...((this.overlay && this.overlay.primitives) || []), ...this.extra];
-    const order = ['grid_minor', 'grid_major', 'grid_axis', 'tag', 'tag_rejected', 'candidate', 'datum_floor', 'datum_side', 'axis_x', 'axis_z', 'tick', 'origin', 'dim', 'target_preview', 'target', 'target_ref', 'measured', 'proposal', 'segment', 'handle', 'note'];
+    const order = ['grid_minor', 'grid_major', 'grid_axis', 'tag', 'tag_rejected', 'candidate', 'datum_floor', 'datum_side', 'axis_x', 'axis_z', 'tick', 'origin', 'dim', 'target_preview', 'target', 'target_ref', 'measured', 'proposal', 'placard_live', 'move_arrow', 'segment', 'handle', 'note'];
     // grid density on screen decides what is worth drawing
     const step = (this.overlay && this.overlay.grid_step_mm) || 0;
     const ppm = (this.overlay && this.overlay.px_per_mm) || 0;
@@ -464,6 +464,30 @@ export class Viewer {
       const minY = Math.min(...vv.map((c) => c[1])), midX = vv.reduce((a, c) => a + c[0], 0) / vv.length;
       const tagText = k === 'target_preview' && p.active !== false ? `${p.label} · PREVIEW` : p.label;
       this._label(ctx, tagText, midX, minY - 17, col, { size: 13, align: 'center', prio: p.active === false ? 4 : 9, avoid: p.active === false });
+    } else if (k === 'placard_live') {
+      // the placard as measured in this live frame, in the colour of its state
+      if (pts.length < 3) return;
+      const col = p.color || '#5cc8ff';
+      this._path(ctx, pts, true);
+      ctx.fillStyle = col; ctx.globalAlpha = 0.16; ctx.fill(); ctx.globalAlpha = 1;
+      if (p.placed && p.placed.some(Boolean) && pts.length === 4) {
+        // a side that was not measured but placed by the placard's size (a hand covers it) is drawn dashed
+        for (let i = 0; i < 4; i++) this._stroke(ctx, [pts[i], pts[(i + 1) % 4]], false, col, 3.4, { dash: p.placed[i] ? [7, 6] : null });
+      } else this._stroke(ctx, pts, true, col, 3.4);
+      if (p.label) {
+        const vv = pts.map((c) => this.toView(c[0], c[1]));
+        const maxY = Math.max(...vv.map((c) => c[1])), midX = vv.reduce((a, c) => a + c[0], 0) / vv.length;
+        this._label(ctx, p.label, midX, maxY + 17, col, { size: 13, align: 'center', prio: 9 });
+      }
+    } else if (k === 'move_arrow') {
+      // from the placard's centre to where it belongs; too short to read when it is nearly there
+      if (pts.length < 2) return;
+      const a = this.toView(pts[0][0], pts[0][1]), b = this.toView(pts[1][0], pts[1][1]);
+      if (Math.hypot(b[0] - a[0], b[1] - a[1]) < 18) return;
+      const col = p.color || '#ffffff';
+      this._stroke(ctx, pts, false, col, 4.5);
+      this._arrowHead(ctx, pts[0], pts[1], col);
+      if (p.label) this._label(ctx, p.label, (a[0] + b[0]) / 2, (a[1] + b[1]) / 2 - 16, col, { size: 14, align: 'center', prio: 10 });
     } else if (k === 'target_ref') {
       const [x, y] = this.toView(pts[0][0], pts[0][1]);
       ctx.strokeStyle = '#05070a'; ctx.lineWidth = 4;

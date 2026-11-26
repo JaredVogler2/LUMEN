@@ -12,7 +12,7 @@ physical study is specified in `docs/PHYSICAL_TEST_PROTOCOL.md` and is NOT RUN.
 |---|---|---|---|
 | Unit tests | each algorithm against ground truth it cannot see: tag corners, edge fits, planar solver, bundle adjustment, datums, placard outline, calibration, video selection, codes, units, gates | `tests/unit` | `python -m pytest tests/unit` |
 | Integration tests | whole flows through the HTTP API on rendered photos, compared with the renderer's truth; refusals; limits; storage; sub-path deployment | `tests/integration` | `python -m pytest tests/integration` |
-| Browser tests | the interface on a phone-sized viewport with a fake camera: walkthrough, live guidance, verification, scanning, record editor, calibration, sub-path | `tests/browser` | `python -m pytest tests/browser` |
+| Browser tests | the interface on a phone-sized viewport with a fake camera: walkthrough, live guidance, live placement (a film of a placard brought to its target), verification, scanning, record editor, calibration, sub-path | `tests/browser` | `python -m pytest tests/browser` |
 | Benchmark | accuracy, stated uncertainty and fault handling on layouts the tests never use | `lumen/validation/benchmark.py` | `python scripts/run_benchmark.py` |
 | Photometric ablation | the experimental flashlight analysis against the edge-only method | `scripts/photometric_ablation.py` | see `docs/PHOTOMETRIC_ABLATION.md` |
 | Smoke test | a running instance end to end | `scripts/smoke_test.py` | `python scripts/smoke_test.py <address>` |
@@ -174,12 +174,40 @@ How to read them:
   Four layouts with one seam width are a spot check, not a study.
 * Latency was measured on a shared four-core build machine.
 
-## 6. What has not been tested at all
+## 6. Live placement: what the tests show
+
+Live placement is not in the benchmark. It is covered by tests against the
+renderer's truth, on the same panel as the other tests (target 120 × 60 mm,
+±2.0 mm, ±1°; live frames 1280×720 from 640 mm, a viewpoint the registration
+did not use):
+
+| Question | Test | Result |
+|---|---|---|
+| Are the numbers those of the placard? | a placard at six known places on its way to the target (`tests/integration/test_placement_flow.py`) | deviations within 0.12 mm and 0.08° of the truth, with their signs; the arrow on the screen within 1 px of the true direction |
+| Is "in position" the verification rule? | same sequence | outside at 35, 14 and 6 mm; neither at 2.4 mm (uncertainty ±1.1 mm against ±2 mm); in position at 0.7 and 0.2 mm |
+| A placard held off the surface | a sheet of the placard's size 8 mm in front of the panel, exactly over the target | measures 1.5 mm too large; not judged |
+| A height too small to show in the size | a sheet 2 mm off the surface, seen 30° from the side: displaced by about 1 mm in the picture | the displacement is inside the stated uncertainty; not called in position |
+| A hand over a corner, a side, half the placard, the middle of both ends | boxes of skin colour, 40 mm thick, in the rendered frame | numbers within 0.3 mm of the truth; in position where the placard is, never "clean" |
+| A hand's straight edge parallel to a side, 12 mm inside it | same | not taken for the side: the side is placed by the record's size |
+| Both ends gripped, corners and all | same | no reading: "The right and left sides are both covered" |
+| A part 20 mm narrower than the record | rendered placard | no reading that calls a side hidden: "is this the right part?" |
+| No lens profile for the registration photos | same panel without a profile | uncertainty ±1.84 mm; the answer says that only ±0.16 mm of the tolerance is left, and why |
+| Following from frame to frame | a seed up to 6 mm from the placard (`tests/unit/test_placard.py`) | all four sides found, centre within 0.05 mm |
+| A jump of 5.5 mm between two frames | the follower misses one side, which is in plain view | that side is measured from where the outline now is; it is not drawn as covered |
+| The whole loop in a browser | a film in a fake camera: the placard arrives and rests (`tests/browser/test_placement.py`) | told to move with the distance, green in position, the record taken by itself from a full-size frame and found within tolerance, the camera released; the tones commanded in this order: beeps, the chime of reaching it, the steady tone, the chime of the record |
+| A reading that is no longer current | answers stop arriving while in position | the tone ends within 1.3 s and the reading is withdrawn |
+
+What these tests are not: a hand, a placard with a real surface, a phone's
+video stream with its exposure and focus changes, a real network, or anybody
+hearing a tone. See section 7.
+
+## 7. What has not been tested at all
 
 | Item | Status |
 |---|---|
 | Accuracy, repeatability and coverage on real hardware | NOT RUN |
-| Any iPhone: camera, torch, recording, live guidance in Safari | NOT RUN |
+| Any iPhone: camera, torch, recording, live guidance, live placement and its sound in Safari | NOT RUN |
+| Live placement with a real hand on a real placard: whether hands are told from sides, how fast it follows, whether "in position" agrees with a reference measurement | NOT RUN |
 | Lens calibration with a real print | NOT RUN |
 | Reading real bar codes at working distance | NOT RUN |
 | Posit Connect deployment | NOT RUN |

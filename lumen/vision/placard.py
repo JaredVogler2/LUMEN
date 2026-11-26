@@ -69,6 +69,10 @@ class PlacardConfig:
     manual_sigma_px: float = 1.5
     #: bound on the edge-definition error of a side (dark-side shift, sticker thickness), px
     edge_definition_bound_px: float = 0.25
+    #: look three times further for a side that is not found near the outline (a part of another size).  Switched
+    #: off for a placard in a hand: there, a side that is not where it should be is hidden, and the next straight
+    #: edge further in is the hand's.
+    wide_side_retry: bool = True
 
 
 @dataclass
@@ -92,6 +96,9 @@ class SideFit:
     flags: list[str] = field(default_factory=list)
     #: which ends of the side had no edge (0 = start corner, 1 = end corner)
     hidden_ends: list[int] = field(default_factory=list)
+    #: unit vector along the side (start corner to end corner) and where on it the edge was seen (px from ``mid``)
+    t: np.ndarray | None = None
+    along: np.ndarray | None = None
 
     @property
     def name(self) -> str:
@@ -329,9 +336,11 @@ def measure_side(
     sm = cv2.filter2D(prof, -1, k[None, :], borderType=cv2.BORDER_REPLICATE)
     g = polarity * np.gradient(sm, step, axis=1)  # positive at an edge of the placard's sign
     core = g[ok_rows]
-    # noise from the outer end of the profiles (bare panel beyond the placard), not from the edge itself
-    tail = core[:, -max(4, core.shape[1] // 5):]
-    noise = float(np.median(np.abs(tail - np.median(tail)))) * 1.4826 + 1e-6
+    # Noise from an end of the profiles, not from the edge itself: the outer end is bare panel when the side is
+    # where it was expected.  A side that lies further out (a placard followed from where it was a moment ago)
+    # puts its edge into that end; then the inner end is the calm one.  The calmer of the two is taken.
+    q = max(4, core.shape[1] // 5)
+    noise = min(float(np.median(np.abs(e - np.median(e)))) for e in (core[:, -q:], core[:, :q])) * 1.4826 + 1e-6
     peak_all = float(np.percentile(core.max(axis=1), 70))
     thr = max(5.0 * noise, 0.3 * peak_all)
     pos = np.full(M, np.nan)
@@ -430,6 +439,9 @@ def measure_side(
         sf.contrast = abs(lv_out - lv_in)
         sf.saturated = float(np.mean(gray_u8 >= 254)) if gray_u8.size < 4e6 else 0.0
     sf.ok = True
+    assert sf.mid is not None
+    sf.t = t
+    sf.along = xi + float((mid - sf.mid) @ t)
     if sf.support < cfg.min_side_support:
         sf.ok = False
         sf.reason = "edge_mostly_hidden"
@@ -513,6 +525,263 @@ def corner_gaps(
     return out
 
 
+def _linear_planes(image: np.ndarray) -> list[np.ndarray]:
+    """The picture's colour channels in linear light (one plane for a grey picture)."""
+    arr = np.asarray(image)
+    if arr.ndim == 2:
+        return [SRGB_TO_LINEAR_LUT[arr]]
+    return [SRGB_TO_LINEAR_LUT[np.ascontiguousarray(arr[..., c])] for c in range(arr.shape[2])]
+
+
+def _levels_across(
+    planes: list[np.ndarray], camera: CameraModel | None, sd: SideFit, frac: float = 0.8,
+    inner: tuple[float, float] = (3.0, 6.0), outer: tuple[float, float] = (3.0, 6.0),
+) -> tuple[np.ndarray, np.ndarray]:
+    """Colour inside and outside a side line, at points along it: arrays ``(points, channels)``, linear light.
+
+    ``inner`` / ``outer``: from how many to how many pixels off the line the colour is taken.  For a measured side
+    the points are where its edge was seen (so a hand over the rest of the side does not enter); for a side that
+    was placed, its middle ``frac``.
+    """
+    assert sd.n is not None and sd.mid is not None
+    if sd.along is not None and sd.t is not None and len(sd.along) >= 4:
+        t = sd.t
+        st = np.asarray(sd.along, dtype=float)
+        st = st[:: max(1, len(st) // 60)]
+    else:
+        t = np.array([sd.n[1], -sd.n[0]])
+        K = int(np.clip(frac * sd.length_px / 2.0, 6, 60))
+        st = (np.arange(K) + 0.5) / K * frac * sd.length_px - 0.5 * frac * sd.length_px
+    base = sd.mid[None, None, :] + st[:, None, None] * t
+    p_in = base - np.arange(inner[0], inner[1] + 1e-6, 0.5)[None, :, None] * sd.n
+    p_out = base + np.arange(outer[0], outer[1] + 1e-6, 0.5)[None, :, None] * sd.n
+    with np.errstate(all="ignore"):
+        inside = np.stack([np.nanmedian(_sample(pl, camera, p_in), axis=1) for pl in planes], axis=1)
+        outside = np.stack([np.nanmedian(_sample(pl, camera, p_out), axis=1) for pl in planes], axis=1)
+    return inside, outside
+
+
+#: Around a measured side the panel is sampled 3 to 6 px outside it, and the placard 6 to 10 px inside: a printed
+#: border along the edge is a few pixels wide, and in a video frame or a JPEG its colour is smeared over its
+#: neighbours (chroma is stored at half resolution), so the first pixels inside an edge say little about the placard.
+_REF_INNER = (6.0, 10.0)
+
+
+def _side_colours(planes: list[np.ndarray], camera: CameraModel | None, sides: list[SideFit]) -> dict[int, tuple[np.ndarray, np.ndarray]]:
+    """Median colour of the placard inside, and of whatever is outside, every measured side."""
+    out: dict[int, tuple[np.ndarray, np.ndarray]] = {}
+    for sd in sides:
+        if sd.ok and sd.method not in ("record_size", "manual") and sd.n is not None and sd.mid is not None and sd.length_px > 8:
+            a, b = _levels_across(planes, camera, sd, inner=_REF_INNER)
+            ok = np.isfinite(a).all(axis=1) & np.isfinite(b).all(axis=1)
+            if ok.sum() >= 4:
+                out[sd.index] = (np.median(a[ok], axis=0), np.median(b[ok], axis=0))
+    return out
+
+
+def _same_surface(c: np.ndarray, ref: np.ndarray, chroma_tol: float, factor: float) -> np.ndarray:
+    """Do colours ``c`` (..., channels) look like the surface with colour ``ref``?
+
+    Hue is compared closely (the share of each channel in the sum, which light and shade leave alone); brightness
+    only coarsely (within ``factor`` either way), because a hand also throws a shadow on what lies next to it.
+    """
+    c = np.asarray(c, dtype=float)
+    y, yr = c.mean(axis=-1), float(np.mean(ref))
+    q = c / np.maximum(c.sum(axis=-1, keepdims=True), 1e-6)
+    qr = np.asarray(ref, dtype=float) / max(float(np.sum(ref)), 1e-6)
+    return (np.abs(q - qr).max(axis=-1) < chroma_tol) & (y < factor * yr) & (y * factor > yr)
+
+
+def _colour_distance(c: np.ndarray, ref: np.ndarray) -> np.ndarray:
+    """Distance between colours ``c`` (..., channels) and ``ref`` in units of what is plainly visible: a hue shift
+    of 0.03 (share of a channel in the sum) or a brightness step of 10 % count as one."""
+    c = np.asarray(c, dtype=float)
+    ref = np.asarray(ref, dtype=float)
+    q = c / np.maximum(c.sum(axis=-1, keepdims=True), 1e-6)
+    qr = ref / max(float(ref.sum()), 1e-6)
+    hue = np.abs(q - qr).max(axis=-1) / 0.03
+    bright = np.abs(np.log(np.maximum(c.mean(axis=-1), 1e-6) / max(float(ref.mean()), 1e-6))) / 0.10
+    return np.hypot(hue, bright)
+
+
+def edge_fraction(planes: list[np.ndarray], camera: CameraModel | None, placed: SideFit, measured: list[SideFit]) -> float | None:
+    """How much of a side that was *placed* shows the placard's own edge: placard inside, panel outside.
+
+    Then the side is not hidden at all; it was only not found where it was looked for (a placard that moved
+    further between two frames than a side is followed), and it can be measured where it was placed.
+    """
+    ref = _side_colours(planes, camera, measured)
+    if not ref or placed.n is None or placed.mid is None:
+        return None
+    c_in = np.median(np.stack([v[0] for v in ref.values()]), axis=0)
+    c_out = np.median(np.stack([v[1] for v in ref.values()]), axis=0)
+    apart = float(_colour_distance(c_in, c_out))
+    if apart < 1.5:
+        return None
+    a, b = _levels_across(planes, camera, placed, inner=_REF_INNER)
+    ok = np.isfinite(a).all(axis=1) & np.isfinite(b).all(axis=1)
+    if ok.sum() < 4:
+        return None
+    tol = 0.35 * apart
+    return float(np.mean((_colour_distance(a[ok], c_in) < tol) & (_colour_distance(b[ok], c_out) < tol)))
+
+
+def plain_fraction(planes: list[np.ndarray], camera: CameraModel | None, placed: SideFit, measured: list[SideFit]) -> float | None:
+    """How much of a side that was *placed*, not measured, lies in plain panel or plain placard.
+
+    A side can only be hidden where something hides it.  Where the picture shows undisturbed panel on both sides
+    of the placed line, the placard does not reach that far; where it shows undisturbed placard on both sides, the
+    placard goes on beyond it.  Either way the outline is not where it was placed (a hand's edge was taken for a
+    side, or the part has another size).  "Undisturbed" is judged against the colours outside and inside the sides
+    that were measured.  Returns the fraction of the line that looks plain, or ``None`` when that cannot be judged
+    (panel and placard look alike, or there is nothing to compare with).
+    """
+    ref = _side_colours(planes, camera, measured)
+    if not ref or placed.n is None or placed.mid is None:
+        return None
+    c_in = np.median(np.stack([v[0] for v in ref.values()]), axis=0)
+    c_out = np.median(np.stack([v[1] for v in ref.values()]), axis=0)
+    # how far apart panel and placard are; "looks like the panel" means: within a third of that from the panel
+    apart = float(_colour_distance(c_in, c_out))
+    if apart < 1.5:
+        return None
+    a, b = _levels_across(planes, camera, placed)
+    ok = np.isfinite(a).all(axis=1) & np.isfinite(b).all(axis=1)
+    if ok.sum() < 4:
+        return None
+    a, b = a[ok], b[ok]
+    tol = 0.35 * apart
+    panel = (_colour_distance(a, c_out) < tol) & (_colour_distance(b, c_out) < tol)
+    placard = (_colour_distance(a, c_in) < tol) & (_colour_distance(b, c_in) < tol)
+    return float(np.mean(panel | placard))
+
+
+def foreign_sides(image: np.ndarray, camera: CameraModel | None, sides: list[SideFit]) -> list[int]:
+    """Measured sides that do not have, outside them, what the other sides have.
+
+    All sides of a placard on a panel have the panel outside.  A straight edge with something else outside is not
+    a side of the placard.  Two cases are told apart from the colour a few pixels outside each measured side:
+
+    * it is not the panel's (compared with the median of all sides: by hue closely, by brightness only within a
+      factor of three, because what covers the placard also shades the panel next to it): the edge of a hand or a
+      tool lying over the placard;
+    * it is nearer to the placard's own colour than to the panel's: an edge *inside* the placard, such as the
+      ends of a block of print, which a third of a side's length is enough to pass for a side while a hand
+      covers the real one.
+
+    With fewer than three measured sides there is no majority: if two differ from each other, both are returned.
+
+    What this cannot see: something of the panel's own hue and of similar brightness (a grey glove on a grey
+    panel).  And on a placard that lies partly against a different background (another label, a painted stripe)
+    it points at the side that has it; it is meant for a placard that is being handled, not for records.
+    """
+    both = _side_colours(_linear_planes(image), camera, sides)
+    cols = {k: v[1] for k, v in both.items()}
+    if len(cols) < 2:
+        return []
+    keys = sorted(cols)
+    if len(keys) == 2:
+        return keys if not bool(_same_surface(cols[keys[0]], cols[keys[1]], 0.05, 3.0)) else []
+    panel = np.median(np.stack([cols[k] for k in keys]), axis=0)
+    placard = np.median(np.stack([both[k][0] for k in keys]), axis=0)
+    apart = float(_colour_distance(placard, panel))
+    out = []
+    for k in keys:
+        not_panel = not bool(_same_surface(cols[k], panel, 0.05, 3.0))
+        inside_placard = apart >= 1.5 and float(_colour_distance(cols[k], placard)) < float(_colour_distance(cols[k], panel))
+        if not_panel or inside_placard:
+            out.append(k)
+    return out
+
+
+def complete_from_size(
+    m: PlacardMeasurement, H: np.ndarray, width_mm: float, height_mm: float, *, allow_two: bool = False,
+    image: np.ndarray | None = None, camera: CameraModel | None = None, max_plain: float = 0.5,
+) -> list[int]:
+    """Place the sides that could not be measured by the placard's known size (plane millimetres).
+
+    For following a placard that a hand partly covers.  A hidden side lies parallel to the opposite, measured
+    side, at the placard's height (top / bottom) or width (left / right) from it *on the panel*; it is computed
+    there and carried back into the picture.  One hidden side is placed from the three measured ones.  Two
+    adjacent hidden sides are placed from the other two only when ``allow_two`` is set, which is sensible only for
+    a placard that was seen whole a moment ago.  Two opposite hidden sides cannot be placed: nothing says where
+    the placard is along them.
+
+    The sides placed carry the method ``"record_size"``, the variances of the side they were derived from and the
+    flag ``side_from_record_size``; the corners next to them are flagged as not directly seen.  This is an
+    assumption (the part has the size the record gives), so it serves guidance only: the caller has to add what
+    the assumption may be wrong by to the uncertainty, and a record needs the whole outline.
+
+    With ``image`` the placement is checked against the picture (:func:`plain_fraction`): a side is placed only
+    where something is seen to cover it.  If more than ``max_plain`` of a placed side lies in plain panel or
+    plain placard, or if that cannot be judged (panel and placard look too much alike), nothing is changed.
+
+    Returns the indices of the sides placed (empty when nothing was changed).
+    """
+    if len(m.sides) != 4:
+        return []
+    missing = [k for k in range(4) if not m.sides[k].ok]
+    if not missing or len(missing) > 2:
+        return []
+    if len(missing) == 2 and (not allow_two or (missing[1] - missing[0]) % 4 == 2):
+        return []
+    Hinv = np.linalg.inv(H)
+    made: list[SideFit] = []
+    for j in missing:
+        src = m.sides[(j + 2) % 4]
+        if not src.ok or src.n is None or src.mid is None or src.length_px <= 0:
+            return []
+        dist = float(height_mm if j in (0, 2) else width_mm)
+        t = np.array([src.n[1], -src.n[0]])
+        ends = np.stack([src.mid - 0.5 * src.length_px * t, src.mid + 0.5 * src.length_px * t])
+        A, B = apply_h(Hinv, ends)
+        d = B - A
+        n_p = np.array([-d[1], d[0]]) / max(float(np.linalg.norm(d)), 1e-12)
+        out_dir = apply_h(Hinv, (src.mid + 2.0 * src.n)[None, :])[0] - apply_h(Hinv, src.mid[None, :])[0]
+        if float(n_p @ out_dir) < 0:
+            n_p = -n_p  # outward for the measured side: the hidden side lies the other way
+        a2, b2 = apply_h(H, np.stack([A - dist * n_p, B - dist * n_p]))
+        d2 = b2 - a2
+        L2 = float(np.linalg.norm(d2))
+        if not np.isfinite(L2) or L2 < 4.0:
+            return []
+        n2 = np.array([-d2[1], d2[0]]) / L2
+        mid2 = 0.5 * (a2 + b2)
+        if float(n2 @ (mid2 - src.mid)) < 0:
+            n2 = -n2  # outward for the hidden side: away from the side it was placed from
+        made.append(SideFit(
+            index=j, ok=True, n=n2, mid=mid2, length_px=L2, var_d=src.var_d, var_theta=src.var_theta, cov_d_theta=0.0,
+            support=0.0, polarity=src.polarity, method="record_size", flags=["side_from_record_size"],
+        ))
+    if image is not None:
+        planes = _linear_planes(image)
+        for sd in made:
+            plain = plain_fraction(planes, camera, sd, m.sides)
+            m.proposal.setdefault("placed_side_plain", {})[SIDE_NAMES[sd.index]] = None if plain is None else round(plain, 3)
+            seen = edge_fraction(planes, camera, sd, m.sides)
+            m.proposal.setdefault("placed_side_edge", {})[SIDE_NAMES[sd.index]] = None if seen is None else round(seen, 3)
+            if plain is None or plain > max_plain:
+                return []  # nothing covers it there (or that cannot be told): the outline is not placed
+    trial = list(m.sides)
+    for sd in made:
+        trial[sd.index] = sd
+    C, cov = _corners_from_sides(trial)
+    if not np.all(np.isfinite(C)):
+        return []
+    m.sides = trial
+    m.corners_ideal, m.corners_cov = C, cov
+    m.ok, m.reason = True, ""
+    names = {SIDE_NAMES[sd.index] for sd in made}
+    m.flags = [f for f in m.flags if f not in ("partial_perimeter", "placard_not_found") and not (f.startswith("side_not_measured:") and f.split(":")[1] in names)]
+    for sd in made:
+        m.flags.append(f"side_from_record_size:{sd.name}")
+        for corner in (sd.index, (sd.index + 1) % 4):
+            tag = f"corner_not_directly_seen:{('TL', 'TR', 'BR', 'BL')[corner]}"
+            if tag not in m.flags:
+                m.flags.append(tag)
+    return [sd.index for sd in made]
+
+
 def measure_placard(
     image: np.ndarray,
     camera: CameraModel | None,
@@ -522,8 +791,16 @@ def measure_placard(
     manual_corners_ideal: np.ndarray | None = None,
     snap: bool = True,
     cfg: PlacardConfig | None = None,
+    seed_corners_ideal: np.ndarray | None = None,
+    seed_polarity: int = 0,
 ) -> PlacardMeasurement:
-    """Measure the placard near ``expected_plane`` (or near operator-marked corners)."""
+    """Measure the placard near ``expected_plane`` (or near operator-marked corners).
+
+    ``seed_corners_ideal`` (with ``seed_polarity``, the sign of its edges if known) says where the placard was a
+    moment ago, for following it from one video frame to the next: the search for a rectangle is skipped and the
+    sides are measured near the seed.  A seed is a place to look, nothing more: sides that are not found there are
+    reported as not measured, never filled in from the seed.
+    """
     cfg = cfg or PlacardConfig()
     gray = to_gray(image)
     lin = SRGB_TO_LINEAR_LUT[gray]
@@ -532,12 +809,20 @@ def measure_placard(
     out = PlacardMeasurement(ok=False)
     Himg, Wimg = gray.shape[:2]
 
+    seed = None if seed_corners_ideal is None else np.asarray(seed_corners_ideal, dtype=float).reshape(4, 2)
+    if seed is not None and not np.all(np.isfinite(seed)):
+        seed = None
     if manual_corners_ideal is not None:
         start = np.asarray(manual_corners_ideal, dtype=float).reshape(4, 2)
         out.provenance = "manual"
         out.proposal = {"found": True, "manual": True}
         scan = float(np.clip(3.0 * ppm, 6.0, 26.0))
         pol = 0
+    elif seed is not None:
+        start = seed
+        out.proposal = {"found": True, "seeded": True}
+        scan = float(np.clip(cfg.side_scan_mm * ppm, 6.0, 40.0))
+        pol = int(np.sign(seed_polarity))
     else:
         prop = propose_rectangle(gray, camera, H, E, cfg)
         out.proposal = {k: (v.tolist() if isinstance(v, np.ndarray) else v) for k, v in prop.items()}
@@ -562,6 +847,22 @@ def measure_placard(
         nrm = np.array([d[1], -d[0]]) / max(float(np.linalg.norm(d)), 1e-9)
         return -nrm if float(nrm @ (0.5 * (p0 + p1) - centre)) < 0 else nrm
 
+    def pair_mismatch(sides: list[SideFit]) -> float:
+        """Largest relative difference between the distance of two measured opposite sides and the record's
+        size in that direction (plane millimetres); infinite when no opposite pair was measured."""
+        vals = []
+        for ia, ib, nominal in ((0, 2, hn), (1, 3, wn)):
+            sa, sb = sides[ia], sides[ib]
+            if not (sa.ok and sb.ok) or sa.mid is None or sb.mid is None or sb.n is None:
+                continue
+            tb = np.array([sb.n[1], -sb.n[0]])
+            A = apply_h(Hinv, sa.mid[None, :])[0]
+            Q = apply_h(Hinv, np.stack([sb.mid - 0.5 * sb.length_px * tb, sb.mid + 0.5 * sb.length_px * tb]))
+            d = Q[1] - Q[0]
+            nrm = np.array([-d[1], d[0]]) / max(float(np.linalg.norm(d)), 1e-12)
+            vals.append(abs(abs(float((A - Q[0]) @ nrm)) - nominal) / nominal)
+        return max(vals) if vals else float("inf")
+
     def manual_side(k: int) -> SideFit:
         p0, p1 = start[k], start[(k + 1) % 4]
         L = float(np.linalg.norm(p1 - p0))
@@ -581,7 +882,7 @@ def measure_placard(
                 p0, p1 = cur[k], cur[(k + 1) % 4]
                 nrm = outward_normal(p0, p1, centre)
                 sd = measure_side(gray, lin, camera, p0, p1, nrm, k, scan if it == 0 else max(0.6 * scan, 8.0), polarity, cfg)
-                if not sd.ok and it == 0 and sd.reason == "edge_not_found":
+                if cfg.wide_side_retry and not sd.ok and it == 0 and sd.reason == "edge_not_found":
                     # a part of another size has sides well away from the nominal outline: look further
                     wide = measure_side(gray, lin, camera, p0, p1, nrm, k, min(3.0 * scan, 70.0), polarity, cfg)
                     if wide.ok:
@@ -601,7 +902,10 @@ def measure_placard(
         # inside it has edges of both signs.  Both signs are tried; the one that
         # gives a complete perimeter of the recorded size is the placard.
         cands = []
-        for polarity in ((pol, -pol) if pol else (1, -1)):
+        # A placard followed from the previous frame keeps the sign of its edges: the other sign is print inside
+        # it, and with a side hidden by a hand that print would otherwise offer "more sides" than the placard.
+        signs = (pol,) if (seed is not None and pol) else ((pol, -pol) if pol else (1, -1))
+        for polarity in signs:
             sides, Cn = run(polarity)
             n_ok = sum(sd.ok for sd in sides)
             rel, area = float("inf"), 0.0
@@ -611,7 +915,10 @@ def measure_placard(
                 hm = 0.5 * (np.linalg.norm(Pm[0] - Pm[3]) + np.linalg.norm(Pm[1] - Pm[2]))
                 rel = float(max(abs(wm - wn) / wn, abs(hm - hn) / hn))
                 area = float(wm * hm)
-            cands.append({"polarity": polarity, "sides": sides, "n_ok": n_ok, "rel": rel, "area": area, "support": float(np.mean([sd.support for sd in sides]))})
+            cands.append({
+                "polarity": polarity, "sides": sides, "n_ok": n_ok, "rel": rel, "area": area, "support": float(np.mean([sd.support for sd in sides])),
+                "pair_rel": pair_mismatch(sides),
+            })
         full = [c for c in cands if c["n_ok"] == 4 and np.isfinite(c["rel"])]
         if manual_corners_ideal is not None:
             # the operator's quadrilateral decides which edges are meant: stay with the nearest ones
@@ -622,10 +929,22 @@ def measure_placard(
             if not match:
                 out.flags.append("size_differs_from_record")
         else:
-            pick = max(cands, key=lambda c: (c["n_ok"], c["support"]))
+            # No complete outline.  What decides first is whether two opposite sides, where both were measured, are
+            # the record's distance apart: a printed border a few millimetres inside the edge has sides too, of
+            # the other sign and closer together, and with a hand's straight edge of that sign it can even offer
+            # more "sides" than the placard.  A candidate whose opposite sides fit comes before one where none
+            # was measured, and that before one whose opposite sides do not fit.  Then the number of sides, then
+            # the sign the whole perimeter voted for.
+            def fit_class(c: dict[str, Any]) -> int:
+                return 1 if not np.isfinite(c["pair_rel"]) else (2 if c["pair_rel"] <= 0.03 else 0)
+
+            pick = max(cands, key=lambda c: (fit_class(c), c["n_ok"], bool(pol) and c["polarity"] == pol, c["support"]))
         out.sides = pick["sides"]
         out.proposal["edge_polarity"] = int(pick["polarity"])
-        out.proposal["polarities_tried"] = [{"polarity": c["polarity"], "sides_ok": c["n_ok"], "size_mismatch": None if not np.isfinite(c["rel"]) else round(c["rel"], 4)} for c in cands]
+        out.proposal["polarities_tried"] = [
+            {"polarity": c["polarity"], "sides_ok": c["n_ok"], "size_mismatch": None if not np.isfinite(c["rel"]) else round(c["rel"], 4),
+             "opposite_sides_mismatch": None if not np.isfinite(c["pair_rel"]) else round(c["pair_rel"], 4)} for c in cands
+        ]
         if manual_corners_ideal is not None:
             for sd in out.sides:
                 if not sd.ok:

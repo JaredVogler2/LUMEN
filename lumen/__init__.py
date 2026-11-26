@@ -16,7 +16,7 @@ __version__ = "0.1.0"
 
 #: Version of the measurement algorithms. Bump when any change can alter a
 #: numeric result, independently of the application version.
-ALGORITHM_VERSION = "lumen-algo-2026.11.2"
+ALGORITHM_VERSION = "lumen-algo-2026.11.3"
 
 RESEARCH_NOTICE = (
     "RESEARCH PROTOTYPE — measurement evidence only. Not product acceptance. "

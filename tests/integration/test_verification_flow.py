@@ -188,3 +188,27 @@ def test_new_registration_discards_earlier_verification_results(client, ready):
     first = client.get(f"/api/sessions/{sid}").json()["frames"][0]["id"]
     s = client.patch(f"/api/sessions/{sid}/frames/{first}", json={"selected": False}).json()
     assert s["registration"] is None and s["verifications"] == []
+
+
+def test_deleting_a_verification_photo_takes_only_its_own_result(client, ready):
+    """Found while building live placement: a record photo that is discarded must leave the registration,
+    the datums and the other records alone (it used to discard them all)."""
+    sid, scene = ready
+    with_placard = replace(scene, placards=(demo_placard(x=240.3, z=299.8),))
+    first = add_verification_photo(client, sid, with_placard, seed=86)
+    keep = verify(client, sid, first)["verification"]["id"]
+    second = add_verification_photo(client, sid, with_placard, seed=87)
+    verify(client, sid, second)
+    before = client.get(f"/api/sessions/{sid}").json()
+    assert len(before["verifications"]) == 2 and before["registration"] is not None
+    s = client.delete(f"/api/sessions/{sid}/frames/{second}").json()
+    assert [v["id"] for v in s["verifications"]] == [keep]
+    assert s["registration"] is not None and s["registration"]["computed_at"] == before["registration"]["computed_at"]
+    assert s["local_frame"] is not None and s["local_frame"]["valid"] and set(s["datums"]) == {"floor", "side"}
+    # the session still measures: a live frame is registered, another photo can be verified
+    third = add_verification_photo(client, sid, with_placard, seed=88)
+    assert verify(client, sid, third)["verification"]["observation"] == "within_tolerance_observed"
+    # a photo the registration was made from is another matter: without it the registration has to be made again
+    reg = next(f["id"] for f in s["frames"] if f["role"] == "registration")
+    s = client.delete(f"/api/sessions/{sid}/frames/{reg}").json()
+    assert s["registration"] is None and s["verifications"] == []

@@ -6,6 +6,10 @@
 // picture it was not computed from; a slow connection only lowers the update
 // rate.  When a frame cannot be registered the overlay disappears with it,
 // and when no answer arrives for a while the last overlay is removed too.
+//
+// With `placement` (views/placement.js) every frame also asks where the placard
+// is: the request carries what the last answer said about the stream, and each
+// answer is handed to the placement view, which shows and sounds it.
 import { upload } from '../api.js';
 import { h, clear, icon, toast } from '../dom.js';
 import { state } from '../store.js';
@@ -14,11 +18,14 @@ import { coachLine } from './common.js';
 
 const STALE_MS = 2500;
 
-export async function startLive({ viewer, shell, modePill, onStopped = () => {}, onReport = () => {} }) {
+export async function startLive({ viewer, shell, modePill, onStopped = () => {}, onReport = () => {}, placement = null }) {
   const sid = state.session.id;
-  const maxEdge = Math.min(1600, state.config.limits.max_track_long_edge || 1600);
+  // Placement wants many answers per second, and what limits its uncertainty is not the pixel size of the frame
+  // (docs/BUILD_LOG.md): frames are sent smaller there.  The record is taken at the camera's full size.
+  const maxEdge = Math.min(placement ? 1280 : 1600, state.config.limits.max_track_long_edge || 1600);
   let running = true;
   let frozen = false;
+  let held = false;                // the loop waits (a record photo is being taken); the picture stays
   let lastUpdate = 0;
   let lastTracked = 0;
   let shownTracking = false;
@@ -43,7 +50,7 @@ export async function startLive({ viewer, shell, modePill, onStopped = () => {},
     onState: (st, info) => {
       if (!running) return;
       if (st === 'starting') setPill('Starting camera…', 'warn', 'starting');
-      else if (st === 'paused') { hideOverlay(); setPill('Camera paused', 'warn', 'paused'); setCoach({ code: 'paused', level: 'warn', text: `${(info && info.reason) || 'The camera is paused.'} Stop and start live guidance to resume.`, arrow: null }); }
+      else if (st === 'paused') { hideOverlay(); gap('The camera is paused.'); setPill('Camera paused', 'warn', 'paused'); setCoach({ code: 'paused', level: 'warn', text: `${(info && info.reason) || 'The camera is paused.'} Stop and start live guidance to resume.`, arrow: null }); }
       else if (st === 'error') { toast({ title: (info && info.title) || 'The camera could not be opened', detail: (info && info.detail) || '', kind: 'error', timeout: 9000 }); stop(); }
     },
   });
@@ -53,6 +60,8 @@ export async function startLive({ viewer, shell, modePill, onStopped = () => {},
     viewer.setOverlay({ primitives: [] });
     shownTracking = false;
   }
+  // no current reading: the placement view must stop showing and sounding one
+  function gap(text) { if (placement) placement.onGap(text); }
 
   function show(shot, res, roundTripMs) {
     const pic = shot.bitmap || shot.canvas;
@@ -75,14 +84,16 @@ export async function startLive({ viewer, shell, modePill, onStopped = () => {},
       setPill('Tracking lost — no overlay', 'warn', 'lost');
       setCoach({ code: t.code, level: 'todo', text: [t.message, ...(t.suggestions || [])].join(' '), arrow: t.arrow });
     }
+    if (placement) placement.onResult(res);
     onReport(res);
   }
 
   // If answers stop coming, the last overlay must not linger on screen.
   const staleTimer = setInterval(() => {
-    if (!running || frozen || !shownTracking) return;
+    if (!running || frozen || held || !shownTracking) return;
     if (performance.now() - lastUpdate > STALE_MS) {
       hideOverlay();
+      gap('No recent answer from the server.');
       setPill('No recent update — overlay hidden', 'warn', 'stale');
     }
   }, 300);
@@ -91,8 +102,13 @@ export async function startLive({ viewer, shell, modePill, onStopped = () => {},
     frozen = !frozen;
     freezeBtn.setAttribute('aria-pressed', String(frozen));
     freezeBtn.textContent = frozen ? 'Resume live' : 'Freeze';
-    if (frozen) setPill('Frozen frame — not live', 'frozen', 'frozen');
+    if (frozen) { setPill('Frozen frame — not live', 'frozen', 'frozen'); gap('The picture is frozen: not a current reading.'); }
     else { lastUpdate = performance.now(); setPill('Resuming…', 'warn', 'starting'); }
+  }
+  // Pause the loop without changing what is shown (while a record photo is taken and measured).
+  function hold(on) {
+    held = !!on;
+    if (!held) lastUpdate = performance.now();
   }
 
   function stop() {
@@ -109,18 +125,18 @@ export async function startLive({ viewer, shell, modePill, onStopped = () => {},
 
   async function loop() {
     while (running) {
-      if (frozen || cam.state !== 'live') { await sleep(150); continue; }
+      if (frozen || held || cam.state !== 'live') { await sleep(held ? 60 : 150); continue; }
       const t0 = performance.now();
       let shot;
       try { shot = await cam.grabReduced(maxEdge); } catch (_) { await sleep(250); continue; }
       const pl = state.session.operation ? state.session.operation.placards_resolved.map((p) => p.placard_id).join(',') : '';
       try {
-        const res = await upload(`api/sessions/${sid}/track?placards=${encodeURIComponent(pl)}`, shot.blob, {
-          meta: { native_width: shot.native[0], native_height: shot.native[1], ...cam.settings(), torch: cam.torchState() }, timeout: 15000,
+        const res = await upload(`api/sessions/${sid}/track?placards=${encodeURIComponent(pl)}${placement ? '&placement=true' : ''}`, shot.blob, {
+          meta: { native_width: shot.native[0], native_height: shot.native[1], ...cam.settings(), torch: cam.torchState(), ...(placement ? placement.meta() : {}) }, timeout: 15000,
         });
         failures = 0;
         if (!running) break;
-        if (frozen) continue;                 // an answer for a frame taken before the freeze is dropped
+        if (frozen || held) continue;         // an answer for a frame taken before the freeze (or the record) is dropped
         show(shot, res, performance.now() - t0);
       } catch (err) {
         failures += 1;
@@ -128,6 +144,7 @@ export async function startLive({ viewer, shell, modePill, onStopped = () => {},
         const busy = err && err.lumen && err.lumen.code === 'server_busy';
         if (failures >= 2) {
           hideOverlay();
+          gap(busy ? 'The server is busy.' : 'The server did not answer.');
           setPill(busy ? 'Server busy — overlay hidden' : 'Connection problem — overlay hidden', 'warn', 'stale');
           setCoach({ code: 'connection', level: 'warn', text: (err && err.lumen && err.lumen.message) || 'The server did not answer.', arrow: null });
         }
@@ -142,5 +159,5 @@ export async function startLive({ viewer, shell, modePill, onStopped = () => {},
   if (!ok) { stop(); return null; }
   hideOverlay();
   loop();
-  return { stop, toggleFreeze, get frozen() { return frozen; }, get camera() { return cam; }, lastTrackedAt: () => lastTracked };
+  return { stop, toggleFreeze, hold, get frozen() { return frozen; }, get camera() { return cam; }, lastTrackedAt: () => lastTracked };
 }

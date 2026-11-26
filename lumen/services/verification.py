@@ -41,6 +41,8 @@ if TYPE_CHECKING:  # pragma: no cover
     from .sessions import SessionService
 
 CORNER_NAMES = ("TL", "TR", "BR", "BL")
+#: outline flags that keep a measured deviation from being reported as "within tolerance"
+DOUBTFUL_OUTLINE = ("corner_lifted_or_hidden", "edge_not_straight", "glare_on_edge", "edge_partly_hidden", "ambiguous_proposal", "at_search_limit", "size_differs_from_record")
 
 
 def _edge_deviations(m: PlacardMeasurement, Hinv: np.ndarray, rect: Any) -> dict[str, float]:
@@ -188,6 +190,31 @@ def verify_frame(
         }.get(m.reason, "The placard outline could not be measured.")
         return _store(svc, sid, base, detail, None, msg + " Mark the four corners by hand, or retake the photo.")
 
+    message = _evaluate(svc, base, detail, m, H=H, cam=cam, lf=lf, rect=rect, spec=spec, base_unc=rep.uncertainty, ppm=ppm, manual=manual, flags=flags)
+    return _store(svc, sid, base, detail, m, message)
+
+
+def _with_bound(unc: Uncertainty, name: str, bound_mm: float, note: str) -> Uncertainty:
+    """``unc`` with one more systematic term given as a bound (rectangular)."""
+    comps = list(unc.components) + [UncertaintyComponent(name=name, kind="systematic", distribution="rectangular", value_mm=bound_mm, variance_mm2=bound_mm**2 / 3.0, note=note)]
+    bias_var = unc.bias_bound_mm**2 + bound_mm**2 / 3.0
+    u_c = float(np.sqrt(unc.u_random_mm**2 + bias_var))
+    return unc.model_copy(update={
+        "bias_bound_mm": float(np.sqrt(bias_var)), "bias_linear_mm": float(unc.bias_linear_mm + bound_mm),
+        "combined_standard_mm": u_c, "expanded_mm": float(unc.k * u_c), "components": comps,
+    })
+
+
+def _evaluate(
+    svc: "SessionService", base: Verification, detail: dict[str, Any], m: PlacardMeasurement, *,
+    H: np.ndarray, cam: Any, lf: Any, rect: Any, spec: PlacementSpec, base_unc: Uncertainty | None, ppm: float, manual: bool, flags: list[str],
+    extra_bounds: list[tuple[str, float, str]] | None = None, doubtful: tuple[str, ...] | None = None,
+) -> str:
+    """Fill ``base`` with the measured outline, its deviation from the target and what that says against the
+    tolerance.  ``extra_bounds`` are further systematic terms ``(name, bound in mm, note)`` of this measurement;
+    ``doubtful`` are the flag prefixes that keep a result from being called "within" (default: every quality flag
+    of the outline).  Returns a message for the operator (empty when there is nothing to add)."""
+    Hinv = np.linalg.inv(H)
     C = m.corners_ideal
     have = np.isfinite(C).all(axis=1)
     plane = np.full((4, 2), np.nan)
@@ -205,29 +232,31 @@ def verify_frame(
         prov.append(Provenance.MANUAL if ("manual" in (a.method, b.method)) else Provenance.MEASURED)
     base.corner_provenance = prov
     base.edge_deviation_mm = {k: round(v, 4) for k, v in _edge_deviations(m, Hinv, rect).items()}
-    unc = _combine_uncertainty(rep.uncertainty, m, ppm, svc._placard_cfg, manual)
+    unc = _combine_uncertainty(base_unc, m, ppm, svc._placard_cfg, manual)
+    for name, bound, note in extra_bounds or []:
+        if unc is not None and bound > 0:
+            unc = _with_bound(unc, name, float(bound), note)
     base.uncertainty = unc
-    message = ""
-    if m.complete:
-        pose = rectangle_pose_in_frame(lf, plane)
-        tgt_c = lf.to_local(rect.center)
-        base.dx_mm = float(pose["x"] - tgt_c[0])
-        base.dz_mm = float(pose["z"] - tgt_c[1])
-        base.radial_mm = float(np.hypot(base.dx_mm, base.dz_mm))
-        base.rotation_rad = float(wrap_angle(pose["angle"] - rect.angle))
-        base.width_error_mm = float(pose["width"] - rect.width)
-        base.height_error_mm = float(pose["height"] - rect.height)
-        detail["rotation_sigma_rad"] = _rotation_sigma(m)
-        detail["size_bound_mm"] = 2.0 * svc._placard_cfg.edge_definition_bound_px / ppm
-        base.observation = _classify(base, spec, unc, detail)
-        if any(fl.startswith(("corner_lifted_or_hidden", "edge_not_straight", "glare_on_edge", "edge_partly_hidden", "ambiguous_proposal", "at_search_limit", "size_differs_from_record")) for fl in flags) and base.observation == "within_tolerance_observed":
-            # a clean-looking number from a doubtful outline is not reported as "within"
-            base.observation = "indeterminate"
-            detail["observation_note"] = "downgraded: the outline has quality flags"
-    else:
+    if not m.complete:
         base.observation = "partial"
-        message = "Only part of the outline was measured: side offsets are reported, the centre is not."
-    return _store(svc, sid, base, detail, m, message)
+        return "Only part of the outline was measured: side offsets are reported, the centre is not."
+    pose = rectangle_pose_in_frame(lf, plane)
+    tgt_c = lf.to_local(rect.center)
+    base.dx_mm = float(pose["x"] - tgt_c[0])
+    base.dz_mm = float(pose["z"] - tgt_c[1])
+    base.radial_mm = float(np.hypot(base.dx_mm, base.dz_mm))
+    base.rotation_rad = float(wrap_angle(pose["angle"] - rect.angle))
+    base.width_error_mm = float(pose["width"] - rect.width)
+    base.height_error_mm = float(pose["height"] - rect.height)
+    detail["rotation_sigma_rad"] = _rotation_sigma(m)
+    detail["size_bound_mm"] = 2.0 * svc._placard_cfg.edge_definition_bound_px / ppm
+    base.observation = _classify(base, spec, unc, detail)
+    bad = doubtful if doubtful is not None else DOUBTFUL_OUTLINE
+    if any(fl.startswith(bad) for fl in flags) and base.observation == "within_tolerance_observed":
+        # a clean-looking number from a doubtful outline is not reported as "within"
+        base.observation = "indeterminate"
+        detail["observation_note"] = "downgraded: the outline has quality flags"
+    return ""
 
 
 def _order_like_target(pts: np.ndarray, target_px: np.ndarray) -> np.ndarray:
