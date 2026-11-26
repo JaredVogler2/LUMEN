@@ -1606,8 +1606,25 @@ a server made anew for every request; 22 existing tests through the carrier;
 3 browser tests (the demo with a reload in the middle and nothing left at
 the end, phone-sized photos, live placement to the automatic record).
 
-Not run: Vercel. Whether the platform takes the envelope as the stand-in
-does, how long its one shared core needs for the lines, and how often a live
-frame meets an instance that knows the job, will be seen on the first try
-there. Menu → Diagnostics → "Where the job is kept" shows each request's size
-and time for that purpose.
+### On Vercel
+
+With the owner's consent the preview deployment of this commit was then
+tried from here through a temporary share link: first with the test client,
+then with Chromium and the fake camera.
+
+| | |
+|---|---|
+| the demo job | the same numbers as everywhere (record 1.44 mm, -0.90 mm) |
+| finding the lines | 15.9 to 18.9 s (12 to 16 s on one core here) |
+| a live reading, request to answer | median 0.15 s; the server's own share 0.04 s |
+| answered from a held registration | 23 of 24 after the first six: the platform kept answering with the instance that knew the job |
+| the first reading on an instance | 1.4 to 1.6 s |
+| live placement from the film in Chromium | in position after 5.2 s, recorded by itself after 9.6 s; a reload in the middle brought the job back |
+
+So the bad case measured above (every frame on a new instance, 1.3 s) is not
+what this platform did on this day: it reused the instance, and the reading
+rate was set by the round trip, not by the server.
+
+Not run: a phone. Each live frame is 92 kB up, which a data centre does not
+notice and a mobile network may. Menu → Diagnostics → "Where the job is kept"
+shows each request's size and time for that purpose.

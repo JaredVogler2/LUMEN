@@ -5,8 +5,10 @@ the other kind of host: a function platform such as Vercel, AWS Lambda,
 Netlify or Azure Functions, which is a convenient place to try the
 application on a phone and is not where it is meant to run at work.
 
-Status: tried against a stand-in for such a host (below). **Not run on
-Vercel itself, and not on a phone.**
+Status: tested against a stand-in for such a host, and tried once on a
+preview deployment on Vercel (Hobby plan, 2026-11-26), from a data centre,
+with the test client and with Chromium and a fake camera (results below).
+**Not tried on a phone.**
 
 ## What is different there
 
@@ -58,7 +60,39 @@ is done on the server either way; the phone only holds the data.
 
 How fast live placement is on such a platform therefore depends on how often
 the platform answers with a copy that already knows the job. That is the
-platform's decision and was not measured.
+platform's decision. On the one deployment tried it almost always did (next
+section).
+
+## On Vercel, measured once
+
+One preview deployment of this code on Vercel's Hobby plan, reached from a
+data centre (so with a better connection than a phone has). First with the
+test client (`tests/carry_client.py`, the same client as in the tests), then
+with Chromium, a phone-sized window and a fake camera playing the film of a
+placard that is brought to its target.
+
+| | |
+|---|---|
+| the page opens (first request, instances cold) | 6.8 s |
+| the five demo photos, tags measured | 3.6 to 4.4 s |
+| registration | 1.3 s |
+| finding the lines (the five photos go up, 0.9 MB) | 15.9 to 18.9 s |
+| the target on a photo; the straight-on picture | 0.7 s each |
+| a live reading, request to answer | median 0.15 s (0.13 to 0.19); the server's own share 0.04 s |
+| the first reading on an instance that has not seen the job | 1.4 to 1.6 s |
+| readings answered from a held registration, after the first six | 23 of 24 |
+| sent with each live frame | 92 kB (frame 69 kB, job 23 to 25 kB) |
+| live placement from the film in Chromium | guiding after 2.4 s, in position after 5.2 s, recorded by itself after 9.6 s; 17 readings; the tones commanded in order |
+| the record | 0.33 mm and 0.20 mm from the target (the film ends at 0.30 and 0.20) |
+| a reload in the middle of the job | the job is back, from the browser's own storage |
+| the whole job with the test client | 42 requests, 30 of them live frames; 7 photos sent; no step had to ask for a photo |
+
+The numbers of the demo job are those of every other run of it (the record
+reads 1.44 mm and -0.90 mm against 1.4 and -0.9).
+
+What this does not say: how it is from a phone on a mobile network (each
+live frame is 92 kB up), on another plan or another day, or with several
+people at once.
 
 ## The limits of the platform
 
@@ -126,5 +160,5 @@ the job carried; in a browser the demo, phone-sized photos being reduced, a
 reload in the middle of a job, live placement to the automatic record, and
 nothing left in the browser after the session ends.
 
-Not run: Vercel or any other real function platform; a phone; a mobile
-network.
+Tried once on Vercel as described above. Not run: a phone; a mobile network;
+any other function platform.
