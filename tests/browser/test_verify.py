@@ -27,7 +27,7 @@ def to_verify(page):
 def test_verify_reports_signed_deviations_as_evidence_not_acceptance(page):
     to_verify(page)
     text = page.inner_text("#view").lower()
-    assert "tags must still be" in text and "not an acceptance decision" in text
+    assert "tags must not have moved" in text and "not an acceptance decision" in text
     assert page.is_disabled('[data-action="confirm"]') if page.locator('[data-action="confirm"]').count() else True
     shot(page, "verify_empty")
     page.click('[data-action="verify-demo"]')

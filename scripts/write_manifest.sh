@@ -8,6 +8,7 @@
 # that matches a Python installed on the Connect server and that has pip (an
 # environment made by uv has none).  Re-run after any change to the files that are
 # deployed: the manifest lists each file with a checksum, and a test compares them.
+# An organisation's logo placed in brand/ (see brand/README.md) is listed and uploaded with the rest.
 # Exclusion patterns may contain "**" only once (a limit of the tool).
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -18,7 +19,7 @@ rsconnect write-manifest fastapi \
   --python "$PY" \
   --requirements-file requirements.txt \
   -x "tests/**" -x "docs/**" -x "prompt_series/**" -x "scripts/**" \
-  -x "requirements-dev.txt" -x "pyproject.toml" -x "README.md" -x ".gitignore" \
+  -x "requirements-dev.txt" -x "pyproject.toml" -x "README.md" -x ".gitignore" -x "brand/README.md" \
   -x ".venv*/**" -x ".pytest_cache/**" -x "**/__pycache__/*" -x "**/*.pyc" -x ".lumen-data/**" -x "lumen-data/**" -x "manifest.json" \
   .
 echo "manifest.json written: $(python3 -c 'import json;m=json.load(open("manifest.json"));print(m["metadata"]["appmode"], m["metadata"]["entrypoint"], "python", m["python"]["version"], len(m["files"]), "files")')"

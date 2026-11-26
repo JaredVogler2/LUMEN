@@ -58,7 +58,7 @@ for the front end.
 ```mermaid
 flowchart TB
   subgraph Phone["Phone browser (vanilla ES modules, no build step)"]
-    UI["views/*: Identify, Markers, Capture, Datums, Rectified, Place, Verify"]
+    UI["views/*: Job, Tags, Photos, Lines (+ scale check), Place, Records"]
     PLV["views/live.js + placement.js: live loop, dial, record; sound.js: tones"]
     CAM["camera.js: getUserMedia, torch, stills, recording"]
     VIEW["viewer.js: canvas, pan/zoom, overlay primitives"]
@@ -225,7 +225,22 @@ from `get_store()`.
 
 *A new screen:* a module in `lumen/static/js/views/` exporting
 `mount(root, ctx)`, registered in `main.js` and `store.js` (`STEPS`,
-`stepAvailability`). Build elements with `h()` from `dom.js`.
+`stepAvailability`). Build elements with `h()` from `dom.js`. A step with
+`nav: false` and a `parent` is a tool of that parent: it has no stop in the
+row of steps and is shown as its parent (the scale check under Lines).
+
+*Wording and look:* the server's status values, check codes and notices are
+the contract with exports and tests and stay as they are; what the operator
+reads is chosen in the views (`STATUS_TEXT` and `statusHero` in
+`views/common.js`, `resultMode` in `store.js` for the indicator in the
+header and the watermark). Colours are the tokens at the top of
+`static/css/lumen.css`: the light theme is the default, `--brand` is the one
+colour, and `applyBrand` in `store.js` replaces it with the installation's
+(`Settings.brand`: `LUMEN_BRAND_NAME`, `LUMEN_BRAND_LOGO` or
+`brand/logo.*`, `LUMEN_BRAND_COLOR`). The logo is served by `GET /brand/logo`
+(`api/app.py`). No artwork of an organisation belongs in the repository
+(`tests/integration/test_branding.py` checks that `brand/` holds only its
+note).
 
 ## 6. State of the work
 

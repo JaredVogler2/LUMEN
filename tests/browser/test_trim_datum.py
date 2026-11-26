@@ -34,7 +34,7 @@ def test_a_kick_strip_makes_the_app_ask_which_line_is_meant(browser, live_server
         page.click('[data-step="datums"]')
         note = page.wait_for_selector('[data-region="step-beside-floor"]', timeout=60_000).inner_text()
         assert "Is this the right line?" in note and "8 mm in front of the panel face" in note and "60 mm beyond" in note
-        assert "Choose detected line" in note and "trim" in note
+        assert "Choose line" in note and "trim" in note
         assert page.query_selector('[data-region="step-beside-side"]') is None, "the side seam has nothing beside it"
         shot(page, "datums_trim_photo")
         page.locator('[data-region="step-beside-floor"]').scroll_into_view_if_needed()
@@ -42,9 +42,9 @@ def test_a_kick_strip_makes_the_app_ask_which_line_is_meant(browser, live_server
         assert_clean_text(page)
         # confirming the lines as they are does not make it guidance: the check stays open and says why
         page.click('[data-action="confirm-datums"]')
-        page.wait_for_selector('[data-step="rectified"][aria-current="step"]', timeout=60_000)
-        page.click('[data-step="place"]')
-        page.wait_for_selector('.status-hero[data-status="research_preview"]', timeout=120_000)
+        page.wait_for_selector('[data-step="place"][aria-current="step"]', timeout=60_000)
+        hero = page.wait_for_selector('.status-hero[data-status="research_preview"]', timeout=120_000).inner_text().lower()
+        assert hero.startswith("check needed") and "at least one check is open" in hero and "not validated" in hero
         gate = page.wait_for_selector('[data-gate="datum_floor_no_step_beside"]')
         assert "fail" in gate.get_attribute("class") and "may be the edge of a trim" in gate.inner_text()
         # scale rests on the entered sizes only: said as a note ("i"), not ticked and not counted as open

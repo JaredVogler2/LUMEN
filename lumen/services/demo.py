@@ -59,7 +59,7 @@ def load_demo(svc: SessionService, sid: str, scenario: str) -> Session:
     lens = str((man.get("calibration") or {}).get("lens") or "")
     for fr in man["frames"]:
         if fr.get("role", "registration") != "registration":
-            continue  # verification photos are added on the Verify step
+            continue  # verification photos are added on the Records step
         data = (d / fr["file"]).read_bytes()
         svc.add_frame(sid, data, role="registration", source="demo", client={"camera_label": device, "lens": lens, "captured_at": man.get("generated", "")})
 

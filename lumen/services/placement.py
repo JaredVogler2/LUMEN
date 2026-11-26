@@ -125,7 +125,7 @@ def live_placement(
     out: dict[str, Any] = {"placard_id": pid, "found": False, "state": "no_target", "in_position": False, "clean": False, "notice": RESEARCH_NOTICE}
     lf = svc._local_frame(s)
     if not pid or not s.operation or lf is None or not lf.valid:
-        out["message"] = "There is no target yet: choose the placard and confirm the datums first."
+        out["message"] = "There is no target yet: choose the placard and confirm the two lines first."
         return out
     try:
         spec = PlacementSpec(**svc._operation(s).placard(pid).resolved())

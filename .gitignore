@@ -16,3 +16,6 @@ lumen-data/
 tests/browser/_artifacts/
 docs/screenshots/_tmp/
 node_modules/
+# an installation's own artwork (its organisation's logo) is supplied at deployment and never committed here
+brand/*
+!brand/README.md

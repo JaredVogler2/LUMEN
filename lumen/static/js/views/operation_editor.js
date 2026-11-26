@@ -202,7 +202,7 @@ export function openOperationEditor({ record = null, mode = 'new', library = [],
       }
       if (check.summary) {
         status.append(Object.keys(issues).length
-          ? banner('warn', 'Not complete: it can be saved as a draft, not released', 'Measurements with an incomplete or draft record stay at "research preview". Nothing is filled in for you.',
+          ? banner('warn', 'Not complete: it can be saved as a draft, not released', 'Measurements with an incomplete or draft record stay at “Check needed”. Nothing is filled in for you.',
             Object.entries(issues).map(([scope, lst]) => `${scope.replace('placard:', 'Placard ')}: ${lst.map(issueLabel).join('; ')}`))
           : banner('ok', 'Complete', 'Every datum, offset, size and tolerance the measurement needs is stated.'));
       }

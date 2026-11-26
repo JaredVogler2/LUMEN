@@ -124,7 +124,7 @@ def test_a_placard_is_followed_to_its_target_turns_green_and_is_recorded(approac
     assert done["stats"]["phases"][-2:] == ["recording", "recorded"] and "in_position" in done["stats"]["phases"]
     card = page.inner_text('[data-region="placement-record"]').lower()
     assert "recorded" in card and "within the tolerance" in card and "not an acceptance decision" in card
-    assert "verify placement" in page.inner_text('[data-action="continue"]').lower()
+    assert "open the record" in page.inner_text('[data-action="continue"]').lower()
     assert_clean_text(page)
     shot(page, "placement_recorded")
     assert not page._lumen_errors
@@ -230,12 +230,21 @@ def test_in_position_under_a_hand_it_waits_and_a_lost_connection_ends_the_tone(c
     page.context.close()
 
 
+# A screen wake lock that only records what is asked of it (a phone's own is not available to a test).
+WAKE_LOCK = """(() => { const log = []; window.__wake = log;
+  Object.defineProperty(navigator, 'wakeLock', { configurable: true, value: { request: async (kind) => { log.push('request:' + kind);
+    const hear = []; return { addEventListener: (_, f) => hear.push(f), release: async () => { log.push('release'); hear.forEach((f) => f()); } }; } } });
+})();"""
+
+
 def test_without_a_placard_nothing_is_judged_or_sounded(playwright_instance, tmp_path_factory, live_server):
     b = launch_with_camera(playwright_instance, film(tmp_path_factory, "bare", [(view(None, seed=330), 1.0)]))
     try:
-        page = open_app(b, live_server.url)
+        page = open_app(b, live_server.url, init_script=WAKE_LOCK)
         start(page)
         page.wait_for_selector('[data-region="placement"][data-phase="searching"]', timeout=60_000)
+        # the phone stands by itself while this runs: its screen is kept on
+        page.wait_for_function("() => window.__wake.includes('request:screen') && window.__lumenLive.awake === true", timeout=10_000)
         page.wait_for_function("() => window.__lumenPlacement.stats.results >= 3", timeout=30_000)
         st = page.evaluate(PLACEMENT)
         assert not st["last"]["found"] and st["log"] == [] and st["stats"]["attempts"] == 0
@@ -249,6 +258,8 @@ def test_without_a_placard_nothing_is_judged_or_sounded(playwright_instance, tmp
         page.wait_for_function("() => window.__lumenLive === null")
         page.wait_for_selector('[data-mode="frozen"]')
         assert "start live placement" in page.inner_text('[data-action="live"]').lower()
+        # ... and given back to the phone when the placement stops
+        assert page.evaluate("() => window.__wake") == ["request:screen", "release"]
         assert not page._lumen_errors
         page.context.close()
     finally:

@@ -103,8 +103,8 @@ condition, and in the corner combinations that are expected to be worst
 7. Note light level, distance, anything unusual, and the time taken.
 
 For verification runs (placard already applied): apply a test label at a
-position measured with the reference instrument, then use the Verify step and
-export.
+position measured with the reference instrument, then use the Records step
+(a photo check) and export.
 
 ## 5. Seeded faults
 
@@ -161,10 +161,11 @@ and z, and the rotation difference. Keep the sign.
 * **Coverage:** share of results whose error magnitude is within the expanded
   uncertainty the app stated, with a Clopper-Pearson interval. Also list the
   largest budget term for results that were not covered.
-* **Guidance status:** of the results shown as "prototype guidance", the share
-  outside tolerance (false acceptance), with its interval; of the results
-  shown as "research preview" or "blocked", the share that would have been
-  inside tolerance (lost results).
+* **Guidance status:** of the results shown as "Ready" (status
+  `prototype_guidance`), the share outside tolerance (false acceptance), with
+  its interval; of the results shown as "Check needed" (`research_preview`) or
+  "Cannot measure yet" (`blocked`), the share that would have been inside
+  tolerance (lost results).
 * **Sensitivity:** error and stated uncertainty against each factor of
   Study B; note where the error grows faster than the stated uncertainty.
 * **Faults:** table of section 5.

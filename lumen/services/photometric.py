@@ -42,7 +42,7 @@ def photometric_research(svc: "SessionService", sid: str) -> dict[str, Any]:
         )
     side = s.datums.get("side")
     if side is None or len(side.endpoints) != 2:
-        raise ConflictError("no_side_datum", "Set the side datum first: the experiment looks at the shading next to it.", suggestions=["Search for the datums on the Datums step."])
+        raise ConflictError("no_side_datum", "Set the side datum first: the experiment looks at the shading next to it.", suggestions=["Search for the datum lines on the Lines step."])
 
     frames = {f.id: f for f in s.frames}
     ctxs = svc._frame_contexts(sid, s, sol, mv)

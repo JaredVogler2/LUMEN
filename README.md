@@ -6,24 +6,27 @@ two datum features on the panel are enough to show where a placard goes, to
 measure it while it is being put there, and to record where it ended up. No
 CAD model, no native app, no LiDAR, no NFC, no extra optical hardware.
 
-> **Research prototype.** Everything LUMEN shows is measurement evidence, not
-> product acceptance. All accuracy figures in this repository come from
-> computer-generated photos. Nothing has been measured with a real phone, a
-> real print or a real panel, and nothing has been deployed to a Posit Connect
-> server: those steps are written down and marked NOT RUN
-> (`docs/PHYSICAL_TEST_PROTOCOL.md`, `docs/POSIT_CONNECT.md`).
+> **Status: evaluation, not validated.** Everything LUMEN shows is measurement
+> evidence, not product acceptance. All accuracy figures in this repository
+> come from computer-generated photos. Nothing has been measured with a real
+> phone, a real print or a real panel, and nothing has been deployed to a
+> Posit Connect server: those steps are written down and marked NOT RUN
+> (`docs/PHYSICAL_TEST_PROTOCOL.md`, `docs/POSIT_CONNECT.md`). The application
+> says the same on every screen ("Evaluation") until an administrator supplies
+> the range that a physical study has validated.
 
 ## What it does
 
+Six steps, one main button on each screen:
+
 | Step | What happens |
 |---|---|
-| Identify | choose the operation and placard, or scan a bar code / QR code (exact matches only); records can be entered and revised in the app |
-| Markers | enter the caliper-measured edge of each tag's black square; scale comes from nothing else |
-| Capture | photos, or a video from which sharp, well-spread frames are selected; coaching on distance, angle, glare, coverage |
-| Datums | floor line and side line are found and fitted to sub-pixel edges; a rounded side edge is modelled from its outline in several photos; the operator confirms |
-| Rectified | metric straight-on view with a grid from the datums; optional rule measurement that catches a wrong tag size |
-| Place | the target outline on the photo with distances, uncertainty and a status that says what was and was not checked. **Live placement**: the camera watches while the placard is positioned; every frame says how far it is from its target and which way to move it, on the screen and by sound; it turns green in position and the placement is recorded by itself |
-| Verify | the record of the placement, or a new photo of an installed placard: the outline is measured and compared with the target, signed deviations with uncertainty; export; delete |
+| 1 Job | choose the operation and placard, or scan a bar code / QR code (exact matches only); records can be entered and revised in the app |
+| 2 Tags | enter the caliper-measured edge of each tag's black square; scale comes from nothing else |
+| 3 Photos | photos, or a video from which sharp, well-spread frames are selected; coaching on distance, angle, glare, coverage |
+| 4 Lines | the floor line and the side line (the datums) are found and fitted to sub-pixel edges; a rounded side edge is modelled from its outline in several photos; the operator looks and confirms. Optional: a metric straight-on view with a rule measurement that catches a wrong tag size |
+| 5 Place | the target outline on the photo with distances, uncertainty and a status: *Cannot measure yet*, *Check needed* or *Ready*, with the list of what was and was not checked. **Live placement**: the camera watches while the placard is positioned; every frame says how far it is from its target and which way to move it, on the screen and by sound; it turns green in position and the placement is recorded by itself |
+| 6 Records | the record of the placement, or a new photo of an installed placard: the outline is measured and compared with the target, signed deviations with uncertainty; export; delete |
 
 How it stays honest:
 
@@ -31,10 +34,12 @@ How it stays honest:
   defines; gravity, the phone's sensors and "up in the picture" are not used;
 * tags are placed anywhere on the flat face; their layout is solved, cross-checked
   between tags and, with several photos, checked for coplanarity in 3-D;
-* missing or contradictory geometry gives "no guidance" with a reason and a
-  next step, never a guess; no datum, offset or tolerance is invented;
+* missing or contradictory geometry gives "Cannot measure yet" with a reason
+  and a next step, never a guess; no datum, offset or tolerance is invented;
 * every result carries an uncertainty budget and the list of checks behind its
-  status; simulated data is labelled on every screen;
+  status; one indicator on every screen says what kind of results these are
+  (demo data, an evaluation that is not validated, or validated), and
+  simulated data is labelled on every picture;
 * what was not checked is said as well: a check that passes on someone's word
   (scale from the entered tag sizes only, a datum on the face by the record's
   statement, a tag that was set aside) is shown as a note, not as a tick;
@@ -61,6 +66,28 @@ covered side is drawn dashed):
 
 Screenshots from the automated browser tests (phone-sized window,
 computer-generated photos). More in `docs/OPERATOR_QUICKSTART.md`.
+
+## Look and branding
+
+White surfaces, one colour (a deep blue by default), one main button per
+screen and plain words. Dark mode is a choice in the menu.
+
+An installation shows whose it is with three settings: the organisation's
+name, its logo and its colour.
+
+<img src="docs/screenshots/branding_sample.png" width="190" alt="First screen of an installation with a logo and a colour of its own (a sample drawing)">
+
+| Setting | Effect |
+|---|---|
+| a file `brand/logo.svg` (or `.png`, `.webp`, `.jpg`) beside the application, or `LUMEN_BRAND_LOGO` naming a file | the logo at the top left of every screen |
+| `LUMEN_BRAND_NAME` | the logo's alternative text; without a logo, the name beside LUMEN's mark |
+| `LUMEN_BRAND_COLOR` (`#rrggbb`) | the rule under the header, the mark and every primary button |
+
+No organisation's artwork is part of this repository: the logo in the picture
+is a drawing made by a test. Whoever deploys LUMEN supplies the official
+file, under the terms on which they may use it (`brand/README.md`,
+`docs/POSIT_CONNECT.md` section 6a); `brand/` is ignored by git so that it is
+not published by accident.
 
 ## Results so far (computer-generated photos only)
 
@@ -136,7 +163,7 @@ tags.
 Hands are skin-coloured boxes in rendered pictures here, and the tones were
 checked as commands in a browser without a loudspeaker.
 
-Tests on this code: 534 unit and integration tests and 42 browser tests pass;
+Tests on this code: 555 unit and integration tests and 45 browser tests pass;
 one test that calls a real language-model endpoint is opt-in and skipped.
 
 None of this is physical accuracy: no phone, print or panel was involved.
@@ -157,8 +184,8 @@ python3 -m venv .venv
 .venv/bin/python -m uvicorn app:app --host 127.0.0.1 --port 8000
 ```
 
-Open <http://127.0.0.1:8000/> and choose **Load demo session** to walk
-through all seven steps on simulated photos. To use a phone's camera the page
+Open <http://127.0.0.1:8000/> and choose **Open the demo** to walk through
+all six steps on simulated photos. To use a phone's camera the page
 must be served over HTTPS; deploying to Posit Connect provides that
 (`docs/POSIT_CONNECT.md`).
 

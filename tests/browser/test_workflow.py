@@ -5,19 +5,30 @@ import re
 
 import pytest
 
-from tests.browser.conftest import assert_clean_text, PHONE_LANDSCAPE, load_demo_to_place, shot
+from tests.browser.conftest import assert_clean_text, PHONE_LANDSCAPE, load_demo_to_place, open_scale_check, shot
 
 pytestmark = pytest.mark.browser
 
 
 def test_first_screen_states(page):
-    assert page.inner_text(".research-strip").lower().startswith("research prototype")
+    # one indicator, on every screen, says what kind of results this installation gives; a tap explains it
+    assert page.get_attribute('[data-region="mode"]', "data-results") == "evaluation"
+    assert page.inner_text('[data-region="mode"]').strip().lower() == "evaluation"
+    page.click('[data-region="mode"]')
+    why = page.wait_for_selector('[data-region="mode-sheet"]').inner_text().lower()
+    assert "not been checked against reference measurements" in why and "not by this app" in why
+    assert "independent metrology validation" in why and "surface and adhesive" in why
+    page.keyboard.press("Escape")
+    page.wait_for_selector('[data-region="mode-sheet"]', state="detached")
+    # six stops, in the operator's words; the scale check is a tool, not a stop
+    assert [b.get_attribute("data-step") for b in page.query_selector_all(".steps .step")] == ["identify", "markers", "capture", "datums", "place", "verify"]
+    assert page.get_attribute('[data-step="identify"]', "aria-label").startswith("Step 1: Job") and page.get_attribute('[data-step="verify"]', "aria-label").startswith("Step 6: Records")
     assert page.get_attribute('[data-step="identify"]', "aria-current") == "step"
     # nothing selected yet: the primary action is disabled and later steps refuse to open
     assert page.is_disabled('[data-action="continue"]')
     page.click('[data-step="capture"]')
     page.wait_for_selector(".toast")
-    assert "operation" in page.inner_text(".toast").lower()
+    assert "choose the job first" in page.inner_text(".toast").lower()
     assert page.get_attribute('[data-step="identify"]', "aria-current") == "step"
     # the three sample records are listed, the incomplete one is marked
     assert page.locator("[data-operation]").count() == 3
@@ -57,11 +68,18 @@ def test_demo_walkthrough_reaches_guidance_and_labels_everything(page):
     assert_clean_text(page)
     assert page.get_attribute(".status-hero", "data-status") == "prototype_guidance"
     hero = page.inner_text(".status-hero").lower()
-    assert "simulated" in hero and "not been validated" in hero
-    assert "simulated demo data" in page.inner_text(".research-strip").lower()
+    assert hero.startswith("ready") and "all checks passed" in hero and "simulated demo data" in hero
+    # the header says that this is the demo, and what that means
+    assert page.get_attribute('[data-region="mode"]', "data-results") == "demo"
+    page.click('[data-region="mode"]')
+    why = page.wait_for_selector('[data-region="mode-sheet"]').inner_text().lower()
+    assert "computer-generated" in why and "simulated" in why and "says nothing about a real part" in why
+    page.keyboard.press("Escape")
+    page.wait_for_selector('[data-region="mode-sheet"]', state="detached")
     assert page.get_attribute("[data-mode]", "data-mode") == "frozen"
     assert "frozen" in page.inner_text("[data-mode]").lower()
-    assert page.inner_text(".viewer-watermark").lower().startswith("research only")
+    # (the watermark is written in capitals by the style sheet)
+    assert page.inner_text(".viewer-watermark").lower() == "demo · simulated data" and page.get_attribute(".viewer-watermark", "data-results") == "demo"
     shot(page, "place_portrait")
     # switching placard keeps the registration and updates the readout
     page.click('[data-placard="PLC-DEMO-102"]')
@@ -147,7 +165,7 @@ def test_accessibility_basics(page):
 def test_ruler_measurement_on_the_rectified_screen_blocks_a_wrong_scale(page):
     """Independent scale check from the interface: a contradicting ruler reading removes the target."""
     load_demo_to_place(page)
-    page.click('[data-step="rectified"]')
+    open_scale_check(page)
     page.wait_for_selector('[data-region="scale-check"] [data-action="ref-check"]', timeout=60_000)
     page.click('[data-action="ref-show"]')
     page.wait_for_function("() => window.__lumenViewer.overlay.primitives.filter((p) => p.kind === 'handle').length === 2", timeout=30_000)

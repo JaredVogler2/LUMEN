@@ -52,6 +52,23 @@ def _default_data_dir() -> Path:
     return Path(tempfile.gettempdir()) / f"lumen-sessions-{uid}"
 
 
+#: image kinds accepted for a brand logo (shown inside <img>, where an SVG cannot run scripts) and its size limit
+BRAND_LOGO_TYPES = {".svg": "image/svg+xml", ".png": "image/png", ".webp": "image/webp", ".jpg": "image/jpeg", ".jpeg": "image/jpeg"}
+BRAND_LOGO_MAX_BYTES = 512 * 1024
+#: an installation's own artwork, placed beside the application before it is deployed (see brand/README.md)
+BRAND_DIR = Path(__file__).resolve().parent.parent / "brand"
+
+
+def bundled_brand_logo(folder: Path | None = None) -> str:
+    """Path of ``logo.<svg|png|webp|jpg|jpeg>`` in the installation's brand folder, or "" if there is none."""
+    d = BRAND_DIR if folder is None else Path(folder)
+    for ext in BRAND_LOGO_TYPES:
+        f = d / f"logo{ext}"
+        if f.is_file():
+            return str(f)
+    return ""
+
+
 @dataclass(frozen=True)
 class Limits:
     """Hard bounds that keep one request / one session from exhausting a worker."""
@@ -102,11 +119,37 @@ class Settings:
     photometric_enabled: bool = True
     #: JSON file describing a physically validated measurement domain ("" = none).
     validated_domain_file: str = ""
+    #: Branding of this installation.  The name of the organisation, an image file with its logo and its primary
+    #: colour are settings of a deployment, not part of the repository: official artwork is supplied by whoever
+    #: runs the installation and has the right to use it.  The logo is the file named by LUMEN_BRAND_LOGO, or
+    #: ``brand/logo.<svg|png|webp|jpg>`` beside the application.
+    brand_name: str = ""
+    brand_logo: str = ""
+    brand_color: str = ""
     log_level: str = "INFO"
 
     @property
     def on_posit_connect(self) -> bool:
         return bool(os.environ.get("CONNECT_SERVER") or os.environ.get("RSTUDIO_PRODUCT") == "CONNECT" or os.environ.get("POSIT_PRODUCT") == "CONNECT")
+
+    @property
+    def brand(self) -> dict[str, object]:
+        """What the interface shows as the installation's brand (see ``brand_name`` and its neighbours).
+
+        A logo is offered only if the file exists, is an image of a kind a browser shows inside ``<img>`` and is
+        small; a colour only if it is a plain ``#rrggbb``.  Anything else is left out, never guessed.
+        """
+        logo = None
+        if self.brand_logo:
+            p = Path(self.brand_logo)
+            try:
+                if p.is_file() and p.suffix.lower() in BRAND_LOGO_TYPES and p.stat().st_size <= BRAND_LOGO_MAX_BYTES:
+                    logo = f"brand/logo?v={int(p.stat().st_mtime)}"
+            except OSError:
+                logo = None
+        color = self.brand_color.strip().lower()
+        ok = len(color) == 7 and color.startswith("#") and all(c in "0123456789abcdef" for c in color[1:])
+        return {"name": self.brand_name.strip()[:60], "logo": logo, "color": color if ok else None}
 
     @property
     def hosting(self) -> dict[str, object]:
@@ -178,6 +221,9 @@ def load_settings() -> Settings:
         llm_timeout_seconds=_env_float("LUMEN_LLM_TIMEOUT_SECONDS", 20.0),
         photometric_enabled=_env_bool("LUMEN_PHOTOMETRIC_ENABLED", True),
         validated_domain_file=_env("LUMEN_VALIDATED_DOMAIN_FILE", "") or "",
+        brand_name=_env("LUMEN_BRAND_NAME", "") or "",
+        brand_logo=_env("LUMEN_BRAND_LOGO", "") or bundled_brand_logo(),
+        brand_color=_env("LUMEN_BRAND_COLOR", "") or "",
         log_level=(_env("LUMEN_LOG_LEVEL", "INFO") or "INFO").upper(),
     )
 

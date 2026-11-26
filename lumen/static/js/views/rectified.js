@@ -88,7 +88,7 @@ export function mount(root, ctx) {
       banner('info', 'How to read this view', 'One pixel is the same distance everywhere on the panel face. The grid is computed from the registered tags and the confirmed datums — it is not decoration. Anything off the face (floor, curved edge, raised trim) is drawn where its line of sight meets the face, so it is displaced.'));
     ctx.setActions([
       { label: 'Back', back: true, onClick: () => ctx.go('datums') },
-      { id: 'continue', label: 'Placement', kind: 'primary lg', icon: 'arrow', onClick: () => ctx.go('place') },
+      { id: 'continue', label: 'Continue', kind: 'primary lg', icon: 'arrow', onClick: () => ctx.go('place') },
     ]);
   }
 

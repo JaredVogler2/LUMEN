@@ -1,4 +1,4 @@
-"""Rounded-edge demo: the edge model on the Datums screen and the research-only flashlight card (prompts 06, 07)."""
+"""Rounded-edge demo: the edge model on the Lines screen and the research-only flashlight card (prompts 06, 07)."""
 
 import pytest
 
@@ -13,6 +13,9 @@ def test_rounded_edge_demo_shows_the_edge_model_and_the_flashlight_experiment(pa
     page.click('[data-action="analyze"]')
     page.wait_for_selector('[data-datum="side"] .chip.ok', timeout=240_000)
     page.wait_for_selector(".busy", state="detached", timeout=180_000)
+    # how the lines were found is under "Details": closed until the operator asks
+    assert page.is_visible('[data-region="lines-lead"]') and not page.is_visible('[data-region="photometric"]')
+    page.click('[data-region="lines-details"] > summary')
     panel = page.inner_text(".panel").lower()  # headings are shown in capitals
     assert "rounded edge" in panel and "radius" in panel and "silhouettes" in panel
     sess = page.evaluate("async () => (await import('./static/js/store.js')).state.session")

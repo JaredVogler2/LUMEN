@@ -115,19 +115,27 @@ def shot(page: Any, name: str) -> Path:
 
 
 def load_demo_to_place(page: Any) -> None:
-    """Drive the demo session from Identify to the Place screen."""
+    """Drive the demo session from the first step (Job) to the Place step."""
     page.click('[data-action="demo"]')
     page.wait_for_selector('[data-action="analyze"]', timeout=180_000)
     page.click('[data-action="analyze"]')
-    # the Datums screen searches automatically on first entry
+    # the Lines step searches automatically on first entry
     page.wait_for_selector('[data-datum="floor"] .chip.ok', timeout=180_000)
     page.wait_for_selector('[data-datum="side"] .chip.ok', timeout=60_000)
     page.wait_for_selector('.busy', state="detached", timeout=60_000)
+    # confirming the lines leads straight to the placement
     page.click('[data-action="confirm-datums"]')
-    page.wait_for_selector(".status-hero", timeout=120_000)
-    page.click('[data-action="continue"]')
+    page.wait_for_selector('[data-step="place"][aria-current="step"]', timeout=120_000)
     page.wait_for_selector('[data-action="center-target"]', timeout=120_000)
     page.wait_for_selector(".status-hero", timeout=120_000)
+
+
+def open_scale_check(page: Any) -> None:
+    """The square-on view with the rule measurement: a tool of the Lines step, not a stop of its own."""
+    page.click('[data-step="datums"]')
+    page.click('[data-action="scale-check"]')
+    page.wait_for_selector('[data-region="scale-check"]', timeout=60_000)
+    assert page.get_attribute('[data-step="datums"]', "aria-current") == "step", "the tool is shown as part of the Lines step"
 
 
 # ---------------------------------------------------------------- fake camera
@@ -178,7 +186,7 @@ def open_app(browser: Any, url: str, init_script: str | None = None, **ctx_kw: A
 
 
 def to_capture_step(page: Any, operation: str = "DEMO-FLAT-01") -> None:
-    """Choose an operation, enter measured tag sizes and open the Capture step."""
+    """Choose an operation, enter measured tag sizes and open the Photos step."""
     page.click(f'[data-operation="{operation}"]')
     page.wait_for_selector('[data-action="continue"]:not([disabled])')
     page.click('[data-action="continue"]')

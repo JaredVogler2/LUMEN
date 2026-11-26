@@ -1,8 +1,8 @@
-// LUMEN application shell: header, research banner, step navigation, view host.
-import { api } from './api.js';
+// LUMEN application shell: header (brand, job, result mode), step navigation, view host.
+import { api, url } from './api.js';
 import { h, clear, icon, logo, toast, showError, sheet, banner } from './dom.js';
 import {
-  state, setState, subscribe, STEPS, prefs, applyTheme, setSession, rememberedSession,
+  state, setState, subscribe, STEPS, prefs, applyTheme, applyBrand, brandInfo, resultMode, setSession, rememberedSession,
   stepAvailability, stepDone, operationSummary, endSession,
 } from './store.js';
 import * as identify from './views/identify.js';
@@ -26,18 +26,18 @@ function boot() {
   let bootInfo = {};
   try { bootInfo = JSON.parse(bootMeta ? bootMeta.content : '{}'); } catch (_) { bootInfo = {}; }
   state.boot = bootInfo;
-  const preferred = prefs.theme || (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
-  applyTheme(preferred);
+  // light is the look of the application; dark is a choice in the menu and is remembered
+  applyTheme(prefs.theme || 'light');
+  applyBrand();
   state.units = prefs.units;
 
   const app = document.getElementById('app');
   clear(app);
   els.header = h('header', { class: 'app-header' });
-  els.strip = h('div', { class: 'research-strip', role: 'note' });
   els.steps = h('nav', { class: 'steps', 'aria-label': 'Workflow steps' });
   els.view = h('main', { id: 'view', tabindex: '-1' });
   els.actions = h('div', { class: 'actions', role: 'toolbar', 'aria-label': 'Step actions' });
-  app.append(els.header, els.strip, els.steps, els.view, els.actions);
+  app.append(els.header, els.steps, els.view, els.actions);
 
   subscribe(renderShell);
   renderShell();
@@ -55,6 +55,7 @@ async function init() {
   const [config, ops] = await Promise.all([api('GET', 'api/config'), api('GET', 'api/operations')]);
   state.config = config;
   state.operations = ops;
+  applyBrand();
   const sid = rememberedSession();
   if (sid) {
     try {
@@ -121,31 +122,51 @@ function setActions(list) {
   });
 }
 
+// The brand block of the header: the organisation's logo where the installation supplies one, else LUMEN's own mark.
+// It is built once per brand, not on every redraw (an <img> that is recreated loads again).
+function brandBlock() {
+  const b = brandInfo();
+  const key = `${b.logo || ''}|${b.name || ''}`;
+  if (els.brand && els.brandKey === key) return els.brand;
+  els.brandKey = key;
+  els.brand = b.logo
+    ? h('div', { class: 'brand', 'data-region': 'brand', title: b.name || null },
+      h('img', { class: 'brand-logo', src: url(b.logo), alt: b.name ? `${b.name} logo` : 'Organisation logo', 'data-region': 'brand-logo' }),
+      h('span', { class: 'brand-divider', 'aria-hidden': 'true' }),
+      h('span', { class: 'product' }, 'LUMEN'))
+    : h('div', { class: 'brand plain', 'data-region': 'brand', title: b.name || null }, logo(), h('span', { class: 'product' }, 'LUMEN'),
+      b.name ? h('span', { class: 'brand-divider', 'aria-hidden': 'true' }) : null, b.name ? h('span', { class: 'brand-name product' }, b.name) : null);
+  return els.brand;
+}
+
+function openMode() {
+  const m = resultMode();
+  sheet({ title: m.title, content: h('div', { class: 'stack', 'data-region': 'mode-sheet' }, h('p', null, m.text)) });
+}
+
 function renderShell() {
   // header
   const s = state.session;
   const op = operationSummary(s);
+  const m = resultMode(s);
+  els.header.classList.toggle('no-job', !op);
   clear(els.header).append(
-    h('div', { class: 'brand' }, logo(), h('span', null, 'LUMEN')),
+    brandBlock(),
     h('div', { class: 'header-context' },
-      h('div', { class: 'op' }, op ? op.operation_id : 'No operation selected'),
-      h('div', { class: 'sub' }, op ? `${s.active_placard_id || 'no placard'} · rev ${op.revision}` : 'Optical placard positioning')),
+      h('div', { class: 'op' }, op ? op.operation_id : 'No job selected'),
+      h('div', { class: 'sub' }, op ? `${s.active_placard_id || 'no placard'} · rev ${op.revision}` : 'Placard positioning')),
+    // one place on every screen says what kind of results these are
+    h('button', { class: `mode-chip ${m.kind}`, type: 'button', 'data-region': 'mode', 'data-results': m.kind, 'aria-label': `${m.title}. Tap for details.`, onclick: openMode }, icon(m.icon), m.label),
     h('button', { class: 'icon-btn', 'aria-label': 'Menu', 'data-action': 'menu', onclick: openMenu }, icon('menu')));
 
-  // research strip
-  const demo = s && s.mode === 'demo';
-  els.strip.className = `research-strip${demo ? ' demo' : ''}`;
-  els.strip.textContent = demo
-    ? 'Simulated demo data · research prototype · not for acceptance'
-    : 'Research prototype · measurement evidence only · not for acceptance';
-
-  // steps
+  // steps: the stops of the way; a tool reached from a stop is shown as that stop
   const avail = stepAvailability(s);
+  const here = (STEPS.find((x) => x.id === state.step) || {}).parent || state.step;
   clear(els.steps);
-  STEPS.forEach((st) => {
+  STEPS.filter((st) => st.nav !== false).forEach((st) => {
     const a = avail[st.id];
     const done = stepDone(st.id, s);
-    const cur = st.id === state.step;
+    const cur = st.id === here;
     els.steps.append(h('button', {
       class: `step${done ? ' done' : ''}${a.ok ? '' : ' blocked'}`,
       type: 'button',

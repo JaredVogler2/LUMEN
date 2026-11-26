@@ -7,7 +7,7 @@ stopping the camera); they say nothing about iPhone Safari.
 
 import pytest
 
-from tests.browser.conftest import assert_clean_text, camera_frames, launch_with_camera, open_app, shot, to_capture_step, write_y4m
+from tests.browser.conftest import assert_clean_text, camera_frames, launch_with_camera, open_app, open_scale_check, shot, to_capture_step, write_y4m
 
 pytestmark = pytest.mark.browser
 
@@ -140,14 +140,22 @@ def test_sweep_of_photos_registers_end_to_end(sweep_cam, live_server):
     page.wait_for_selector('.busy', state="detached", timeout=120_000)
     page.wait_for_selector('[data-datum="side"] .chip', timeout=120_000)
     if page.is_enabled('[data-action="confirm-datums"]'):
-        page.click('[data-action="confirm-datums"]')
+        page.click('[data-action="confirm-datums"]')          # leads straight to the Place step
+        page.wait_for_selector('[data-step="place"][aria-current="step"]', timeout=120_000)
         page.wait_for_selector(".status-hero", timeout=120_000)
-    for step in ("rectified", "place"):
-        page.click(f'[data-step="{step}"]')
+    # the scale check (a tool of the Lines step), then the Place step
+    open_scale_check(page)
+    for step in (None, "place"):
+        if step:
+            page.click(f'[data-step="{step}"]')
         page.wait_for_selector(".status-hero", timeout=120_000)
         page.wait_for_selector('.busy', state="detached", timeout=60_000)
         assert_clean_text(page)
-    assert "research prototype" in page.inner_text(".research-strip").lower() and "simulated" not in page.inner_text(".research-strip").lower()
+    # real photos on an installation that has not been validated: said in the header, on the picture and beside the status
+    assert page.get_attribute('[data-region="mode"]', "data-results") == "evaluation"
+    assert page.inner_text(".viewer-watermark").lower() == "evaluation only · not acceptance"
+    said = (page.inner_text(".app-header") + page.inner_text(".status-hero")).lower()
+    assert "not validated" in said and "simulated" not in said
     # Five small video-size frames, no lens profile: an outline is shown as a preview with reasons.  It is not
     # blocked: this is where a wrong "the floor datum is not on the panel face" used to stop a correct capture.
     assert page.get_attribute(".status-hero", "data-status") == "research_preview", page.inner_text(".panel")[:600]

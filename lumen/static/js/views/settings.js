@@ -195,7 +195,7 @@ export function openSettings() {
       sess && sess.calibration && !profiles.some((p) => p.id === sess.calibration.id)
         ? h('div', { class: 'card tight' }, h('div', { class: 'row wrap' }, h('strong', { class: 'grow' }, sess.calibration.label || sess.calibration.id), chip('used in this session', 'ok'), chip(sess.calibration.provenance, sess.calibration.provenance === 'simulated' ? 'info' : 'solid')),
           h('p', { class: 'hint' }, `${sess.calibration.width}×${sess.calibration.height} px · ${sess.calibration.method}`)) : null,
-      profiles.length ? profiles.map(profileCard) : h('p', { class: 'hint' }, 'None saved. Without a lens profile LUMEN still measures on the panel plane, but lens distortion is only bounded, and results stay at "research preview".'),
+      profiles.length ? profiles.map(profileCard) : h('p', { class: 'hint' }, 'None saved. Without a lens profile LUMEN still measures on the panel plane, but lens distortion is only bounded, and results stay at “Check needed”.'),
       ws ? photoStep() : boardStep(),
       h('p', { class: 'hint' }, 'A profile is applied only to photos of exactly the same pixel size and orientation, and not when the photo reports a different camera, lens or zoom. Calibration photos are kept on the server only as long as a session.')]);
   }

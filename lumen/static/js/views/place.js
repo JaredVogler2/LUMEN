@@ -153,7 +153,7 @@ export function mount(root, ctx) {
     } else if (rep && rep.status === 'blocked') {
       panel.append(banner('danger', 'No target is drawn.', 'LUMEN does not show a placement outline while required geometry is missing or ambiguous.', rep.suggestions));
     } else if (rep && rep.suggestions.length) {
-      panel.append(banner('warn', 'To reach guidance status', null, rep.suggestions));
+      panel.append(banner('warn', 'To get to “Ready”', null, rep.suggestions));
     }
     const ops = sess.operation ? sess.operation.placards_resolved : [];
     if (ops.length > 1) {
@@ -167,12 +167,12 @@ export function mount(root, ctx) {
       live
         ? h('button', { class: 'btn sm block', type: 'button', 'data-action': 'center-target', onclick: centerOnTarget }, icon('target'), 'Find target')
         : [
-          rec ? null : h('p', { class: 'hint', 'data-region': 'live-intro' }, 'Live placement: the camera watches while you position the placard. The screen and the sound say which way to move it, it turns green when it is in position, and the placement is recorded with a chime. Stand the phone where it sees the tags and the target, so that both hands are free.'),
+          rec ? null : h('p', { class: 'hint', 'data-region': 'live-intro' }, 'Stand the phone where it sees the tags and this target, then start. It guides the placard into place, turns green, and records the placement by itself.'),
           h('div', { class: 'row wrap' },
             h('button', { class: 'btn sm grow', type: 'button', 'data-action': 'center-target', disabled: blocked ? true : null, onclick: centerOnTarget }, icon('target'), 'Find target'),
             rec
               ? h('button', { class: 'btn sm grow', type: 'button', 'data-action': 'live', 'aria-pressed': 'false', disabled: blocked || starting ? true : null, onclick: toggleLive }, icon('video'), 'Place again, live')
-              : h('button', { class: 'btn sm grow', type: 'button', 'data-action': 'continue', disabled: canVerify ? null : true, onclick: () => ctx.go('verify') }, icon('camera'), 'Check from a photo')),
+              : h('button', { class: 'btn sm grow', type: 'button', 'data-action': 'continue', disabled: canVerify ? null : true, onclick: () => ctx.go('verify') }, icon('camera'), 'Photo check')),
         ],
       live ? null : h('div', { class: 'eyebrow' }, 'Target'), live ? null : targetReadout(p));
     if (rep && !live) {
@@ -187,15 +187,15 @@ export function mount(root, ctx) {
         live ? h('span', null, h('i', { style: { background: '#5cc8ff' } }), 'placard as measured') : h('span', null, h('i', { style: { background: '#fff' } }), 'offsets from datums')),
       h('p', { class: 'hint' }, live
         ? 'Each picture is shown together with what was measured in that same picture, a moment after it was taken. On the dial, the ring is the tolerance of the record and the disc is the placard, as large as the uncertainty of this view: it is in position when the disc is inside the ring. The record is a stored photo, taken when nothing covers the placard.'
-        : 'The outline here is drawn on a photo that does not update. A placard that is already installed can also be checked from one new photo in the Verify step.'),
+        : 'The outline here is drawn on a photo that does not update. A placard that is already installed can be checked from one new photo: Photo check.'),
       sess.mode === 'demo' ? h('div', null, chip('simulated demo data', 'info')) : null);
     // What comes next: placing it (live), or, once a record exists, the record.
     ctx.setActions([
-      { label: 'Back', back: true, onClick: () => ctx.go('rectified') },
+      { label: 'Back', back: true, onClick: () => ctx.go('datums') },
       live
         ? { id: 'live', label: 'Stop live placement', kind: 'lg', icon: 'pause', onClick: toggleLive }
         : rec
-          ? { id: 'continue', label: 'Verify placement', kind: 'primary lg', icon: 'arrow', disabled: !canVerify, onClick: () => ctx.go('verify') }
+          ? { id: 'continue', label: 'Open the record', kind: 'primary lg', icon: 'arrow', disabled: !canVerify, onClick: () => ctx.go('verify') }
           : { id: 'live', label: 'Start live placement', kind: 'primary lg', icon: 'video', disabled: blocked || starting, onClick: toggleLive },
     ]);
   }
@@ -248,7 +248,7 @@ export function mount(root, ctx) {
     renderPanel();
   }
 
-  ctx.setActions([{ label: 'Back', back: true, onClick: () => ctx.go('rectified') }]);
+  ctx.setActions([{ label: 'Back', back: true, onClick: () => ctx.go('datums') }]);
   load();
   return {
     flush: true,

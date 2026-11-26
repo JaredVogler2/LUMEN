@@ -54,7 +54,7 @@ export function mount(root, ctx) {
     clear(rows);
     const ids = Object.keys(table.measured_mm).map(Number).sort((a, b) => a - b);
     if (!ids.length) {
-      rows.append(h('tr', null, h('td', { colspan: '3', style: { color: 'var(--text-dim)' } }, 'No measured tags yet. Unmeasured tags use the nominal size and stay at research-preview status.')));
+      rows.append(h('tr', null, h('td', { colspan: '3', style: { color: 'var(--text-dim)' } }, 'No measured tags yet. A tag without a measurement uses the nominal size, and results stay at “Check needed”.')));
     }
     ids.forEach((id) => {
       rows.append(h('tr', { 'data-tag': id },
@@ -76,8 +76,8 @@ export function mount(root, ctx) {
   const quick = [...seen].filter((id) => !(id in table.measured_mm)).sort((a, b) => a - b);
 
   root.append(
-    h('h1', { class: 'view-title' }, 'Measure the tags'),
-    h('p', { class: 'view-lead' }, 'All scale comes from the tags. Measure the edge of the black square of each sticker with a caliper and enter it for its ID. The size printed on the packaging is only a nominal value.'),
+    h('h1', { class: 'view-title' }, 'Tag sizes'),
+    h('p', { class: 'view-lead' }, 'Measure the black square of each tag with a caliper and enter it next to its number. Every size in the picture comes from these.'),
     h('div', { class: 'card' }, tagDiagram(),
       h('ul', { class: 'checklist' },
         h('li', null, icon('check'), h('span', null, 'Use 2–4 tags with different IDs, flat on the same panel face as the placard.')),
@@ -96,8 +96,8 @@ export function mount(root, ctx) {
       h('summary', null, 'Nominal size for unmeasured tags'),
       h('div', { class: 'body' },
         h('div', { class: 'field' }, h('label', { for: 'nominal' }, 'Nominal black-square edge'), h('div', { class: 'input-unit' }, nominal, h('span', { class: 'unit' }, 'mm'))),
-        h('p', { class: 'hint', id: 'nominal-hint' }, 'A tag without a measurement uses this value, labelled as nominal. Nominal scale carries a ±1 mm assumed tolerance and cannot support guidance status.'))),
-    Object.keys(table.measured_mm).length === 0 ? banner('warn', 'No measured tag yet.', 'You can continue, but results stay a research preview until at least the tags in view are measured.') : null);
+        h('p', { class: 'hint', id: 'nominal-hint' }, 'A tag without a measurement uses this value, labelled as nominal. Nominal scale carries a ±1 mm assumed tolerance and cannot reach “Ready”.'))),
+    Object.keys(table.measured_mm).length === 0 ? banner('warn', 'No measured tag yet.', 'You can continue, but results stay at “Check needed” until the tags in view are measured.') : null);
 
   async function save(next) {
     for (const [id, v] of Object.entries(table.measured_mm)) {
@@ -120,7 +120,7 @@ export function mount(root, ctx) {
   renderRows();
   ctx.setActions([
     { label: 'Back', back: true, onClick: () => ctx.go('identify') },
-    { id: 'continue', label: 'Continue to capture', kind: 'primary lg', icon: 'arrow', onClick: () => save('capture') },
+    { id: 'continue', label: 'Continue', kind: 'primary lg', icon: 'arrow', onClick: () => save('capture') },
   ]);
   return {};
 }

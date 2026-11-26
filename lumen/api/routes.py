@@ -204,6 +204,7 @@ def config(request: Request) -> dict[str, Any]:
         "capture_hints": {"min_views": 3, "max_views": 9},
         # whether a session can survive on this host at all (a function platform keeps none)
         "hosting": s.hosting,
+        "brand": s.brand,
     }
 
 

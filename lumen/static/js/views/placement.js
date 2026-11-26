@@ -248,7 +248,10 @@ export function createPlacement({ viewer, split, onRecorded = () => {} }) {
     if (msg.textContent !== text) msg.textContent = text;
     // what this view is worth
     clear(meta);
-    if (p && p.status) meta.append(chip((STATUS_TEXT[p.status] || STATUS_TEXT.blocked).title, p.status === 'prototype_guidance' || p.status === 'validated' ? 'ok' : p.status === 'blocked' ? 'danger' : 'warn'));
+    // A live frame's own status is no news while the placard is positioned: the stream has no lens profile and its
+    // uncertainty is larger than a photo's, so it would read "Check needed" every time, and "in position" already
+    // counts that uncertainty.  Only a view in which nothing can be measured is said here.
+    if (p && p.status === 'blocked') meta.append(chip(STATUS_TEXT.blocked.title, 'danger'));
     // of the placard's position when one is measured, else of the target in this view
     const U = p ? (p.expanded_mm !== null && p.expanded_mm !== undefined ? p.expanded_mm : p.target_expanded_mm) : null;
     if (U !== null && U !== undefined) meta.append(chip(`uncertainty ±${fmt(U, 2)} mm`, ''));
@@ -377,7 +380,7 @@ export function createPlacement({ viewer, split, onRecorded = () => {} }) {
     } catch (err) {
       fb.chime('fail');
       notice = (err && err.lumen && err.lumen.message) || 'The record could not be taken.';
-      if (fid && how === 'auto') { try { setSession(await api('DELETE', `api/sessions/${sid}/frames/${fid}`)); } catch (_) { /* it stays; the Verify step shows it */ } }
+      if (fid && how === 'auto') { try { setSession(await api('DELETE', `api/sessions/${sid}/frames/${fid}`)); } catch (_) { /* it stays; the Records step shows it */ } }
     } finally {
       recording = false;
       attemptAt = performance.now();
