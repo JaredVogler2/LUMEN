@@ -54,7 +54,7 @@ export function openCamera({ onChange = () => {}, onFallback = null, role = 'reg
 
   function renderModes() {
     clear(modeSeg);
-    const canRecord = !!Camera.recordingType();
+    const canRecord = !!Camera.recordingType() && ((state.config && state.config.sessions) || {}).video !== false;
     const opts = single || custom ? [['photo', 'Photo']] : [['photo', 'Photo'], ...(canRecord ? [['sweep', 'Sweep video']] : []), ...(cam.torch.supported ? [['pair', 'Flash pair']] : [])];
     modeSeg.hidden = single || !!custom;
     if (!opts.some((o) => o[0] === mode)) mode = 'photo';

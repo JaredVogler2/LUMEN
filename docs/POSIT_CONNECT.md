@@ -163,25 +163,27 @@ The processes then do not share a local directory. Use one of:
 `LUMEN_STORAGE=memory` keeps sessions inside one process and must not be used
 with more than one process.
 
-**Function platforms (serverless) cannot run LUMEN.** A test deployment of this
-repository on Vercel showed it: the platform ran requests that arrived
-together in separate, freshly started instances, each with an empty disk of
-its own (seen in its runtime logs: every instance first installed the
-dependencies). Photos uploaded through one request did not exist for the
-next; the thumbnails of the Photos step would not load and each further
-step answered "Unknown or expired session". Nothing in the application can
-repair that: a session has to be where the next request arrives. LUMEN now
-recognises such a platform from its environment (`VERCEL`,
-`AWS_LAMBDA_FUNCTION_NAME`, `FUNCTIONS_WORKER_RUNTIME`, `NETLIFY`), says so
-on its first screen and in the lost-session error, and reports `degraded`
-with `host_keeps_sessions: false` from `api/health`. Live placement in
-addition wants several answers per second from a process that already holds
-the registration; that, too, needs a process that keeps running.
+**Function platforms (serverless) keep nothing between two requests.** A test
+deployment of this repository on Vercel showed what that means for a server
+that keeps the job: the platform ran requests that arrived together in
+separate, freshly started instances, each with an empty disk of its own.
+Photos uploaded through one request did not exist for the next; the
+thumbnails of the Photos step would not load and each further step answered
+"Unknown or expired session".
 
-What does work, apart from Posit Connect: anything that keeps one process (or
-several on one disk) running and serves it over HTTPS, which the camera
-needs. For a trial on one phone, `uvicorn app:app` on a computer in the same
-network behind any HTTPS tunnel or reverse proxy is enough.
+On such a platform the browser carries the job instead, and LUMEN chooses
+that by itself (`LUMEN_STORAGE=client`, the default where `VERCEL`,
+`AWS_LAMBDA_FUNCTION_NAME`, `FUNCTIONS_WORKER_RUNTIME` or `NETLIFY` is in the
+environment). It is meant for trying the application on a phone, costs
+photo size and speed, and is described in `docs/FUNCTION_HOSTS.md`. None of
+it concerns Posit Connect: there the server keeps the job, as described
+above, and the browser is not asked to.
+
+What works without that compromise, apart from Posit Connect: anything that
+keeps one process (or several on one disk) running and serves it over HTTPS,
+which the camera needs. For a trial on one phone, `uvicorn app:app` on a
+computer in the same network behind any HTTPS tunnel or reverse proxy is
+enough.
 
 **Operation records entered in the app** are written to one JSON file
 (`LUMEN_OPERATIONS_DIR`, see section 6) under a file lock, and every process
@@ -202,7 +204,7 @@ has a default, and no value is returned by the API.
 | Variable | Default | Meaning |
 |---|---|---|
 | `LUMEN_DATA_DIR` | `$TMPDIR/lumen-sessions-<uid>` | session directory (see section 5) |
-| `LUMEN_STORAGE` | `file` | `file` or `memory` |
+| `LUMEN_STORAGE` | `file` | `file` or `memory`: the server keeps the job. `client`: the browser carries it (the default on a function platform; `docs/FUNCTION_HOSTS.md`, which also lists `LUMEN_STATE_SECRET` and the `LUMEN_CARRY_…` limits) |
 | `LUMEN_SESSION_TTL_SECONDS` | `14400` | sessions and their photos are deleted this long after the last change |
 | `LUMEN_MAX_SESSIONS` | `40` | new sessions are refused beyond this |
 | `LUMEN_MAX_FRAMES` | `24` | photos per session |
@@ -376,7 +378,7 @@ Record the iOS version, the browser and the phone model with each result.
 | "Camera access was refused" or no camera prompt | page not on HTTPS; or camera blocked for the site (Safari: "aA" → Website Settings); or an embedding page lacks camera permission |
 | `server_busy` (503) under load | raise Max processes, or `LUMEN_MAX_CONCURRENT_JOBS` if the host has spare cores |
 | Session "not found" after a while | time limit reached (`LUMEN_SESSION_TTL_SECONDS`), content redeployed, or a second node without a shared `LUMEN_DATA_DIR` |
-| "This copy of LUMEN cannot keep a session", photos that do not load, "Unknown or expired session" at every step | the host starts an empty instance per request (a function platform): see section 5 |
+| "This copy of LUMEN is set up in a way that cannot work here", photos that do not load, "Unknown or expired session" at every step | `LUMEN_STORAGE` tells the server to keep jobs on a host that starts an empty instance per request (a function platform): remove the setting, or see section 5 |
 | Live placement updates less than about five times a second with the phone on a stand | network delay, or the server is short of processor time: each frame is analysed on the server (0.04 s of one core on the development machine while the phone stands, 0.17 s while it moves). Give the content more processor, keep Min processes at 1 so that nothing has to start. With several processes each keeps its own held registration, so more frames are measured in full: one process per operator is the simplest arrangement |
 | Video "could not be decoded" | codec not supported by the bundled decoder; record in the phone's "Most compatible" format or upload photos |
 | Health check reports `degraded` | the response lists which self-check failed (tag detection, JPEG codec, storage, operation library, a host that keeps no sessions) |

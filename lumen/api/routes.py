@@ -155,8 +155,9 @@ def health(request: Request) -> JSONResponse:
         storage_ok = False
         n_sessions = -1
     host = svc.settings.hosting
-    # a host that keeps no sessions cannot run this application, whatever else works
-    ok = bool(st.get("apriltag_36h11") and st.get("jpeg_codec") and storage_ok and not svc.library.load_errors and host["keeps_sessions"])
+    sessions = svc.settings.sessions
+    # a server that is to keep jobs, on a host that keeps nothing, cannot run this application, whatever else works
+    ok = bool(st.get("apriltag_36h11") and st.get("jpeg_codec") and storage_ok and not svc.library.load_errors and sessions["works"])
     body = {
         "status": "ok" if ok else "degraded",
         "version": __version__,
@@ -164,7 +165,8 @@ def health(request: Request) -> JSONResponse:
         "python": sys.version.split()[0],
         "platform": platform.platform(),
         "dependencies": {"opencv": cv2.__version__, "numpy": np.__version__, "scipy": scipy.__version__},
-        "checks": {**st, "storage": storage_ok, "operation_library": not svc.library.load_errors, "host_keeps_sessions": bool(host["keeps_sessions"])},
+        "checks": {**st, "storage": storage_ok, "operation_library": not svc.library.load_errors, "host_keeps_sessions": bool(host["keeps_sessions"]), "jobs_can_be_kept": bool(sessions["works"])},
+        "sessions": {"kept_by": sessions["kept_by"]},
         "hosting": {"kind": host["kind"], "name": host["name"], "message": host["message"]},
         "library": {"revision": svc.library.library_revision, "operations": len(svc.library.all()), "errors": svc.library.load_errors, "editable": svc.library.editable},
         "storage": {"adapter": type(svc.store).__name__, "sessions": n_sessions},
@@ -204,6 +206,8 @@ def config(request: Request) -> dict[str, Any]:
         "capture_hints": {"min_views": 3, "max_views": 9},
         # whether a session can survive on this host at all (a function platform keeps none)
         "hosting": s.hosting,
+        # who keeps a job while it is open: this server, or the browser (which then sends it with every request)
+        "sessions": s.sessions,
         "brand": s.brand,
     }
 
@@ -547,6 +551,10 @@ async def add_video(request: Request, sid: str, source: str = "video_upload") ->
 
     _session(request, sid)
     svc = _svc(request)
+    # a video is worked on after its request has ended: that needs a server that still has the job then
+    from ..storage.carried import require_carrier
+
+    require_carrier(svc.store)
     limit = svc.settings.limits.max_video_bytes
     path = None
     n = 0

@@ -93,12 +93,23 @@ class Limits:
     max_concurrent_jobs: int = 2
     max_json_bytes: int = 2 * 1024 * 1024
     max_track_long_edge: int = 1600
+    #: Where the browser carries the job (storage "client"): the largest request and the largest answer.  The
+    #: defaults fit under the 4.5 MB that Vercel allows a function (AWS Lambda and Netlify allow 6 MB).
+    carry_max_request_bytes: int = 4_000_000
+    carry_max_response_bytes: int = 4_300_000
+    #: ... and the size to which the browser reduces a photo there, so that all photos of a job fit in one request
+    carry_photo_max_edge: int = 1600
 
 
 @dataclass(frozen=True)
 class Settings:
     limits: Limits = field(default_factory=Limits)
-    storage: str = "file"  # "file" | "memory"
+    #: Where a job lives while it is open.  "file" and "memory": with this server.  "client": with the browser
+    #: that runs it, which sends it along with every request (for hosts that keep nothing between requests).
+    storage: str = "file"
+    #: With storage "client": a secret with which the job's state is signed, so that a state this server did not
+    #: write, or that was changed, is refused.  Empty = states are checked for their form only.
+    state_secret: str = ""
     data_dir: Path = field(default_factory=_default_data_dir)
     #: Directory of the editable operation library ("" = bundled read-only sample).
     operations_dir: str = ""
@@ -152,6 +163,29 @@ class Settings:
         return {"name": self.brand_name.strip()[:60], "logo": logo, "color": color if ok else None}
 
     @property
+    def sessions(self) -> dict[str, object]:
+        """Who keeps a job while it is open, and what that means for the browser.
+
+        ``kept_by`` is "server" (the ordinary way: this process holds the photos and the analysis for the minutes
+        a job takes) or "client" (the browser carries them and sends what a step needs; see ``storage/carried.py``).
+        ``works`` is false only for a server that is meant to keep jobs on a host that keeps nothing.
+        """
+        carried = self.storage == "client"
+        lim = self.limits
+        out: dict[str, object] = {"kept_by": "client" if carried else "server", "works": bool(carried or self.hosting["keeps_sessions"]), "video": not carried}
+        if carried:
+            views = 9  # the most photos a capture asks for; all of them go into one request when the lines are found
+            room = max(lim.carry_max_request_bytes - 300_000, 500_000)
+            out.update({
+                "max_request_bytes": lim.carry_max_request_bytes,
+                "photo_max_edge": lim.carry_photo_max_edge,
+                "photo_max_bytes": int(room // views),
+                "single_max_bytes": int(min(room, 1_500_000)),
+                "signed": bool(self.state_secret),
+            })
+        return out
+
+    @property
     def hosting(self) -> dict[str, object]:
         """Where this process runs, as far as its environment says, and whether a session can survive there.
 
@@ -164,25 +198,42 @@ class Settings:
         ``keeps_sessions`` is ``False`` where the platform is known not to keep them, ``True`` otherwise (which is
         not a promise: it says only that nothing known speaks against it).
         """
-        for kind, name, var in (
-            ("vercel", "Vercel (serverless functions)", "VERCEL"),
-            ("aws_lambda", "AWS Lambda", "AWS_LAMBDA_FUNCTION_NAME"),
-            ("azure_functions", "Azure Functions", "FUNCTIONS_WORKER_RUNTIME"),
-            ("netlify", "Netlify Functions", "NETLIFY"),
-        ):
-            if os.environ.get(var):
-                return {
-                    "kind": kind, "name": name, "keeps_sessions": False,
-                    "message": (
-                        f"This copy of LUMEN runs on {name}. Each request there may be served by a new instance with an empty disk, "
-                        "so photos and sessions are lost between requests and nothing after the first step can work. "
-                        "Run LUMEN where one process keeps running: Posit Connect (docs/POSIT_CONNECT.md), a container or a "
-                        "virtual machine, or a computer on the same network."
-                    ),
-                }
+        host = forgetful_host()
+        if host is not None:
+            kind, name = host
+            if self.storage == "client":
+                # the browser carries the job: the host's forgetting does not matter
+                return {"kind": kind, "name": name, "keeps_sessions": False, "message": ""}
+            return {
+                "kind": kind, "name": name, "keeps_sessions": False,
+                "message": (
+                    f"This copy of LUMEN runs on {name} and is set to keep each job on the server (LUMEN_STORAGE). "
+                    "This host forgets everything between two requests: a job is unknown again seconds after it was "
+                    "started, and nothing after the first step can work. Nothing has to be stored for long: remove "
+                    "LUMEN_STORAGE, and the phone carries the job. Or run LUMEN where one process keeps running: "
+                    "Posit Connect (docs/POSIT_CONNECT.md), a container or a virtual machine."
+                ),
+            }
         if self.on_posit_connect:
             return {"kind": "posit_connect", "name": "Posit Connect", "keeps_sessions": True, "message": ""}
         return {"kind": "process", "name": "", "keeps_sessions": True, "message": ""}
+
+
+#: platforms that start a new, empty copy of the program for a request as they please
+_FORGETFUL = (
+    ("vercel", "Vercel (serverless functions)", "VERCEL"),
+    ("aws_lambda", "AWS Lambda", "AWS_LAMBDA_FUNCTION_NAME"),
+    ("azure_functions", "Azure Functions", "FUNCTIONS_WORKER_RUNTIME"),
+    ("netlify", "Netlify Functions", "NETLIFY"),
+)
+
+
+def forgetful_host() -> tuple[str, str] | None:
+    """(kind, name) of the function platform this process runs on, or ``None``."""
+    for kind, name, var in _FORGETFUL:
+        if os.environ.get(var):
+            return kind, name
+    return None
 
 
 def load_settings() -> Settings:
@@ -201,13 +252,19 @@ def load_settings() -> Settings:
         request_timeout_seconds=_env_float("LUMEN_REQUEST_TIMEOUT_SECONDS", 30.0),
         max_concurrent_jobs=max(1, _env_int("LUMEN_MAX_CONCURRENT_JOBS", 2)),
         max_track_long_edge=_env_int("LUMEN_MAX_TRACK_LONG_EDGE", 1600),
+        carry_max_request_bytes=max(600_000, int(_env_float("LUMEN_CARRY_MAX_REQUEST_MB", 4.0) * 1_000_000)),
+        carry_max_response_bytes=max(600_000, int(_env_float("LUMEN_CARRY_MAX_RESPONSE_MB", 4.3) * 1_000_000)),
+        carry_photo_max_edge=max(640, _env_int("LUMEN_CARRY_PHOTO_MAX_EDGE", 1600)),
     )
-    storage = (_env("LUMEN_STORAGE", "file") or "file").lower()
-    if storage not in ("file", "memory"):
-        storage = "file"
+    # A job is kept by the server wherever a server can keep one.  On a platform that forgets everything between
+    # two requests the browser carries it, unless the administrator says otherwise.
+    storage = (_env("LUMEN_STORAGE", "") or "").lower()
+    if storage not in ("file", "memory", "client"):
+        storage = "client" if forgetful_host() is not None else "file"
     return Settings(
         limits=lim,
         storage=storage,
+        state_secret=_env("LUMEN_STATE_SECRET", "") or "",
         data_dir=_default_data_dir(),
         operations_dir=_env("LUMEN_OPERATIONS_DIR", "") or "",
         operations_readonly=_env_bool("LUMEN_OPERATIONS_READONLY", False),

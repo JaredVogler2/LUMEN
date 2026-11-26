@@ -1,5 +1,6 @@
 // Diagnostics sheet: the raw numbers behind the current session.
-import { api } from '../api.js';
+import { api, jobIsCarried } from '../api.js';
+import * as carry from '../carry.js';
 import { h, clear, sheet, chip, banner, fmt, icon, showError } from '../dom.js';
 import { state, activeFrameId } from '../store.js';
 
@@ -33,9 +34,36 @@ function assistantCard() {
     out);
 }
 
+// Where the browser carries the job: what it holds, and how the last requests went (how much each sent, how long
+// the answer took).  This is what tells a slow connection from a slow server.
+function carrierCard() {
+  if (!jobIsCarried()) return null;
+  const box = h('div', { class: 'card tight', 'data-region': 'carrier' },
+    h('div', { class: 'eyebrow' }, 'Where the job is kept'),
+    h('p', { class: 'hint' }, 'This server keeps nothing between two requests. The job (its photos and what was measured in them) is on this phone and travels with each request; it is removed when the session ends.'));
+  carry.held().then((jobs) => {
+    const pics = jobs.reduce((n, j) => n + j.pictures.length, 0);
+    const bytes = jobs.reduce((n, j) => n + j.state_bytes + j.pictures.reduce((m, x) => m + x.bytes, 0), 0);
+    const last = carry.recent.slice(-8).reverse();
+    box.append(
+      h('dl', { class: 'kv' },
+        h('dt', null, 'On this phone'), h('dd', null, `${pics} photo${pics === 1 ? '' : 's'}, ${fmt(bytes / 1e6, 1)} MB`),
+        h('dt', null, 'Requests'), h('dd', null, `${carry.stats.requests}, ${fmt(carry.stats.bytesSent / 1e6, 1)} MB sent`),
+        h('dt', null, 'Photos sent again'), h('dd', null, `${carry.stats.picturesSent}${carry.stats.askedAgain ? ` (the server asked ${carry.stats.askedAgain} time${carry.stats.askedAgain === 1 ? '' : 's'})` : ''}`)),
+      last.length ? h('div', { style: { overflowX: 'auto' } }, h('table', { class: 'budget', 'data-region': 'carrier-recent' },
+        h('thead', null, h('tr', null, ['Request', 'Sent', 'Answer after', 'Result'].map((t) => h('th', null, t)))),
+        h('tbody', null, last.map((r) => h('tr', null,
+          h('td', { class: 'mono' }, `${r.method} ${r.path.replace(/^api\/(sessions|calibration)\/…\/?/, '') || r.path}`),
+          h('td', { class: 'v' }, r.bytes > 1e5 ? `${fmt(r.bytes / 1e6, 2)} MB` : `${fmt(r.bytes / 1e3, 0)} kB`),
+          h('td', { class: 'v' }, r.ms === null ? '…' : r.ms >= 1000 ? `${fmt(r.ms / 1000, 1)} s` : `${r.ms} ms`),
+          h('td', null, r.status === 200 ? chip('ok', 'ok') : chip(String(r.status === null ? 'waiting' : r.status), r.status === null ? 'solid' : 'danger'))))))) : null);
+  });
+  return box;
+}
+
 export function openDiagnostics() {
   const s = state.session;
-  if (!s) { sheet({ title: 'Diagnostics', content: banner('info', 'No session yet.') }); return; }
+  if (!s) { sheet({ title: 'Diagnostics', content: h('div', { class: 'stack' }, banner('info', 'No session yet.'), carrierCard()) }); return; }
   const reg = s.registration;
   const rows = [];
   s.frames.forEach((f) => f.markers.forEach((m) => rows.push(h('tr', null,
@@ -67,6 +95,7 @@ export function openDiagnostics() {
       h('thead', null, h('tr', null, ['Photo', 'Tag', 'Status', 'Edge', 'σ corner px', 'Blur px', 'Edge bias px'].map((t) => h('th', null, t)))),
       h('tbody', null, rows.length ? rows : h('tr', null, h('td', { colspan: '7' }, 'No tag observations.'))))),
     h('p', { class: 'hint' }, 'σ corner is the predicted standard deviation of a tag corner from the edge fits. Edge bias is the dark-side shift estimated from the tag interior and removed from its border; "—" means the tag was too small for that (it is then corrected with the value from larger tags when there are any).'),
+    carrierCard(),
     assistantCard());
   sheet({ title: 'Diagnostics', content, wide: true });
 }

@@ -201,8 +201,10 @@ def test_a_host_without_sessions_says_so_and_a_missing_photo_is_a_labelled_tile(
     page = ctx.new_page()
     page.goto(live_server.url)
     page.wait_for_selector('[data-step="identify"]')
+    # this server keeps jobs itself (as every server of these tests does), and now finds itself on a host that
+    # forgets them between requests: that cannot work, and the first screen says so and how to change it
     b = page.inner_text(".banner.danger").lower()
-    assert "cannot keep a session" in b and "lost between requests" in b and "posit connect" in b
+    assert "set up in a way that cannot work here" in b and "forgets everything between two requests" in b and "the phone carries the job" in b and "posit connect" in b
     shot(page, "host_without_sessions")
     ctx.close()
     monkeypatch.delenv("VERCEL")

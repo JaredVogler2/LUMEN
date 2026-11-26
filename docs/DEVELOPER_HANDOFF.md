@@ -84,7 +84,7 @@ flowchart TB
     PH["vision/photometric (experimental, diagnostics only)"]
     GEO["geometry/: camera, homography, lines, local frame, SE(3)"]
   end
-  STORE[("storage/: session directory or memory")]
+  STORE[("storage/: session directory, memory, or nothing (the browser carries the job)")]
   SYN["synth/: renderer for tests, demo and benchmark"]
 
   UI --> API
@@ -143,7 +143,20 @@ Data flow of a measurement:
    verification is the record.
 
 State: a session is one JSON document plus photo blobs behind
-`storage.SessionStore` (file directory with a lock, or memory). Every change
+`storage.SessionStore` (file directory with a lock, or memory). On a host
+that keeps nothing between two requests a third store is used,
+`storage/carried.py`: it holds what one request brought, for the length of
+that request. The browser then keeps the document and the photos
+(`static/js/carry.js`) and sends every request of a job to one address,
+`api/carry`, wrapped together with the document and the photos that step
+needs; `api/carry.py` unpacks it, serves the request that is meant through
+the ordinary routes, and wraps the answer with the document as the request
+left it. Routes, services and the measurement code do not know which store
+they have. What they may rely on: caches inside the process are keyed by
+content (a solution by the photos' checksums, a decoded picture by its own),
+because another process may have seen a job of the same name in another
+state; and a step that outlives its request (the video job) asks
+`require_carrier` first and is refused where the job is carried. Every change
 goes through `SessionService._mutate`, which loads, changes and saves under
 the session lock; background video jobs write their progress into the session
 too, so any worker process can answer a poll. Changing tag sizes, photos or
@@ -161,7 +174,7 @@ the lens profile invalidates everything computed from them.
 | `lumen/policy/` | uncertainty budget and gates, with their thresholds in one dataclass each |
 | `lumen/operations/` | record schema, library with revisions, the bundled synthetic sample |
 | `lumen/overlay/` | drawing primitives in image pixels |
-| `lumen/storage/` | session stores |
+| `lumen/storage/` | session stores: file directory, memory, and `carried.py` (one request's content, where the browser carries the job) |
 | `lumen/synth/` | deterministic ray caster, scenes, calibration boards (tests, demo, benchmark only) |
 | `lumen/validation/` | benchmark cases and report |
 | `lumen/assistant/` | optional language-model explanations, off by default (`docs/ASSISTANT.md`) |
@@ -222,6 +235,12 @@ placeholders chosen on synthetic data; they are not engineering limits.
 
 *A storage backend:* implement `lumen.storage.base.SessionStore` and return it
 from `get_store()`.
+
+*A route that reads photos of a job:* nothing to do on the server (a photo
+that did not come with the request is asked for by name, and the browser
+sends it and asks again). To spare that round trip, name the step in
+`picturesFor` in `static/js/carry.js` (and in `tests/carry_client.py`, which
+is the same client in Python for the tests).
 
 *A new screen:* a module in `lumen/static/js/views/` exporting
 `mount(root, ctx)`, registered in `main.js` and `store.js` (`STEPS`,

@@ -323,7 +323,12 @@ def get_store() -> SessionStore:
             from ..config import get_settings
 
             s = get_settings()
-            _STORE = MemorySessionStore() if s.storage == "memory" else FileSessionStore(s.data_dir)
+            if s.storage == "client":
+                from .carried import CarriedStore
+
+                _STORE = CarriedStore()
+            else:
+                _STORE = MemorySessionStore() if s.storage == "memory" else FileSessionStore(s.data_dir)
         return _STORE
 
 
