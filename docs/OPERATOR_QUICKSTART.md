@@ -149,7 +149,8 @@ and the placement is measured while it happens, not afterwards.
 2. Press **Start live placement** and allow the camera. Turn the sound up.
 3. Bring the placard to the dashed outline.
 
-What you get, a few times per second:
+What you get, several times per second (ten or more while the phone stands
+still; the panel then shows "phone steady"):
 
 * **On the picture**: the placard as it was just measured, and an arrow to
   where it belongs.
@@ -198,7 +199,13 @@ it finds, whatever that is.
 
 Each picture is analysed on the server and shown together with its result a
 fraction of a second after it was taken. Move slowly over the last
-millimetres and let the reading settle before you press the placard on. On an
+millimetres and let the reading settle before you press the placard on.
+
+Leave the phone alone once it stands. While it does not move, the tags are
+measured once and then only checked in every picture, which is several times
+faster, and your arm may pass over some of the tags without anything
+changing. If the phone or the panel is moved, the tags are measured again by
+themselves; the readings come more slowly for a moment. On an
 iPhone the sound depends on the media volume, and on some settings on the
 ring switch; if you hear nothing, switch **Sound** off and on once and check
 the volume.

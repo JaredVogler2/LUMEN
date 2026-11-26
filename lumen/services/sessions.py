@@ -90,7 +90,7 @@ class SessionService:
         self._last_purge = 0.0
         self._purge_lock = threading.Lock()
         self.jobs = JobRunner(self._load, self._mutate, max_workers=1)
-        self._live = LruCache(8)
+        self._live = LruCache(32)
         from ..vision.placard import PlacardConfig
 
         self._placard_cfg = PlacardConfig()

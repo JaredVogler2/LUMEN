@@ -170,19 +170,19 @@
       "checksum": "fdc1632a1782d12a8c6c6f0159e188b3"
     },
     "lumen/services/live.py": {
-      "checksum": "e0ca3a8dbb6172a90edd9f93cdcabdeb"
+      "checksum": "dcee09e3a71d5dabf19429940465f5bf"
     },
     "lumen/services/photometric.py": {
       "checksum": "0b541ab24c896a535583c646fcbebf7f"
     },
     "lumen/services/placement.py": {
-      "checksum": "a549ed0926aa3b542171ff50b1c89a43"
+      "checksum": "9e2f38466729f49ed4833313b468b98e"
     },
     "lumen/services/reference.py": {
       "checksum": "ff9fe64b8ee1888d5f34b6847f5fd779"
     },
     "lumen/services/sessions.py": {
-      "checksum": "843a696e12de2f123a22193e8289d4f7"
+      "checksum": "7f18284b8f83b649673facca094e51f5"
     },
     "lumen/services/verification.py": {
       "checksum": "039e846f4594067b58b863e21565a9f4"
@@ -236,7 +236,7 @@
       "checksum": "eb1e6e1bdc73f200cb367623761316c9"
     },
     "lumen/static/js/views/live.js": {
-      "checksum": "014ec4340cb089f0cd97655b3f2b94c1"
+      "checksum": "6e39d554c3747c599e5527f725b21dcf"
     },
     "lumen/static/js/views/markers.js": {
       "checksum": "4e033789eb3e4a52261cbb56c79851ef"
@@ -248,7 +248,7 @@
       "checksum": "075695eb214f890ac6a687b7c9c774cd"
     },
     "lumen/static/js/views/placement.js": {
-      "checksum": "b66e2528c952d613aeb93de5b2c126b2"
+      "checksum": "1bb6f8c5aae8c65d12f3251dd2d7617d"
     },
     "lumen/static/js/views/rectified.js": {
       "checksum": "8507f10c6d32cb5c254064b945c0ee97"
@@ -323,13 +323,16 @@
       "checksum": "ca9edbc64890af819bf4f71968513798"
     },
     "lumen/vision/placard.py": {
-      "checksum": "87915b4e4d3278edcac95e733f60c7d8"
+      "checksum": "5a88b743fe52908c514ab0eda0cbee13"
     },
     "lumen/vision/planar.py": {
       "checksum": "3d996753b58be2b8155031e98fc04ee2"
     },
     "lumen/vision/rectify.py": {
       "checksum": "636663be32e77c12e3006ab4284fcf41"
+    },
+    "lumen/vision/steady.py": {
+      "checksum": "b2820383046117b650811e36ef6b3cbe"
     },
     "lumen/vision/video.py": {
       "checksum": "4d89fade64a04d2492f5fb3d5ba6393c"

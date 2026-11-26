@@ -169,6 +169,9 @@ the placard may measure and still be in position.
 | budget term "hidden side placed by the size in the record (live)" | a part may differ from the record's size; 1.0 mm is allowed for, of which half moves the centre. An assumption of the guidance only |
 | `size_not_seen` | no two opposite sides were measured, so nothing shows whether the placard lies on the surface. Not judged |
 | `hands` | part of the outline is covered (a partly hidden side, a corner not seen, a side placed by size) |
+| `tracking.held` | the phone stands still: no tag was measured in this frame. The registration is that of an earlier frame, checked on the tags that can be seen (`tags_seen`; `tags_covered` could not be compared). `shift_px` is the largest shift found; with `moved_along` the registration was carried along a shift of up to 0.5 px on which at least three tags agree |
+| budget term "registration held from an earlier frame of the standing phone (live)" | what that check cannot see: 0.1 px, or 0.06 px when the registration was moved along |
+| `live_terms` | the terms of this reading's budget that a stored photo would not have (lying flat, a side placed by size, a held registration), with their bounds |
 | `clean` | all four sides measured, nothing covered, no doubt about the outline. Required for the automatic record |
 
 A side counts as measured in a live frame when at least 30 % of it lies on

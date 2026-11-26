@@ -91,7 +91,8 @@ only. They do not lower the status; each says how to close the gap.
 | A side of the outline is drawn dashed | that side is covered; it was placed by the placard's size from the opposite side | nothing, while positioning. The record waits until all four sides are seen |
 | Green and the steady tone, but no record | a hand still covers part of the placard ("Let go to record"), or **Record by hand** is set | take your hands away for a second, or press **Record now** |
 | "The record photo did not confirm it" | the full-size photo measured the placard just outside what the live picture said (it is at the limit) | nudge it towards the centre and wait; the photo that did not confirm it is not kept |
-| The picture updates slowly | every picture is analysed on the server: a slow connection or a busy server lowers the rate | the reading is always for the picture shown; move more slowly. Results stop being shown, and the tone stops, when no answer arrives |
+| The picture updates slowly | every picture is analysed on the server: a slow connection or a busy server lowers the rate. A phone that is held in the hand, or a stand that shakes, also costs time, because the tags are then measured in every picture ("phone steady" is not shown) | put the phone on something firm; the reading is always for the picture shown; move more slowly. Results stop being shown, and the tone stops, when no answer arrives |
+| "phone steady · 2 tags covered" | an arm or a tool is over some of the tags; the others show that the phone has not moved, so the registration from before is kept | nothing. If only one tag stays visible for more than a few seconds the tags are measured again, with what is visible |
 | "Tracking lost — nothing is drawn" | the tags left the picture or cannot be measured | aim the phone so that the tags and the target are both in view; fix the phone on a stand |
 
 ## Verification

@@ -122,14 +122,21 @@ frames of 1280×720 from 640 mm, target tolerance ±2 mm and ±1°:
 | the same without a lens profile | ±1.84 mm: only ±0.16 mm of the tolerance is left, and the screen says so |
 | a hand over a corner, a side, the lower half, the middle of both ends | position within 0.3 mm; never recorded while covered |
 | both ends gripped completely; a part of another size; a placard held 8 mm off the surface | no judgement, with the reason |
-| server time per followed frame / first frame / no placard in view | 0.17 s / 0.9 s / 0.27 s |
-| results per second in a browser on the same machine | about 5 results per second, each shown 0.2 s after its picture was taken |
+| server time per frame, phone on a stand: placard followed / no placard in view / first frame | 0.04 s / 0.14 s / 0.9 s |
+| the same while the phone is moved (the tags are measured in every frame) | 0.17 s / 0.27 s / 0.9 s |
+| results per second in a browser on the same machine, phone on a stand | 12 (the page asks for no more), each shown about 40 ms after its picture was taken |
 | from "in position, hands off" to the chime of the record | about 2 s (one second of rest, then 0.7 s for the photo and its measurement) |
+
+While the phone stands still the tags are measured once and then only
+checked: every frame is asked whether the picture around each tag is still in
+the same place (to a few hundredths of a pixel). That is what makes a frame
+cost 0.04 s, and it keeps the registration when an arm covers some of the
+tags.
 
 Hands are skin-coloured boxes in rendered pictures here, and the tones were
 checked as commands in a browser without a loudspeaker.
 
-Tests on this code: 520 unit and integration tests and 42 browser tests pass;
+Tests on this code: 534 unit and integration tests and 42 browser tests pass;
 one test that calls a real language-model endpoint is opt-in and skipped.
 
 None of this is physical accuracy: no phone, print or panel was involved.

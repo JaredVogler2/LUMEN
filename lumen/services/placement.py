@@ -66,6 +66,7 @@ LIVE_MIN_SIDE_SUPPORT = 0.3
 #: assumption of the live guidance only; a record measures all four sides.
 RECORD_SIZE_ALLOWANCE_MM = 1.0
 SIZE_TERM = "hidden side placed by the size in the record (live)"
+HELD_TERM = "registration held from an earlier frame of the standing phone (live)"
 #: margin on the size test beyond the edge-definition bound (mm): fit noise of two sides
 SIZE_MARGIN_MM = 0.15
 #: added to the viewing angle when the camera of the live stream is not calibrated (degrees)
@@ -113,8 +114,14 @@ def _hint(meta: dict[str, Any]) -> tuple[np.ndarray | None, int]:
 
 def live_placement(
     svc: "SessionService", s: Any, frame: Any, bgr: np.ndarray, cam: Any, loc: Any, rep: dict[str, Any] | None, pid: str | None, meta: dict[str, Any],
+    held_px: float | None = None,
 ) -> dict[str, Any]:
-    """Measure the placard in this live frame and say where it is relative to its target."""
+    """Measure the placard in this live frame and say where it is relative to its target.
+
+    ``held_px``: the registration ``loc`` is that of an earlier frame of a phone that stands still, and the tags
+    were found within this many pixels of where they were then (``live.py``).  What that check cannot see is a
+    term of the reading's budget.
+    """
     out: dict[str, Any] = {"placard_id": pid, "found": False, "state": "no_target", "in_position": False, "clean": False, "notice": RESEARCH_NOTICE}
     lf = svc._local_frame(s)
     if not pid or not s.operation or lf is None or not lf.valid:
@@ -289,6 +296,8 @@ def live_placement(
         if n_assumed:
             b = 0.5 * RECORD_SIZE_ALLOWANCE_MM * float(np.sqrt(n_assumed))
             extra.append((SIZE_TERM, b, f"the part may differ from the record's size by up to {RECORD_SIZE_ALLOWANCE_MM:.1f} mm; half of that moves its centre"))
+    if held_px is not None:
+        extra.append((HELD_TERM, float(held_px) / ppm, f"the tags were where they were in the frame that was measured, to within {held_px:g} px"))
     angle, dist, known = _view_geometry(loc, H, int(frame.width), int(frame.height), rect.center)
     lift_bound = None
     seen_dims = [d for d, ok in ((rect.width, width_seen), (rect.height, height_seen)) if ok]
@@ -330,6 +339,8 @@ def live_placement(
         "observation": base.observation, "position_observation": detail.get("position_observation"), "rotation_observation": detail.get("rotation_observation"),
         "reachable": reachable, "in_position": base.observation == "within_tolerance_observed",
         "room_mm": None if room is None else round(room, 3),
+        # the terms of this reading's budget that a stored photo would not have
+        "live_terms": [{"name": name, "bound_mm": round(float(b), 4)} for name, b, _ in extra],
         "tight": bool(room is not None and 0.0 < room < min(TIGHT_FRACTION * tol, TIGHT_MM)), "limit_hint": limit_hint,
         "hands": hands, "clean": clean, "flags": flags, "doubtful": [f for f in flags if f.startswith(LIVE_DOUBTFUL)],
         "view_angle_deg": None if angle is None else round(angle, 1), "distance_mm": None if dist is None else round(dist, 0),

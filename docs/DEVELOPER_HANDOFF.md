@@ -133,7 +133,11 @@ Data flow of a measurement:
    Two things carried from frame to frame make that fast, and the client
    hands both back with the next frame: the stream's edge shift (so the tags
    are measured without re-estimating it) and where the placard was (so it is
-   followed instead of searched for). Nothing of this is stored. When the
+   followed instead of searched for). While the phone stands still the tags
+   are not measured again at all: the frame is asked whether the picture
+   around each tag is where it was in the frame that was measured
+   (`vision/steady.py`), and the registration of that frame is kept (held)
+   as long as at least two tags say so. Nothing of this is stored. When the
    placard has been in position and uncovered for a second, the browser
    uploads one full-size frame as a verification photo and the ordinary
    verification is the record.
@@ -255,7 +259,7 @@ Not done, or not possible here:
 | Deployment on a Posit Connect server | NOT RUN (`docs/POSIT_CONNECT.md`, section 9) |
 | iPhone Safari camera, torch and recording behaviour | NOT RUN; the code follows the published browser interfaces and was exercised in Chromium with a fake camera only |
 | Live placement with a real hand, a real placard and a real phone; sound on a phone | NOT RUN. Hands were boxes in rendered pictures; the tones were checked as commands in a browser without a loudspeaker |
-| Frame-rate tracking in the browser between server answers | not built; the picture and the reading update as fast as the server answers (about five times a second on the development machine, less over a network) |
+| Frame-rate tracking in the browser between server answers | not built; the picture and the reading update as fast as the server answers (twelve times a second with the phone on a stand on the development machine, less over a network) |
 | Validated domain | none; the status `validated` cannot occur |
 | Curved target surfaces | refused by design |
 | Rolling shutter, focus breathing, optical stabilisation, local tone mapping | not modelled in the synthetic photos; covered only by generic bounds in the budget |
@@ -265,13 +269,23 @@ Not done, or not possible here:
 
 ## 7. Known weak points
 
-* Every live frame makes a round trip to the server. With the stream's edge
-  shift and the placard's last place handed back by the client, a 1280×720
-  frame costs about 0.17 s of server time on the development machine (0.9 s
-  for the first frame, 0.3 s while no placard is in view, 0.4 to 0.7 s when a
-  covered placard has to be searched for again). On a network the rate is
-  lower. The picture shown is always the analysed one, so the display moves
-  in steps.
+* Every live frame makes a round trip to the server. With a phone that
+  stands still a 1280×720 frame costs about 0.04 s of server time on the
+  development machine (0.14 s while no placard is in view, 0.33 s when a
+  covered placard has to be searched for again, 0.9 s for the first frame),
+  and the page asks for at most twelve a second. A phone that moves costs
+  0.17 s a frame, because its tags are measured every time. On a network the
+  rate is lower. The picture shown is always the analysed one, so the display
+  moves in steps.
+* The held registration lives in the memory of the process that measured it.
+  With several processes behind one address each keeps its own; that is
+  correct and merely means more frames are measured in full. It was tried
+  with one process only.
+* A held registration is checked by the shift of the picture around each
+  tag. A change that leaves that picture where it is and still moves the
+  placard's target in the frame is not seen: none is known for a rigid panel
+  and a rigid phone, but a panel that flexes between the tags when it is
+  pressed would be one.
 * What tells a hand from a placard in a live frame is colour and brightness
   beside the edges (`foreign_sides`, `plain_fraction` in `vision/placard.py`)
   and the record's size. The thresholds were set on rendered pictures in

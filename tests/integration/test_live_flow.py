@@ -67,7 +67,7 @@ def test_live_frame_from_a_new_viewpoint_gets_its_own_overlay(client, ready):
     # the frame was used and thrown away: nothing was added to the session
     s = client.get(f"/api/sessions/{sid}").json()
     assert len(s["frames"]) == n_before and all(f["id"] != "live" for f in s["frames"])
-    assert set(ov["timing_ms"]) == {"decode", "tags", "localise", "overlay", "placard", "total"} and ov["timing_ms"]["placard"] < 1.0, "no placard is measured unless asked for"
+    assert set(ov["timing_ms"]) == {"decode", "tags", "localise", "overlay", "placard", "hold", "total"} and ov["timing_ms"]["placard"] < 1.0, "no placard is measured unless asked for"
 
 
 def test_uncertainty_is_reused_only_for_a_nearly_identical_view(client, ready):

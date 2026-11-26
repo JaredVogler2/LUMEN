@@ -17,6 +17,9 @@ import { Camera } from '../camera.js';
 import { coachLine } from './common.js';
 
 const STALE_MS = 2500;
+// No more than about twelve frames a second are asked for: beyond that a reading does not get more useful, and the
+// server's time belongs to other operators too.
+const MIN_INTERVAL_MS = 80;
 
 export async function startLive({ viewer, shell, modePill, onStopped = () => {}, onReport = () => {}, placement = null }) {
   const sid = state.session.id;
@@ -77,7 +80,9 @@ export async function startLive({ viewer, shell, modePill, onStopped = () => {},
       viewer.setOverlay(res);
       shownTracking = true;
       lastTracked = now;
-      setPill(`LIVE · ${(roundTripMs / 1000).toFixed(1)} s delay${rate ? ` · ${rate.toFixed(1)}/s` : ''}`, 'live', 'live');
+      // how old the picture on the screen is, and how many readings a second arrive
+      const delay = roundTripMs < 950 ? `${Math.max(10, Math.round(roundTripMs / 10) * 10)} ms` : `${(roundTripMs / 1000).toFixed(1)} s`;
+      setPill(`LIVE · ${delay} delay${rate ? ` · ${rate.toFixed(rate < 10 ? 1 : 0)}/s` : ''}`, 'live', 'live');
       setCoach(t.code === 'tracking' ? null : { code: t.code, level: t.code === 'tag_moved' ? 'warn' : 'todo', text: t.message, arrow: t.arrow });
     } else {
       hideOverlay();
@@ -137,7 +142,9 @@ export async function startLive({ viewer, shell, modePill, onStopped = () => {},
         failures = 0;
         if (!running) break;
         if (frozen || held) continue;         // an answer for a frame taken before the freeze (or the record) is dropped
-        show(shot, res, performance.now() - t0);
+        const took = performance.now() - t0;
+        show(shot, res, took);
+        if (took < MIN_INTERVAL_MS) await sleep(MIN_INTERVAL_MS - took);
       } catch (err) {
         failures += 1;
         if (!running) break;

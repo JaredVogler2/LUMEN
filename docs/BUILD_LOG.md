@@ -1227,3 +1227,104 @@ video is a film in a fake camera. Whether real skin is told from a real side,
 whether the tones are heard in a workshop, how many answers per second a
 deployed server gives over a real network: `docs/PHYSICAL_TEST_PROTOCOL.md`,
 section 8.
+
+## 2026-11-26 — A phone that stands still: the registration is held (prompts 05, 09)
+
+Five readings a second, each 0.2 s old, is a slide show beside a hand that
+moves a placard. Of the 0.17 s a frame cost, 0.12 s went into measuring the
+tags and redrawing what follows from them, in every frame, although during
+placement the phone is on a stand and the tags are in the same pixels each
+time. And whenever an arm covered a tag the frame was registered on what was
+left, with a different result.
+
+### The check
+
+The registration of one frame is kept, with the picture around each tag
+(`vision/steady.py`). A later frame is asked one question per tag: is this
+still the same picture, in the same place? The answer is a least-squares fit
+of the kept patch to the new one with four unknowns: a shift in x and y, a
+gain and an offset. Measured on rendered frames through JPEG:
+
+| The new frame | Shift found (px) | Explained (R²) |
+|---|---|---|
+| the same view, other noise, the placard elsewhere | 0.000 to 0.005 | 1.000 |
+| the picture shifted by 0.05 / 0.1 / 0.3 / 1.0 px | 0.05 / 0.10 / 0.30 / 1.03 | 1.000 |
+| shifted by 3 px | 3.3 | 0.98 |
+| 20 % brighter, 30 % darker | under 0.006 | 0.998 or more |
+| an arm over two tags | none for those two | 0.00 for those two, 1.00 for the third |
+| the camera 0.1 mm / 1 mm to the side (re-aimed) | 0.02 / 0.12 to 0.23 | 1.000 |
+
+Three tags are compared in about a millisecond. A shift of a few pixels is
+recognised by its size, not by a poor fit: three pixels are still explained
+to 98 %. What must not happen is a large shift that looks like a small,
+well-explained one. In 504 comparisons of pictures shifted by 0.6 to 30 px in
+twelve directions none did: wherever the estimate came out under half a
+pixel, at most 2 % of the picture was explained.
+(The first unit test of this failed by 20 %. The estimate was right: the test
+shifted its pictures with an OpenCV warp, which places a picture only to
+1/32 px.)
+
+### The rule
+
+* At least two tags compare (R² of 0.97 or more) and none has moved more than
+  0.1 px: the kept registration is used as it is. The frame is *held*.
+* They have moved up to 0.5 px and at least three agree on how (a similarity,
+  to 0.06 px): the registration is moved along. This is a stand that gives a
+  little when the panel is touched.
+* One tag alone cannot show a movement that leaves that tag where it is. It
+  is accepted for three seconds after two tags last agreed (an arm passing).
+* Anything else: the tags are measured afresh, and that frame becomes the new
+  reference. A held registration is also measured afresh every five seconds
+  when no tag is covered; the uncertainty of the view is then taken over,
+  because the same tags in the same pixels have the same uncertainty.
+* A tag that cannot be compared is not asked: covered, moved, or changed, it
+  takes no part, and the registration made when it was in view stands.
+
+The answer says that the frame was held, by which tags, which were covered
+and how far they had moved; the reading's budget has a term for what the
+check cannot see (0.1 px, or 0.06 px when moved along: 0.07 mm here).
+
+### What it buys
+
+Server time per 1280×720 frame, development machine:
+
+| | measured in every frame | held |
+|---|---|---|
+| placard followed | 0.17 s | 0.04 s (0.03 s when it rests: one measuring pass is enough for a placard that has not moved) |
+| no placard in view | 0.27 s | 0.14 s |
+| a covered placard searched for again | 0.42 s | 0.33 s |
+| in a browser on the same machine | 5 readings a second, 0.2 s old | 12 a second (the page asks for no more than one every 80 ms), about 40 ms old |
+
+A phone standing for 16 s: 262 frames, 258 of them held at a median of 42 ms;
+the routine re-measurements took 0.16 s each, the first frame 0.93 s and one
+more 0.49 s (the first re-measurement, whose tags were measured in another
+way than those of the first frame, so that its uncertainty was evaluated
+again).
+
+And what the speed does not show: with an arm over two of the three tags in
+view, the held reading is the one made with all three; measured afresh, the
+same picture has one tag and cannot say "in position".
+
+### Limits
+
+The check sees the picture around the tags. A change that leaves it in place
+and still moves the target in the frame is not seen. For a rigid panel and a
+rigid phone there is none; a panel that flexes between the tags when it is
+pressed would be one. The held registration lives in the memory of one
+process; several processes each keep their own, which is correct and slower.
+
+### Tests
+
+| Suite | Result |
+|---|---|
+| unit and integration | 535 tests: 534 pass, 1 skipped (the opt-in call to a real language-model endpoint); 14.5 min |
+| browser | 42 tests: 42 pass; 9.0 min |
+
+New: 9 tests of the patch comparison, 5 of the held registration through the
+API (a standing phone; an arm over one and over two tags; a phone moved 2 mm;
+a stand that gives 0.2 mm; a tag knocked aside and a change of placard), and
+the browser test of a far placard now also requires that the film's standing
+camera is recognised as such.
+
+Not run: a phone on a real stand. How still a clamped phone is, in pixels,
+while somebody presses on the panel beside it, decides how often this applies.
